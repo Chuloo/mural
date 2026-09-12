@@ -22,7 +22,7 @@
     "ws": "8.21.0"
   },
   "devDependencies": {
-    "@types/node": "^22.19.0",
+    "@types/node": "^26.5.0",
     "@types/pg": "^8.15.0",
     "@types/ws": "^8.18.1",
     "tsx": "4.23.13",
