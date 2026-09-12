@@ -87,7 +87,7 @@ All monetary strings are integer **nanoUSD**: 1 USD = 1,000,000,000 nanoUSD. A d
 | `POST /v1/checkout` | Bearer token; `Idempotency-Key`; `product` = `ai-10-usd` or `ai-25-usd` | `checkoutURL`, `orderID`, `sandbox: true`, itemized `quote` |
 | `POST /v1/webhooks/stripe` | Raw signed Stripe JSON | Atomic payment/refund journal update and duplicate receipt |
 | `POST /v1/trial/eligibility` | Apple attestation proof | `503 trial_attestation_unavailable` until a verified adapter is configured |
-| `POST /v1/live/sessions` | Bearer token; `Idempotency-Key`; `sdp`; `language` (`nb-NO`, `es-ES`, `en-US`, `fr-FR`) | Default `503`; allowlisted experiment returns `sessionID`, `providerSessionID`, `sdp`, `deadline`, `reservedNanoUSD`, `rateVersion`, `experimental` |
+| `POST /v1/live/sessions` | Bearer token; `Idempotency-Key`; `sdp`; `language` (`nb-NO`, `es-ES`, `en-US`, `fr-FR`, `zh-CN`) | Default `503`; allowlisted experiment returns `sessionID`, `providerSessionID`, `sdp`, `deadline`, `reservedNanoUSD`, `rateVersion`, `experimental` |
 | `GET /v1/live/sessions/:id` | Bearer token belonging to the session owner | Minimal state, cumulative milliseconds, confirmed provider cost and customer debit |
 | `POST /v1/live/sessions/:id/close` | Bearer token belonging to the session owner | Requests server closure; never accepts client-reported usage |
 

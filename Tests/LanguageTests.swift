@@ -170,6 +170,26 @@ final class LanguageTests: XCTestCase {
         XCTAssertEqual(MeaningLanguages.greeting(in: "Norwegian"), "Hei!")
     }
 
+    func testMandarinUsesSimplifiedChinesePolicyAndCulturalContext() {
+        let language = LanguageModule.mandarin
+        let learner = LearningEngine.project([], languageID: language.id)
+        let prompts = [TeachingPolicy.voice(language: language, learner: learner, theme: nil, interests: "", meaningLanguage: "English"),
+            TeachingPolicy.assessment(language: language), TeachingPolicy.greeting(language: language),
+            TeachingPolicy.help(language: language), TeachingPolicy.redirect(language: language),
+            TeachingPolicy.translation(language: language, meaningLanguage: "English"), TeachingPolicy.delegation(language: language),
+            TeachingPolicy.typedReply(language: language), TeachingPolicy.lookup(language: language, meaningLanguage: "English"),
+            TeachingPolicy.currentTopic(language: language)]
+        for prompt in prompts {
+            XCTAssertTrue(prompt.contains("Mandarin Chinese"))
+            XCTAssertFalse(prompt.contains("Norwegian"))
+        }
+        XCTAssertEqual(language.id, "zh")
+        XCTAssertEqual(language.locale, "zh-CN")
+        XCTAssertEqual(language.greeting, "你好！")
+        XCTAssertTrue(language.writingGuidance.contains("Simplified Chinese"))
+        XCTAssertTrue(language.themes.allSatisfy { !$0.situation.contains("Norway") && !$0.situation.contains("Norwegian") })
+    }
+
     func testEnglishIsProductionWhenEnglishIsTheTarget() {
         let session = evidence(languageID: "en")
         XCTAssertEqual(LearningEngine.validate(session.assessments[0], session: session)?.words.first?.kind, .independent)
