@@ -1,0 +1,398 @@
+{
+  "preferences" : {
+    "aiConsentVersion" : 1,
+    "hasOnboarded" : true,
+    "hiddenWords" : [
+      "en|soup|a hot liquid food"
+    ],
+    "interests" : "cooking, travel",
+    "learningLanguageID" : "en",
+    "meaningLanguage" : "Spanish",
+    "meaningVisible" : true,
+    "sessionMinutes" : 15
+  },
+  "schemaVersion" : 2,
+  "sessions" : [
+    {
+      "assessments" : [
+        {
+          "capability" : "Describes past weekend activities",
+          "context" : "weekend",
+          "createdAt" : 809968220,
+          "nextGoal" : "Add one detail about when it happened.",
+          "outcome" : "success",
+          "passageID" : "s1-u1",
+          "revisionKey" : "s1-u1:1,s1-u2:0",
+          "suggestedLevel" : 2,
+          "words" : [
+            {
+              "confidence" : 0.95,
+              "form" : "grandmother",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "grandmother",
+              "meaning" : "the mother of your parent",
+              "quote" : "my grandmother",
+              "sourceIDs" : [
+                "s1-u1"
+              ]
+            },
+            {
+              "confidence" : 0.9,
+              "form" : "cooked",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "cook",
+              "meaning" : "to prepare food by heating it",
+              "quote" : "we cooked soup",
+              "sourceIDs" : [
+                "s1-u2"
+              ]
+            },
+            {
+              "confidence" : 0.85,
+              "form" : "soup",
+              "kind" : "understanding",
+              "language" : "en",
+              "lemma" : "soup",
+              "meaning" : "a hot liquid food",
+              "quote" : "soup",
+              "sourceIDs" : [
+                "s1-u2"
+              ]
+            }
+          ]
+        }
+      ],
+      "endReason" : "Ended by you",
+      "endedAt" : 809968200,
+      "fragments" : [
+        {
+          "endMS" : 1200,
+          "id" : "s1-a1",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 809967601,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 0,
+          "text" : " Hi! What did you do",
+          "typed" : false
+        },
+        {
+          "endMS" : 2000,
+          "id" : "s1-a2",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 809967602,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 1300,
+          "text" : " last weekend?",
+          "typed" : false
+        },
+        {
+          "endMS" : 6000,
+          "id" : "s1-u1",
+          "meaningVisible" : false,
+          "previousTexts" : [
+            " I visit my grandmother"
+          ],
+          "receivedAt" : 809967606,
+          "revision" : 1,
+          "speaker" : "user",
+          "startMS" : 4000,
+          "text" : " I visited my grandmother",
+          "typed" : false
+        },
+        {
+          "endMS" : 8000,
+          "id" : "s1-u2",
+          "meaningVisible" : false,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 809967608,
+          "revision" : 0,
+          "speaker" : "user",
+          "startMS" : 6500,
+          "text" : " and we cooked soup.",
+          "typed" : false
+        },
+        {
+          "endMS" : 14000,
+          "id" : "s1-a3",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 809967614,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 12000,
+          "text" : " Lovely! What soup did you make?",
+          "typed" : false
+        }
+      ],
+      "id" : "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A61",
+      "inputTokens" : 1200,
+      "languageID" : "en",
+      "outputTokens" : 300,
+      "providerID" : "sess_fixture_1",
+      "searchCalls" : 1,
+      "startedAt" : 809967600,
+      "themeID" : "weekend",
+      "title" : "The weekend",
+      "topics" : [
+        {
+          "id" : "7D4C2B1A-0F9E-4D8C-8B7A-6F5E4D3C2B11",
+          "languageID" : "en",
+          "query" : "electric cars",
+          "retrievedAt" : 809967900,
+          "sources" : [
+            {
+              "title" : "Example source",
+              "url" : "https://example.org/cars"
+            }
+          ],
+          "text" : "Electric cars are growing. ([example.org](https://example.org/cars))\n\n**Discussion question:** Would you buy one?"
+        }
+      ],
+      "translations" : {
+        "Spanish::s1-a1:0,s1-a2:0" : " ¡Hola! ¿Qué hiciste el fin de semana pasado?"
+      },
+      "usageFinal" : true,
+      "voiceSeconds" : 600.5
+    },
+    {
+      "assessments" : [
+        {
+          "capability" : "Describes past weekend activities",
+          "context" : "food",
+          "createdAt" : 810054060,
+          "nextGoal" : "Use a time word with the past tense.",
+          "outcome" : "success",
+          "passageID" : "s2-u1",
+          "revisionKey" : "s2-u1:0",
+          "suggestedLevel" : 2,
+          "words" : [
+            {
+              "confidence" : 0.9,
+              "form" : "cooked",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "cook",
+              "meaning" : "to prepare food by heating it",
+              "quote" : "I cooked pasta",
+              "sourceIDs" : [
+                "s2-u1"
+              ]
+            }
+          ]
+        }
+      ],
+      "endReason" : "Ended by you",
+      "endedAt" : 810054300,
+      "fragments" : [
+        {
+          "endMS" : 1,
+          "id" : "s2-u1",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810054001,
+          "revision" : 0,
+          "speaker" : "user",
+          "startMS" : 0,
+          "text" : "Yesterday I cooked pasta for dinner.",
+          "typed" : true
+        },
+        {
+          "endMS" : 3001,
+          "id" : "s2-a1",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810054003,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 3000,
+          "text" : "Nice! What sauce did you use?",
+          "typed" : false
+        }
+      ],
+      "id" : "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A62",
+      "inputTokens" : 400,
+      "languageID" : "en",
+      "outputTokens" : 80,
+      "searchCalls" : 0,
+      "startedAt" : 810054000,
+      "title" : "A little English",
+      "topics" : [
+
+      ],
+      "translations" : {
+
+      },
+      "usageFinal" : true,
+      "voiceSeconds" : 0
+    },
+    {
+      "assessments" : [
+        {
+          "capability" : "Describes past weekend activities",
+          "context" : "food",
+          "createdAt" : 810659400,
+          "nextGoal" : "Compare two meals you cooked.",
+          "outcome" : "success",
+          "passageID" : "s3-u1",
+          "revisionKey" : "s3-u1:0",
+          "suggestedLevel" : 3,
+          "words" : [
+            {
+              "confidence" : 0.92,
+              "form" : "cooked",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "cook",
+              "meaning" : "to prepare food by heating it",
+              "quote" : "I cooked rice",
+              "sourceIDs" : [
+                "s3-u1"
+              ]
+            },
+            {
+              "confidence" : 0.93,
+              "form" : "grandmother",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "grandmother",
+              "meaning" : "the mother of your parent",
+              "quote" : "my grandmother",
+              "sourceIDs" : [
+                "s3-u1"
+              ]
+            }
+          ]
+        }
+      ],
+      "endReason" : "Time limit",
+      "endedAt" : 810659500,
+      "fragments" : [
+        {
+          "endMS" : 1500,
+          "id" : "s3-a1",
+          "meaningVisible" : false,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810658802,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 0,
+          "text" : " What did you cook this week?",
+          "typed" : false
+        },
+        {
+          "endMS" : 7000,
+          "id" : "s3-u1",
+          "meaningVisible" : false,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810658807,
+          "revision" : 0,
+          "speaker" : "user",
+          "startMS" : 5000,
+          "text" : " I cooked rice for my grandmother.",
+          "typed" : false
+        }
+      ],
+      "id" : "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A63",
+      "inputTokens" : 900,
+      "languageID" : "en",
+      "outputTokens" : 200,
+      "providerID" : "sess_fixture_3",
+      "searchCalls" : 0,
+      "startedAt" : 810658800,
+      "themeID" : "food",
+      "title" : "Food",
+      "topics" : [
+
+      ],
+      "translations" : {
+
+      },
+      "usageFinal" : false,
+      "voiceSeconds" : 240
+    },
+    {
+      "assessments" : [
+        {
+          "capability" : "Greets and states a goal",
+          "context" : "greeting",
+          "createdAt" : 810659000,
+          "nextGoal" : "Di qué te gustaría practicar hoy.",
+          "outcome" : "success",
+          "passageID" : "s4-u1",
+          "revisionKey" : "s4-u1:0",
+          "suggestedLevel" : 1,
+          "words" : [
+            {
+              "confidence" : 0.9,
+              "form" : "practicar",
+              "kind" : "independent",
+              "language" : "es",
+              "lemma" : "practicar",
+              "meaning" : "to practise",
+              "quote" : "quiero practicar",
+              "sourceIDs" : [
+                "s4-u1"
+              ]
+            }
+          ]
+        }
+      ],
+      "endReason" : "Ended by you",
+      "endedAt" : 810659100,
+      "fragments" : [
+        {
+          "endMS" : 2000,
+          "id" : "s4-u1",
+          "meaningVisible" : false,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810658902,
+          "revision" : 0,
+          "speaker" : "user",
+          "startMS" : 0,
+          "text" : "Hola, quiero practicar.",
+          "typed" : false
+        }
+      ],
+      "id" : "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A64",
+      "inputTokens" : 150,
+      "languageID" : "es",
+      "outputTokens" : 40,
+      "providerID" : "sess_fixture_4",
+      "searchCalls" : 0,
+      "startedAt" : 810658900,
+      "title" : "Un poco de español",
+      "topics" : [
+
+      ],
+      "translations" : {
+
+      },
+      "usageFinal" : true,
+      "voiceSeconds" : 90
+    }
+  ]
+}

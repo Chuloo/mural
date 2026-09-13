@@ -1,0 +1,32 @@
+{
+  "languageID": "en",
+  "now": 810745200.0,
+  "passages": {
+    "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A61": [
+      {"speaker": "assistant", "text": " Hi! What did you do last weekend?", "fragmentIDs": ["s1-a1", "s1-a2"]},
+      {"speaker": "user", "text": " I visited my grandmother and we cooked soup.", "fragmentIDs": ["s1-u1", "s1-u2"]},
+      {"speaker": "assistant", "text": " Lovely! What soup did you make?", "fragmentIDs": ["s1-a3"]}
+    ],
+    "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A62": [
+      {"speaker": "user", "text": "Yesterday I cooked pasta for dinner.", "fragmentIDs": ["s2-u1"]},
+      {"speaker": "assistant", "text": "Nice! What sauce did you use?", "fragmentIDs": ["s2-a1"]}
+    ],
+    "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A63": [
+      {"speaker": "assistant", "text": " What did you cook this week?", "fragmentIDs": ["s3-a1"]},
+      {"speaker": "user", "text": " I cooked rice for my grandmother.", "fragmentIDs": ["s3-u1"]}
+    ],
+    "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A64": [
+      {"speaker": "user", "text": "Hola, quiero practicar.", "fragmentIDs": ["s4-u1"]}
+    ]
+  },
+  "learner": {
+    "challenge": 1,
+    "observationCount": 3,
+    "nextGoal": "Compare two meals you cooked.",
+    "capabilities": ["Describes past weekend activities"],
+    "words": [
+      {"id": "en|cook|to prepare food by heating it", "lemma": "cook", "meaning": "to prepare food by heating it", "form": "cooked", "example": "I cooked rice", "bars": 2, "understandingCount": 0, "independentCount": 2, "lastSeen": 810659400.0, "dueAt": 811005000.0},
+      {"id": "en|grandmother|the mother of your parent", "lemma": "grandmother", "meaning": "the mother of your parent", "form": "grandmother", "example": "my grandmother", "bars": 2, "understandingCount": 0, "independentCount": 2, "lastSeen": 810659400.0, "dueAt": 811005000.0}
+    ]
+  }
+}

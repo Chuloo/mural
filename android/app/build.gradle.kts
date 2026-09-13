@@ -37,6 +37,11 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
+tasks.withType<Test>().configureEach {
+    inputs.dir(rootProject.file("../Tests/Fixtures/cross-platform"))
+        .withPropertyName("crossPlatformFixtures")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.10.1")

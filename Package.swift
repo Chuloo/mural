@@ -7,6 +7,6 @@ let package = Package(
     products: [.library(name: "MuralCore", targets: ["MuralCore"])],
     targets: [
         .target(name: "MuralCore", path: "Core"),
-        .testTarget(name: "MuralCoreTests", dependencies: ["MuralCore"], path: "Tests")
+        .testTarget(name: "MuralCoreTests", dependencies: ["MuralCore"], path: "Tests", exclude: ["Fixtures"])
     ]
 )

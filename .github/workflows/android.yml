@@ -2,9 +2,9 @@ name: Android
 on:
   push:
     branches: [main]
-    paths: ['android/**', 'scripts/export_android_content.py', '.github/workflows/android.yml']
+    paths: ['android/**', 'Tests/Fixtures/**', 'scripts/export_android_content.py', '.github/workflows/android.yml']
   pull_request:
-    paths: ['android/**', 'scripts/export_android_content.py', '.github/workflows/android.yml']
+    paths: ['android/**', 'Tests/Fixtures/**', 'scripts/export_android_content.py', '.github/workflows/android.yml']
 permissions:
   contents: read
 concurrency:

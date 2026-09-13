@@ -1,0 +1,22 @@
+{
+  "description": "TeachingPolicy.shouldRedirectSpeech cases shared by MuralCore and the Android core.",
+  "cases": [
+    {"language": "zh", "detected": "zh", "confidence": 0.99, "redirect": false},
+    {"language": "zh", "detected": "zh-Hans", "confidence": 0.99, "redirect": false},
+    {"language": "zh", "detected": "zh-Hant", "confidence": 0.99, "redirect": false},
+    {"language": "zh", "detected": "zh-CN", "confidence": 0.99, "redirect": false},
+    {"language": "zh", "detected": "zh_TW", "confidence": 0.99, "redirect": false},
+    {"language": "zh", "detected": "ZH-HANS", "confidence": 0.99, "redirect": false},
+    {"language": "zh", "detected": "ja", "confidence": 0.99, "redirect": true},
+    {"language": "zh", "detected": "zhx", "confidence": 0.99, "redirect": true},
+    {"language": "pt", "detected": "pt-PT", "confidence": 0.99, "redirect": false},
+    {"language": "pt", "detected": "es", "confidence": 0.99, "redirect": true},
+    {"language": "es", "detected": "en", "confidence": 0.89, "redirect": true},
+    {"language": "es", "detected": "en", "confidence": 0.88, "redirect": false},
+    {"language": "es", "detected": "en", "confidence": 1.5, "redirect": false},
+    {"language": "es", "detected": "und", "confidence": 0.99, "redirect": false},
+    {"language": "es", "detected": "", "confidence": 0.99, "redirect": false},
+    {"language": "nb", "detected": "nb", "confidence": 0.99, "redirect": false},
+    {"language": "nb", "detected": "sv", "confidence": 0.95, "redirect": true}
+  ]
+}

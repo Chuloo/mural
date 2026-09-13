@@ -9,7 +9,8 @@ Before a substantial feature, open an issue describing the problem and proposed 
 1. Follow [the iPhone setup guide](docs/run-on-iphone.md) or use a simulator.
 2. Make a focused change. Use [the language-module guide](docs/add-language.md) for new languages.
 3. Run `swift test` and the relevant native checks in [the build guide](docs/build-and-test.md). Changes to voice behavior need a real-device check; report when that check was unavailable.
-4. Describe the user-visible change, how you verified it, and any remaining limitations in your pull request.
+4. If your change touches `Core/`, make the matching change under `android/app/src/main/java/chat/mural/core/` and run `python3 scripts/check_cross_platform.py`. State in your pull request if you could not build or run the Android app to verify it.
+5. Describe the user-visible change, how you verified it, and any remaining limitations in your pull request.
 
 Keep credentials and machine-specific signing settings out of commits. Update the project generator when adding app resources or project settings. Preserve third-party notices when modifying dependencies.
 

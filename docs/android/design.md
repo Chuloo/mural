@@ -37,6 +37,10 @@ The microphone works only in the foreground. Ending the conversation, losing aud
 
 The repository protocol is unchanged: OpenAI `POST /v1/live/sessions` with `gpt-live-1`, voice `marin` and the `oai-events` channel, and helper operations through `POST /v1/responses` with `gpt-5.6-luna`. The key is entered on the device, never in code. There is no shared key, no required Mural server and no paid call in automated tests.
 
+## Keeping both clients in sync
+
+Language content is generated from the Swift modules by `scripts/export_android_content.py`. `scripts/check_cross_platform.py` compares teaching prompts, learning constants and archive fields between `Core/` and `android/app/src/main/java/chat/mural/core/`, and `Tests/Fixtures/cross-platform/` holds an archive that both `swift test` and the Gradle tests decode, project and re-encode. See [the language architecture](../language-architecture.md).
+
 ## Platform and verification
 
 Minimum Android 8.0 (API 26); compile and target SDK 35. Java 17, Gradle 8.11.1 with a verified checksum, AGP 8.9.2 and pinned dependencies. The APK bundles WebRTC for ARM and x86 emulators. Google Play publishing and a release signing key are outside a personal installation.
