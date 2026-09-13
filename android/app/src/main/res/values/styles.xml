@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.Mural" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">#141413</item>
+        <item name="android:colorAccent">#DFBC85</item>
+    </style>
+</resources>

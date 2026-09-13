@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common -->
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_close">Close</string>
+    <string name="common_save">Save</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_privacy_policy">Privacy policy</string>
+    <string name="common_terms_of_use">Terms of use</string>
+    <string name="common_contact_support">Contact support</string>
+    <string name="common_operation_failed">The operation couldn\'t be completed.</string>
+
+    <!-- Errors -->
+    <string name="error_dialog_title">A little interruption</string>
+    <string name="error_go_to_settings">Go to Settings</string>
+    <string name="error_local_history_unavailable">The local history couldn\'t be opened. It won\'t be overwritten. Keep the app\'s data and check the file before continuing.</string>
+    <string name="error_save_progress_failed">Progress couldn\'t be saved. Export a backup before closing the app.</string>
+    <string name="error_resolve_local_history_first">Resolve the local history error first.</string>
+    <string name="error_accept_ai_consent">Accept OpenAI use in Settings before you begin.</string>
+    <string name="error_missing_key">Add your OpenAI key in Settings to begin.</string>
+    <string name="error_key_invalid">Enter a valid OpenAI API key.</string>
+    <string name="error_key_save">The key couldn\'t be saved securely on this device.</string>
+    <string name="error_key_save_failed">The key couldn\'t be saved.</string>
+    <string name="error_key_remove">The key couldn\'t be removed. Unlock this device and try again.</string>
+    <string name="error_key_delete_failed">The key couldn\'t be removed.</string>
+    <string name="error_help_failed">The hint couldn\'t be prepared.</string>
+    <string name="error_voice_connect_failed">Mural couldn\'t connect the voice conversation.</string>
+    <string name="error_send_message_failed">The message couldn\'t be sent.</string>
+    <string name="error_lookup_word_failed">The word couldn\'t be looked up.</string>
+    <string name="error_find_topic_failed">The topic couldn\'t be found.</string>
+    <string name="error_topic_unsourced">The search didn\'t return verifiable sources. Try a more specific topic.</string>
+    <string name="error_import_failed">Import failed. Check the file is a Mural backup, matches supported languages, and is under 30 MB.</string>
+    <string name="error_incomplete_response">OpenAI returned an incomplete response. Please try again.</string>
+    <string name="error_request_refused">Mural couldn\'t complete that request. Try a different topic.</string>
+    <string name="error_http_401">Your OpenAI key wasn\'t accepted. Check it in Settings.</string>
+    <string name="error_http_403_404">This API key may not have access to the requested model. Check your OpenAI project.</string>
+    <string name="error_http_429">OpenAI\'s usage or rate limit was reached. Check your project billing and limits.</string>
+    <string name="error_http_generic">OpenAI couldn\'t complete the request (HTTP %1$d). Please try again.</string>
+    <string name="error_backup_too_large">The backup exceeds the 30 MB limit.</string>
+    <string name="error_file_open_failed">The selected file couldn\'t be opened.</string>
+    <string name="error_transport_microphone">Allow microphone access in Android Settings to start a conversation.</string>
+    <string name="error_transport_connection">The voice connection couldn\'t be established. Check your connection and try again.</string>
+    <string name="error_transport_timeout">The voice connection took too long. Please try again.</string>
+    <string name="error_transport_audio_focus">Mural couldn\'t use audio because another app has control of it. Please try again.</string>
+    <string name="error_transport_network_lost">The network connection was lost. Tap to start a new conversation.</string>
+    <string name="error_transport_channel_closed">The voice connection ended unexpectedly. Your conversation has been saved.</string>
+    <string name="error_transport_invalid_event">The voice connection received an invalid event. Your conversation has been saved.</string>
+    <string name="error_transport_audio_interrupted">Audio was interrupted. Your conversation has been saved.</string>
+    <string name="error_transport_audio_stopped">The voice audio stopped unexpectedly. Your conversation has been saved.</string>
+
+    <!-- Notices -->
+    <string name="notice_invalid_voice_update">An invalid voice update was received.</string>
+    <string name="notice_key_saved">Saved securely. Start a conversation to connect.</string>
+    <string name="notice_help_simpler">Mural will make that a little simpler.</string>
+    <string name="notice_update_send_failed">A conversation update couldn\'t be sent. You can keep speaking.</string>
+    <string name="notice_voice_update_rejected">A voice update was rejected. If Mural stops responding, end this conversation and start again.</string>
+    <string name="notice_time_limit_reached">You\'ve reached your conversation time limit.</string>
+    <string name="notice_ended_inactivity">Mural ended this quiet session to avoid running up usage.</string>
+    <string name="notice_topic_ready">Topic ready. Tap Talk or start typing to begin.</string>
+    <string name="notice_backup_imported">Your backup has been imported.</string>
+    <string name="notice_microphone_blocked">Microphone access is blocked for Mural. You can enable it in phone settings or keep typing.</string>
+    <string name="notice_microphone_permission_needed">Mural needs permission to hear your voice. You can also type instead.</string>
+
+    <!-- Talk screen -->
+    <string name="talk_tab_title">Talk</string>
+    <string name="talk_meaning_loading">Finding the meaning…</string>
+    <string name="talk_meaning_failed">We couldn\'t get the meaning.</string>
+    <string name="talk_retry_meaning_button">Try meaning again</string>
+    <string name="talk_checking">Checking that for you…</string>
+    <string name="talk_meaning_label">Meaning</string>
+    <string name="talk_status_written">Written conversation</string>
+    <string name="talk_mic_start_desc">Start conversation</string>
+    <string name="talk_mic_unmute_desc">Unmute microphone</string>
+    <string name="talk_mic_mute_desc">Mute microphone</string>
+    <string name="talk_end_label">End</string>
+    <string name="talk_transcript_label">Transcript</string>
+    <string name="talk_type_button">Type instead</string>
+    <string name="talk_help_button">A little help</string>
+    <string name="talk_lookup_button">Look up a word</string>
+    <string name="talk_open_phone_settings">Open phone settings</string>
+    <string name="talk_new_conversation_button">New conversation</string>
+    <string name="talk_typed_reply_title">Say it your way.</string>
+    <string name="talk_typed_reply_subtitle">You can write in %1$s or another language.</string>
+    <string name="talk_typed_reply_field_label">Your reply</string>
+    <string name="talk_typed_reply_send_button">Send reply</string>
+    <string name="talk_lookup_dialog_title">A little meaning</string>
+    <string name="talk_pinyin_show">Show pinyin</string>
+    <string name="talk_pinyin_hide">Hide pinyin</string>
+    <string name="talk_lookup_field_label">Word or phrase</string>
+    <string name="talk_lookup_button_action">Look up</string>
+    <string name="talk_status_connecting">Getting comfortable…</string>
+    <string name="talk_status_muted">Microphone muted</string>
+    <string name="talk_status_listening">I\'m listening</string>
+    <string name="talk_status_closing">Saving our conversation…</string>
+    <string name="talk_status_ended">Until next time</string>
+    <string name="talk_status_failed">Let\'s try again</string>
+    <string name="talk_status_idle">Ready when you are</string>
+    <string name="talk_orb_listening_desc">Mural is listening</string>
+    <string name="talk_orb_idle_desc">Mural\'s orb</string>
+
+    <!-- Topics screen -->
+    <string name="topics_tab_title">Themes</string>
+    <string name="topics_eyebrow">A place to begin</string>
+    <string name="topics_title">What\'s on your mind?</string>
+    <string name="topics_subtitle">Same friend. Somewhere new.</string>
+    <string name="topics_just_talk">Just talk</string>
+    <string name="topics_search_placeholder">Find a conversation</string>
+    <string name="topics_category_all">All</string>
+    <string name="topics_category_everyday">Everyday</string>
+    <string name="topics_category_connection">Connection</string>
+    <string name="topics_category_local_life">Local life</string>
+    <string name="topics_category_interests">Interests</string>
+    <string name="topics_no_results">We couldn\'t find a conversation like that.</string>
+    <string name="topics_current_dialog_eyebrow">The world today</string>
+    <string name="topics_current_dialog_title">A fresh conversation.</string>
+    <string name="topics_current_dialog_subtitle">What would you like to talk about?</string>
+    <string name="topics_find_button">Find a topic</string>
+    <string name="topics_finding_button">Finding something interesting…</string>
+    <string name="topics_sources_heading">Sources</string>
+    <string name="topics_talk_about_button">Talk about this</string>
+    <string name="topics_sources_note">Sources stay attached to the topic.</string>
+    <string name="topics_current_theme_subtitle">From the world today</string>
+    <string name="topics_from_conversation">From our conversation</string>
+
+    <!-- Words screen -->
+    <string name="words_tab_title">Words</string>
+    <string name="words_eyebrow">Little by little · %1$s</string>
+    <string name="words_title">Your words.</string>
+    <string name="words_subtitle">Familiar words, ready for another conversation.</string>
+    <string name="words_search_placeholder">Find a word</string>
+    <string name="words_empty_title_blank">They\'ll grow from here.</string>
+    <string name="words_empty_title_search">No matching words yet.</string>
+    <string name="words_empty_subtitle_blank">As we talk, useful words and phrases find a home here. Their strength grows when you recall them over time.</string>
+    <string name="words_empty_subtitle_search">Try another word or meaning.</string>
+    <string name="words_recall_note">The bars estimate spoken recall, not permanent mastery.</string>
+    <string name="words_capabilities_title">Finding your voice</string>
+    <string name="words_capabilities_note">Observed across conversations. These are provisional, not formal level certificates.</string>
+    <string name="words_last_seen">Last seen %1$s</string>
+    <string name="words_remove_button">Remove from my words</string>
+    <string name="words_done_button">Done</string>
+    <string name="words_recall_new">New</string>
+    <string name="words_recall_fragile">Fragile</string>
+    <string name="words_recall_growing">Growing</string>
+    <string name="words_recall_steady">Steady</string>
+    <string name="words_explanation_supported">Heard or used with support. Try using it in your own words.</string>
+    <string name="words_explanation_recalled_once">Used independently. We\'ll bring it back soon.</string>
+    <string name="words_explanation_recalled_days">Recalled on different days. Still worth revisiting.</string>
+    <string name="words_explanation_steady">Recalled across days and contexts. Strength can fade with time.</string>
+    <string name="words_recall_bars_desc">%1$d of 3 recall bars</string>
+    <string name="words_example_quote">“%1$s”</string>
+    <plurals name="words_independent_uses">
+        <item quantity="one">%1$d independent use</item>
+        <item quantity="other">%1$d independent uses</item>
+    </plurals>
+
+    <!-- Settings screen -->
+    <string name="settings_tab_title">Settings</string>
+    <string name="settings_eyebrow">Your space</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Make Mural feel comfortable for you.</string>
+    <string name="settings_section_conversation">Conversation</string>
+    <string name="settings_learning_language">Learning language</string>
+    <string name="settings_conversation_limit">Conversation limit</string>
+    <string name="settings_minutes_value">%1$d min</string>
+    <string name="settings_meaning_language">Meaning language</string>
+    <string name="settings_interests_label">A few things you enjoy</string>
+    <string name="settings_interests_support">Helps suggest conversations that matter to you.</string>
+    <string name="settings_section_openai_account">OpenAI account</string>
+    <string name="settings_key_saved_notice">Your key is saved securely on this device.</string>
+    <string name="settings_key_missing_notice">Add a key to talk, look up meanings, and check current topics.</string>
+    <string name="settings_save_key">Save key</string>
+    <string name="settings_replace_key">Save replacement key</string>
+    <string name="settings_remove_key">Remove key</string>
+    <string name="settings_section_usage">Usage</string>
+    <string name="settings_voice_time_label">Recorded voice time</string>
+    <string name="settings_voice_estimate_label">Voice estimate</string>
+    <string name="settings_search_calls_label">Search calls recorded</string>
+    <string name="settings_usage_billing_link">OpenAI usage and billing</string>
+    <string name="settings_usage_footer">Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.</string>
+    <string name="settings_section_ai_permission">AI permission</string>
+    <string name="settings_ai_consent_accepted">Accepted for this version</string>
+    <string name="settings_ai_consent_not_accepted">Not accepted</string>
+    <string name="settings_ai_permission_summary">With permission, Mural sends audio and the text you choose to OpenAI. You can use your history and words without granting it.</string>
+    <string name="settings_revoke_consent_button">Withdraw permission</string>
+    <string name="settings_review_consent_button">Review and accept</string>
+    <string name="settings_section_your_data">Your words belong to you</string>
+    <string name="settings_export_backup">Export learning backup</string>
+    <string name="settings_import_backup">Import learning backup</string>
+    <string name="settings_backup_footer">Backups include transcripts and learning evidence, never your API key. Import adds conversations with new IDs. Existing conversations stay unchanged. There is no cloud sync.</string>
+    <string name="settings_delete_all_data">Delete all conversations and learning</string>
+    <string name="settings_section_help_privacy">Help and privacy</string>
+    <string name="settings_openai_data_controls">OpenAI data controls</string>
+    <string name="settings_open_source_notices">Open-source notices</string>
+    <string name="settings_data_use_footer">Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.</string>
+    <string name="settings_app_version_footer">Mural %1$s · Android</string>
+    <string name="settings_corrections_label">Corrections</string>
+    <string name="settings_corrections_value">Gently, as we talk</string>
+    <string name="settings_open_api_keys">Open OpenAI API keys</string>
+    <string name="settings_models_footer">Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna</string>
+    <string name="settings_delete_key_confirm_title">Delete the saved key?</string>
+    <string name="settings_delete_key_confirm_message">You\'ll need another key to use AI features again.</string>
+    <string name="settings_delete_all_confirm_title">Delete all learning data on this device?</string>
+    <string name="settings_delete_all_confirm_message">This removes conversations, vocabulary and progress. Export a backup first if you want to keep them. Your API key and preferences remain.</string>
+    <string name="settings_delete_all_confirm_button">Delete all learning data</string>
+    <string name="settings_revoke_consent_confirm_title">Withdraw AI permission?</string>
+    <string name="settings_revoke_consent_confirm_message">Conversations, searches, and online meanings will be turned off. Your local history stays available.</string>
+    <string name="settings_key_dialog_title">OpenAI API key</string>
+    <string name="settings_key_dialog_note">Stored encrypted by Android and never included in backups.</string>
+    <string name="settings_key_dialog_field_label">New key</string>
+    <string name="settings_backup_exported_toast">Backup exported</string>
+    <string name="settings_backup_imported_toast">Backup imported</string>
+
+    <!-- History -->
+    <string name="history_section_title">Past conversations</string>
+    <string name="history_empty">Your conversations will appear here.</string>
+    <string name="history_delete_session_confirm_title">Delete this conversation and its learning evidence?</string>
+    <string name="history_speaker_you">YOU</string>
+    <string name="history_speaker_mural">MURAL</string>
+    <string name="history_edit_passage_button">Edit</string>
+    <string name="history_saved_sources">Saved sources</string>
+    <string name="history_correction_dialog_title">What you said</string>
+    <plurals name="history_passages_count">
+        <item quantity="one">%1$d turn</item>
+        <item quantity="other">%1$d turns</item>
+    </plurals>
+
+    <!-- Onboarding -->
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_language_title">What would you like to speak?</string>
+    <string name="onboarding_meaning_title">A little help,\nin your language.</string>
+    <string name="onboarding_meaning_subtitle">Mural speaks %1$s. Choose the language you read most easily for meanings.</string>
+    <string name="onboarding_continue_button">Continue</string>
+    <string name="onboarding_choose_continue_button">Choose and continue</string>
+    <string name="onboarding_pace_note_step0">We\'ll find your pace through conversation.</string>
+    <string name="onboarding_pace_note_step1">You can change both languages in Settings.</string>
+
+    <!-- AI consent -->
+    <string name="consent_title">Before we talk.</string>
+    <string name="consent_ai_summary">With your permission, Mural sends audio and selected text to OpenAI to provide conversations and meanings. Provider retention rules apply.</string>
+    <string name="consent_local_storage_note">Your learning record is stored on this device. Mural does not save raw audio. You can keep browsing your saved words and conversations without agreeing.</string>
+    <string name="consent_privacy_policy_link">Privacy policy</string>
+    <string name="consent_agree_button">Agree and continue</string>
+    <string name="consent_decline_button">Not now</string>
+</resources>

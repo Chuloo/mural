@@ -1,0 +1,15 @@
+Mural for Android
+
+Mural: MIT; see Mural-LICENSE.txt.
+AndroidX / Jetpack Compose (Google), Kotlin and kotlinx.coroutines/serialization (JetBrains),
+OkHttp and Okio (Square): Apache License 2.0; see Apache-2.0.txt and each upstream project.
+WebRTC Android package io.github.webrtc-sdk:android:150.7871.01:
+see WebRTC-SDK-LICENSE.txt and WebRTC-THIRD-PARTY-NOTICES.md for WebRTC and its included components.
+
+https://android.googlesource.com/platform/frameworks/support/
+https://github.com/JetBrains/kotlin
+https://github.com/Kotlin/kotlinx.coroutines
+https://github.com/Kotlin/kotlinx.serialization
+https://github.com/square/okhttp
+https://github.com/square/okio
+https://github.com/webrtc-sdk/android

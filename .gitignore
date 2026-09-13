@@ -30,3 +30,12 @@ marketing/demo/
 node_modules/
 __pycache__/
 *.py[cod]
+
+# Android local tooling, build outputs and private signing material
+android/.gradle/
+android/.kotlin/
+android/**/build/
+android/local.properties
+android/.idea/
+*.jks
+*.keystore

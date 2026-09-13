@@ -13,6 +13,17 @@ Mural is a native iPhone app for learning through conversation. Speak to a warm,
 
 Built with SwiftUI, Liquid Glass and local SwiftData storage. This version connects directly to OpenAI using your own API key. It needs an internet connection, but no Mural account or running Mac.
 
+## Android
+
+A native Android client is available in [`android/`](android/README.md), with voice and written conversation, the same eight language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and uses your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
+
+See the [Android installation/build guide](docs/run-on-android.md) and [Android verification record](verification/android-validation.md). Build a personal-install APK with Java 17 and Android SDK 35:
+
+```sh
+cd android
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
 ## Get started
 
 You need a Mac with Xcode 26 or later, an iPhone running iOS 26.1 or later, an Apple Account, and an OpenAI API project with billing and access to GPT-Live-1 and GPT-5.6 Luna. A ChatGPT subscription does not provide API credit.
@@ -110,6 +121,7 @@ On 13 September 2026, the eight-language build passed **70 core tests and 20 nat
 
 | Directory | Contents |
 | --- | --- |
+| `android/` | Native Kotlin/Compose Android client and tests |
 | `App/` | SwiftUI views, SwiftData storage, Keychain, WebRTC transport and API coordination |
 | `Core/` | Language modules, teaching policy, transcripts, vocabulary evidence and recall projection |
 | `Tests/` | Core learning and translation tests |
