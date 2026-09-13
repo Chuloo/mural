@@ -85,6 +85,10 @@ import MuralCore
     var assistantPassage: Passage? { session?.passages.last(where: { $0.speaker == .assistant }) }
     var userPassage: Passage? { session?.passages.last(where: { $0.speaker == .user }) }
     var caption: String { assistantPassage?.text ?? language.greeting }
+    var pinyinTokens: [MandarinPronunciationToken] {
+        guard language.id == "zh" else { return [] }
+        return MandarinPinyin.tokens(caption)
+    }
     var status: String {
         switch state {
         case .idle: "Ready when you are"

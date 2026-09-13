@@ -183,7 +183,13 @@ struct TranscriptView: View {
                         ForEach(session.passages) { passage in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(passage.speaker == .assistant ? "MURAL" : "YOU").font(.caption).tracking(1).foregroundStyle(MuralColor.secondary)
-                                Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
+                                if session.languageID == "zh", passage.speaker == .assistant {
+                                    MandarinRubyText(tokens: MandarinPinyin.tokens(passage.text))
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel(passage.text)
+                                } else {
+                                    Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
+                                }
                                 if let translation = session.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: meaningLanguage)] ?? session.translations[passage.revisionKey] {
                                     Text(translation).font(.subheadline).foregroundStyle(MuralColor.secondary)
                                 }
@@ -255,7 +261,13 @@ struct EditableTranscriptView: View {
                                     Button("Edit") { editedText = passage.text; editingID = passage.id }.font(.caption)
                                 }
                             }.foregroundStyle(MuralColor.secondary)
-                            Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
+                            if session?.languageID == "zh", passage.speaker == .assistant {
+                                MandarinRubyText(tokens: MandarinPinyin.tokens(passage.text))
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(passage.text)
+                            } else {
+                                Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
+                            }
                         }
                     }
                     ForEach(session?.topics ?? []) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt) }

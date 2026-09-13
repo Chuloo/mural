@@ -119,12 +119,19 @@ struct TalkView: View {
     }
     private var captionArea: some View {
         VStack(spacing: 12) {
-            Text(linkedCaption).font(.system(coordinator.assistantPassage == nil ? .largeTitle : .title2, design: .rounded, weight: .medium))
-                .tracking(-0.5).multilineTextAlignment(.center).tint(MuralColor.ink)
-                .environment(\.openURL, OpenURLAction { url in
-                    guard url.scheme == "mural-word", let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first?.value else { return .discarded }
-                    lookup = WordLookup(word: word, sentence: coordinator.caption); return .handled
-                }).accessibilityIdentifier("target-caption")
+            if coordinator.language.id == "zh" {
+                MandarinRubyText(tokens: coordinator.pinyinTokens)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(coordinator.caption)
+                    .accessibilityIdentifier("target-caption")
+            } else {
+                Text(linkedCaption).font(.system(coordinator.assistantPassage == nil ? .largeTitle : .title2, design: .rounded, weight: .medium))
+                    .tracking(-0.5).multilineTextAlignment(.center).tint(MuralColor.ink)
+                    .environment(\.openURL, OpenURLAction { url in
+                        guard url.scheme == "mural-word", let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first?.value else { return .discarded }
+                        lookup = WordLookup(word: word, sentence: coordinator.caption); return .handled
+                    }).accessibilityIdentifier("target-caption")
+            }
             if coordinator.store.preferences.meaningVisible {
                 Text(coordinator.assistantPassage == nil ? MeaningLanguages.greeting(in: coordinator.store.preferences.meaningLanguage) : !coordinator.meaning.isEmpty ? coordinator.meaning : coordinator.translating ? "Finding the meaning…" : "")
                     .font(.subheadline).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)

@@ -168,6 +168,8 @@ final class LanguageTests: XCTestCase {
         XCTAssertEqual(LanguageRegistry.module(for: "fr")?.greeting, "Salut !")
         XCTAssertEqual(LanguageModule.french.locale, "fr-FR")
         XCTAssertEqual(MeaningLanguages.greeting(in: "Norwegian"), "Hei!")
+        XCTAssertTrue(MeaningLanguages.all.contains("Chinese"))
+        XCTAssertEqual(MeaningLanguages.greeting(in: "Chinese"), "你好！")
     }
 
     func testMandarinUsesSimplifiedChinesePolicyAndCulturalContext() {
@@ -190,6 +192,16 @@ final class LanguageTests: XCTestCase {
         XCTAssertTrue(language.themes.allSatisfy { !$0.situation.contains("Norway") && !$0.situation.contains("Norwegian") })
     }
 
+    func testMandarinPinyinPairsEachCharacter() {
+        XCTAssertEqual(MandarinPinyin.annotated("你好！"), "你(nǐ) 好(hǎo)！")
+        XCTAssertEqual(MandarinPinyin.tokens("喝茶？"), [
+            MandarinPronunciationToken(text: "喝", pinyin: "hē"),
+            MandarinPronunciationToken(text: "茶", pinyin: "chá"),
+            MandarinPronunciationToken(text: "？", pinyin: nil)
+        ])
+        XCTAssertNil(MandarinPinyin.annotated("Hello!"))
+    }
+
     func testEnglishIsProductionWhenEnglishIsTheTarget() {
         let session = evidence(languageID: "en")
         XCTAssertEqual(LearningEngine.validate(session.assessments[0], session: session)?.words.first?.kind, .independent)
@@ -203,10 +215,10 @@ final class LanguageTests: XCTestCase {
     func testFourLanguageArchivePreservesSeparateProgressAndGlossaryKeys() throws {
         var archive = Archive()
         archive.preferences.learningLanguageID = "fr"
-        archive.sessions = ["nb", "es", "en", "fr"].flatMap { [evidence(languageID: $0), evidence(languageID: $0, day: 2)] }
+        archive.sessions = ["nb", "es", "en", "fr", "zh"].flatMap { [evidence(languageID: $0), evidence(languageID: $0, day: 2)] }
         let restored = try Archive.decode(archive.encoded())
         XCTAssertEqual(restored.preferences.learningLanguageID, "fr")
-        let keys = ["nb", "es", "en", "fr"].compactMap { id -> String? in
+        let keys = ["nb", "es", "en", "fr", "zh"].compactMap { id -> String? in
             let learner = LearningEngine.project(restored.sessions, languageID: id, now: restored.sessions.last!.startedAt)
             XCTAssertEqual(learner.observationCount, 2)
             XCTAssertEqual(learner.words.count, 1)
@@ -214,7 +226,7 @@ final class LanguageTests: XCTestCase {
             XCTAssertEqual(learner.words.first?.bars, 2)
             return learner.words.first?.id
         }
-        XCTAssertEqual(Set(keys).count, 4)
+        XCTAssertEqual(Set(keys).count, 5)
     }
 
     func testFrenchEvidencePreservesAccentsAndElisions() throws {

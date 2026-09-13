@@ -109,6 +109,24 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.secureTextFields["api-key"].exists)
     }
 
+    func testOnboardingCanStartMandarinPractice() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding"]
+        app.launch()
+        XCTAssertTrue(app.buttons["onboarding-language-zh"].waitForExistence(timeout: 10))
+        app.buttons["onboarding-language-zh"].tap()
+        app.buttons["onboarding-continue"].tap()
+        XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["onboarding-meaning-title"].label.contains("Mural speaks Mandarin Chinese"), true)
+        app.buttons["onboarding-meaning-picker"].tap()
+        app.buttons["Chinese"].tap()
+        XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "你好！")
+        app.buttons["onboarding-continue"].tap()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "你好！")
+        XCTAssertEqual(app.staticTexts["meaning-caption"].label, "你好！")
+    }
+
     func testEnglishOnboardingOffersOtherMeaningsAndPreservesAnExplicitChoice() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding"]
@@ -129,9 +147,9 @@ final class MuralUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "¡Hola!")
     }
 
-    func testSettingsCanSwitchToEnglishAndFrench() {
+    func testSettingsCanSwitchToEnglishFrenchAndMandarin() {
         let app = launch()
-        for (selection, greeting) in [("English · International", "Hi!"), ("French · France", "Salut !")] {
+        for (selection, greeting) in [("English · International", "Hi!"), ("French · France", "Salut !"), ("Mandarin Chinese · Mainland China", "你好！")] {
             app.buttons["Settings"].tap()
             app.buttons["learning-language-picker"].tap()
             app.buttons[selection].tap()
