@@ -205,3 +205,26 @@ integration('regressing final usage does not settle or refund a hold; trusted re
     assert.equal((await f.controller.status(f.account, live.sessionID)).chargedNanoUSD, '29166667');
   } finally { await f.cleanup(); }
 });
+
+integration('Tagalog locale creates and settles voice while aliases cannot reserve credit', async () => {
+  const f = await fixture();
+  try {
+    const before = await f.wallet();
+    for (const language of ['tl', 'fil', 'fil-PH', 'tgl-PH', 'tl_PH', '__proto__']) {
+      await assert.rejects(f.controller.create(f.account, `tagalog-invalid-${language}`, 'v=0', language), { code: 'invalid_live_offer' });
+    }
+    assert.equal(f.creates, 0);
+    assert.deepEqual(await f.wallet(), before);
+    assert.equal((await f.db.query('SELECT count(*) FROM reservations')).rows[0].count, '0');
+    assert.equal((await f.db.query('SELECT count(*) FROM hosted_sessions')).rows[0].count, '0');
+    const live = await f.controller.create(f.account, 'tagalog-valid-offer', 'v=0', 'tl-PH');
+    assert.equal(f.creates, 1);
+    assert.match((f.payloads[0] as { session: { instructions: string } }).session.instructions, /Speak only Tagalog as spoken in the Philippines/);
+    assert.equal((await f.wallet()).reserved_nano, '500000000');
+    await f.controller.close(f.account, live.sessionID);
+    f.send(live.providerSessionID, { type: 'session.closed', usage: { seconds: 20 } });
+    await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
+    assert.equal((await f.wallet()).reserved_nano, '0');
+    assert.equal((await f.controller.status(f.account, live.sessionID)).chargedNanoUSD, '16666667');
+  } finally { await f.cleanup(); }
+});

@@ -14,6 +14,9 @@ Language-specific content lives in `Core/Languages/`. Each module defines its gr
 | `it` | Italian from Italy | `it-IT` |
 | `pt` | Brazilian Portuguese | `pt-BR` |
 | `zh` | Standard Mandarin, Simplified Chinese | `zh-CN` |
+| `tl` | Tagalog (Filipino) from the Philippines | `tl-PH` |
+
+Tagalog uses Filipino as a display alias and keeps one `tl` storage namespace. Its automatic speech-language detector is disabled because valid Tagalog can be classified as Indonesian with high confidence; explicit target-language teaching instructions remain in use. See [Tagalog teaching choices and references](tagalog.md) for the evidence, vocabulary conventions and verification limits.
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
 

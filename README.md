@@ -70,7 +70,9 @@ A free Personal Team can run the app on your own phone; TestFlight and App Store
 - **A fresh start:** the Talk screen returns to its greeting 15 seconds after a conversation ends. Tap **New conversation** to reset immediately. Your saved conversations and learning remain.
 - **Local records:** export or import a JSON learning backup, delete a conversation, or delete all learning data from Settings.
 
-The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Spanish from Spain, international English, French from France, German from Germany, Italian from Italy, Brazilian Portuguese and Standard Mandarin with Simplified Chinese. Each language has its own conversation themes, teaching guidance and progress. Valid regional alternatives are accepted.
+The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Spanish from Spain, international English, French from France, German from Germany, Italian from Italy, Brazilian Portuguese, Standard Mandarin with Simplified Chinese, and Tagalog (Filipino) from the Philippines. Each language has its own conversation themes, teaching guidance and progress. Valid regional alternatives are accepted.
+
+Tagalog includes six teaching stages, Philippine conversation settings and vocabulary guidance that preserves verb focus. It uses the same meanings, word lookup and independent progress flows. [Teaching choices and references](docs/tagalog.md) explain the `tl` identity and the limits of automatic language detection.
 
 Mandarin includes optional pinyin in Talk, transcripts and word details. Chinese word lookup uses word boundaries, and the original characters remain available for copying from transcripts. Pinyin uses system dictionary readings; names, ambiguous words and tone changes in connected speech still need listening checks. Voice accent and teaching guidance are model instructions, and fluent-speaker review is still needed before making pronunciation or learning-effectiveness claims.
 
@@ -102,9 +104,9 @@ xcodebuild -project Mural.xcodeproj -scheme Mural \
   CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
 ```
 
-For UI tests, create or select an iPhone 17 simulator in Xcode, then run **Product → Test**. The tests use in-memory fixtures and do not require an API key. More commands and preview options are in [the build guide](docs/build-and-test.md).
+For UI tests, create a dedicated iPhone 17 simulator in Xcode, then run **Product → Test**. Most tests use in-memory fixtures; the relaunch test also writes language preferences to that simulator's local store. No API key is required. More commands and preview options are in [the build guide](docs/build-and-test.md).
 
-On 13 September 2026, the eight-language build passed **70 core tests and 20 native UI tests**, including Mandarin pinyin, all four new onboarding choices and the largest accessibility text size. **79 backend tests** passed with an isolated PostgreSQL database and no skips. German, Italian, Brazilian Portuguese and Mandarin each passed a live iPhone check using synthetic typed replies and real voice output, meanings and word lookup. These checks do not establish human speech-recognition, pronunciation or correction quality. [Verification record](verification/validation.md)
+On 13 September 2026, the nine-language build passed **90 core tests, 25 native UI tests and 80 backend tests**, with no failures or skipped backend tests. Debug simulator and unsigned Release iPhone builds passed. Tagalog checks include the largest accessibility text size, transcript retention, language isolation and normal relaunch persistence. Tagalog real-device and proficient-speaker review remain pending. Earlier German, Italian, Brazilian Portuguese and Mandarin live checks used synthetic typed replies and real voice output; those checks do not establish human speech-recognition, pronunciation or correction quality. [Verification record](verification/validation.md)
 
 ## Code map
 
