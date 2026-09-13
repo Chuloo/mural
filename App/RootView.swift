@@ -53,6 +53,11 @@ struct RootView: View {
         .task {
             if AudioVerification.requested { await AudioVerification.run(coordinator) }
             else if ProcessInfo.processInfo.arguments.contains("--ended-conversation") { coordinator.prepareEndedPreview() }
+            else {
+                #if targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("--preview"), ProcessInfo.processInfo.arguments.contains("--preview-long-caption") { coordinator.prepareScreenshot(.conversation) }
+                #endif
+            }
         }
         #endif
     }
@@ -90,25 +95,21 @@ struct TalkView: View {
                         .accessibilityIdentifier("conversation-status")
                     captionArea
                     Spacer(minLength: 12)
-                    controls
-                    Text(coordinator.microphoneLabel).font(.caption2).foregroundStyle(MuralColor.secondary).padding(.top, 10)
-                        .accessibilityIdentifier("microphone-status")
-                    HStack(spacing: 24) {
-                        if coordinator.state == .active {
-                            Button("Type instead", systemImage: "keyboard") { typing = true }
-                            Button("A little help", systemImage: "sparkles") { coordinator.help() }
-                        } else if coordinator.session == nil {
-                            Text("Reply in whichever language comes to you.").foregroundStyle(MuralColor.secondary)
-                        } else if !coordinator.isRunning {
-                            Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
-                                .accessibilityIdentifier("new-conversation")
-                        }
-                    }.font(.caption).padding(.top, 6).padding(.bottom, 12)
+                    if coordinator.session == nil {
+                        Text("Reply in whichever language comes to you.").font(.caption).foregroundStyle(MuralColor.secondary)
+                            .multilineTextAlignment(.center).padding(.bottom, 12)
+                    }
                     if let notice = coordinator.notice {
                         Text(notice).font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center).padding(.bottom, 12)
                     }
                 }.padding(.horizontal, 30).frame(maxWidth: .infinity).frame(minHeight: geometry.size.height)
             }.scrollIndicators(.hidden)
+                .accessibilityIdentifier("conversation-content")
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            controlArea
+                .padding(.horizontal, 30).padding(.top, 12)
+                .frame(maxWidth: .infinity).background(MuralColor.cream)
         }
         .sheet(isPresented: $typing) { TypedReplyView(coordinator: coordinator) }
         .animation(.smooth(duration: 0.35), value: coordinator.state)
@@ -116,6 +117,26 @@ struct TalkView: View {
             TranscriptView(session: session, meaningLanguage: coordinator.store.preferences.meaningLanguage)
         }
         .sheet(item: $lookup) { item in LookupView(item: item, coordinator: coordinator) }
+    }
+    private var controlArea: some View {
+        VStack(spacing: 0) {
+            controls
+            Text(coordinator.microphoneLabel).font(.caption2).foregroundStyle(MuralColor.secondary).padding(.top, 10)
+                .accessibilityIdentifier("microphone-status")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 24) { secondaryControls }
+                VStack(spacing: 12) { secondaryControls }
+            }.font(.caption).padding(.top, 6).padding(.bottom, 12)
+        }
+    }
+    @ViewBuilder private var secondaryControls: some View {
+        if coordinator.state == .active {
+            Button("Type instead", systemImage: "keyboard") { typing = true }
+            Button("A little help", systemImage: "sparkles") { coordinator.help() }
+        } else if coordinator.session != nil && !coordinator.isRunning {
+            Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
+                .accessibilityIdentifier("new-conversation")
+        }
     }
     private var captionArea: some View {
         VStack(spacing: 12) {
@@ -168,7 +189,7 @@ struct TalkView: View {
                 VStack(spacing: 6) {
                     Image(systemName: coordinator.store.preferences.meaningVisible ? "captions.bubble.fill" : "captions.bubble")
                         .frame(width: 48, height: 48).modifier(SoftGlass(tint: coordinator.store.preferences.meaningVisible ? MuralColor.butter.opacity(0.7) : .white.opacity(0.4)))
-                    Text("Meaning").font(.caption2)
+                    Text("Meaning").font(.caption2).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.center)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain)
                 .accessibilityLabel(coordinator.store.preferences.meaningVisible ? "Hide meaning subtitles" : "Show meaning subtitles")
@@ -189,7 +210,7 @@ struct TalkView: View {
             Button { if coordinator.isRunning { coordinator.end() } else { transcript = coordinator.session } } label: {
                 VStack(spacing: 6) {
                     Image(systemName: coordinator.isRunning ? "phone.down" : "text.bubble").frame(width: 48, height: 48).modifier(SoftGlass())
-                    Text(coordinator.isRunning ? "End" : "Transcript").font(.caption2)
+                    Text(coordinator.isRunning ? "End" : "Transcript").font(.caption2).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.center)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel(coordinator.isRunning ? "End conversation" : "Conversation transcript")
                 .disabled(coordinator.session == nil)

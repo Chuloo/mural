@@ -353,9 +353,16 @@ import MuralCore
         selectedTheme = language.themes.first { $0.id == "coffee" }
         var record = SessionRecord(languageID: "es", themeID: selectedTheme?.id, title: selectedTheme?.title)
         record.append(Fragment(speaker: .user, text: "Un café con leche, por favor.", startMS: 0, endMS: 2200))
-        record.append(Fragment(speaker: .assistant, text: "¡Un café con leche! ¿Y algo para comer?", startMS: 2800, endMS: 6000))
+        let longCaption = ProcessInfo.processInfo.arguments.contains("--preview-long-caption")
+        let caption = longCaption
+            ? String(repeating: "Podemos practicar cómo pedir un café y preguntar qué hay para comer. ", count: 12)
+            : "¡Un café con leche! ¿Y algo para comer?"
+        let meaning = longCaption
+            ? String(repeating: "We can practise ordering a coffee and asking what there is to eat. ", count: 12)
+            : "A coffee with milk! And something to eat?"
+        record.append(Fragment(speaker: .assistant, text: caption, startMS: 2800, endMS: 6000))
         let passage = record.passages.last!
-        record.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: "English")] = "A coffee with milk! And something to eat?"
+        record.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: "English")] = meaning
         session = record; state = .active; outputLevel = 0.18
         scheduleTranslation()
     }

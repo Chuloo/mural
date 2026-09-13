@@ -177,3 +177,18 @@ Visual review after the full UI run found that the fixed consent footer crowded 
 After the owner unlocked the phone, the final build launched normally at 16:37:51 CEST. Its running process was confirmed. This reopened the persistent learning store without verification arguments.
 
 The device results verify the application/provider paths with synthetic typed input and real voice output. They do not verify recognition of a human speaker, pronunciation, tones, correction quality, unscripted interruptions, headphones or cellular operation. The proficient-speaker checks requested in issues #10–#13 remain open. Pinyin uses dictionary tones and may need correction for names, ambiguous words and connected-speech tone changes. The Android contribution is not integrated in this checkout, so there is no generated Android language catalog to update here.
+
+
+## Pinned Talk controls with long captions
+
+13 September 2026, 19:59 CEST
+
+Long captions previously pushed the microphone and conversation actions offscreen. Talk now keeps the controls in a bottom safe-area inset while captions, notices and the idle instruction scroll. Secondary actions stack when needed; Meaning and Transcript labels wrap at large text sizes.
+
+- The long-caption regression failed against the original Talk layout because the microphone was not hittable, then passed with the pinned footer.
+- **70 offline Core tests passed**. Native Debug simulator builds passed using Xcode 26.5, iOS 26.5 and arm64.
+- **Both new UI tests passed on iPhone 17 and iPhone SE (3rd generation)**, at standard and largest accessibility text sizes. They verify actual Meaning state changes from icon and label taps, caption scrolling, stable action positions and typed-reply sheet dismissal.
+- Greeting/Meaning and ended-conversation/manual-reset checks passed on SE again after the final idle-instruction adjustment. Existing automatic-reset/open-transcript and Mandarin transcript/pinyin checks also passed on iPhone 17 during this change.
+- Simulator screenshot review confirmed readable scrolled captions and visible actions at both text sizes, and full Meaning/Transcript labels in the small-screen ended state. At the largest text size, the controls occupy more space and reading captions requires scrolling.
+
+The interactive long-caption fixture uses temporary preview storage and cached translations. It is seeded from the debug simulator task rather than the static screenshot initializer, so changing Meaning does not reset its state. These checks made no API calls and do not verify live microphone input, streaming audio or provider behavior. Audio, teaching logic, persistence, account settings and the proposed Android client are unchanged.

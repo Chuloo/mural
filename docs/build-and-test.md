@@ -30,6 +30,8 @@ In **Product → Scheme → Edit Scheme → Run → Arguments**, add `--preview`
 
 Remove preview arguments before testing normal persistence. For actual speech, [install on an iPhone](run-on-iphone.md) and use the key saved through Settings.
 
+For the pinned Talk controls regression, launch a Debug simulator with `--preview --preview-long-caption`. This seeds an active conversation with long Spanish captions and cached English meanings, without an API key. Toggle Meaning, scroll the text, and open and dismiss Type instead; the controls should stay in place. Repeat at the largest accessibility text size. Do not combine this interactive fixture with `--screenshot=conversation`, which prepares static screenshot state in the root view initializer.
+
 ## Update the generated project
 
 After adding or removing files under `App/`, run:

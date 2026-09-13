@@ -132,6 +132,70 @@ final class MuralUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--preview"] + (ended ? ["--ended-conversation"] : [])
         app.launch(); return app
     }
+    private func checkPinnedConversationControls(accessibilityText: Bool = false) {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-long-caption"]
+        if accessibilityText {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
+        app.launch()
+        let microphone = app.buttons["start-conversation"]
+        XCTAssertTrue(microphone.waitForExistence(timeout: 10))
+        let end = app.buttons["End conversation"]
+        XCTAssertTrue(end.waitForExistence(timeout: 5))
+        let type = app.buttons["Type instead"]
+        let help = app.buttons["A little help"]
+        let pinned = [microphone, end, type, help]
+        for button in pinned { XCTAssertTrue(button.isHittable, button.label) }
+        let frames = pinned.map(\.frame)
+        func assertPinned() {
+            for (button, frame) in zip(pinned, frames) {
+                XCTAssertTrue(button.isHittable, button.label)
+                XCTAssertEqual(button.frame.midY, frame.midY, accuracy: 1, button.label)
+            }
+        }
+        let hideMeaning = app.buttons["Hide meaning subtitles"]
+        let showMeaning = app.buttons["Show meaning subtitles"]
+        XCTAssertEqual(hideMeaning.value as? String, "On")
+        hideMeaning.tap()
+        XCTAssertTrue(showMeaning.waitForExistence(timeout: 5), "Tapping the meaning control must turn subtitles off")
+        XCTAssertEqual(showMeaning.value as? String, "Off")
+        assertPinned()
+        // Exercise the label as well as the icon; both belong to the same button.
+        showMeaning.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.93)).tap()
+        XCTAssertTrue(hideMeaning.waitForExistence(timeout: 5), "Tapping the meaning label must turn subtitles on")
+        XCTAssertEqual(hideMeaning.value as? String, "On")
+        assertPinned()
+
+        let content = app.scrollViews["conversation-content"]
+        XCTAssertTrue(content.exists)
+        let caption = app.staticTexts["target-caption"]
+        let captionY = caption.frame.minY
+        // The scroll view's accessibility frame can extend beneath the safe-area
+        // footer. Drag inside the visible content, above the pinned controls.
+        let top = max(content.frame.minY, app.navigationBars.firstMatch.frame.maxY) + 16
+        let bottom = min(content.frame.maxY, hideMeaning.frame.minY - 12) - 16
+        XCTAssertGreaterThan(bottom - top, 30)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: content.frame.midX, dy: bottom))
+        let finish = origin.withOffset(CGVector(dx: content.frame.midX, dy: top))
+        for _ in 0..<3 { start.press(forDuration: 0.05, thenDragTo: finish) }
+        XCTAssertLessThan(caption.frame.minY, captionY)
+        assertPinned()
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = accessibilityText ? "Pinned controls - largest accessibility text" : "Pinned controls - long caption"
+        screen.lifetime = .keepAlways; add(screen)
+
+        type.tap()
+        XCTAssertTrue(app.textFields.firstMatch.waitForExistence(timeout: 5) || app.textViews.firstMatch.exists)
+        app.buttons["Close"].tap()
+        XCTAssertTrue(type.waitForExistence(timeout: 5))
+        assertPinned()
+    }
+    func testLongCaptionKeepsConversationControlsPinned() { checkPinnedConversationControls() }
+    func testLongCaptionKeepsConversationControlsPinnedAtLargestAccessibilityTextSize() {
+        checkPinnedConversationControls(accessibilityText: true)
+    }
     func testGreetingAndMeaningToggle() {
         let app = launch()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
