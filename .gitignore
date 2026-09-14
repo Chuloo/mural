@@ -19,6 +19,9 @@ Config/Local.xcconfig
 verification/*.log
 verification/*.zip
 verification/*.png
+# Keep local verification output out of future contributions. Existing tracked
+# files remain visible to Git and are not removed by this rule.
+verification/**
 release/private/
 release/screenshots/en-US/originals/
 site/.openai/hosting.json

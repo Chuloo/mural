@@ -11,7 +11,7 @@
 
 Mural is a native iPhone and Android app for learning through conversation. Speak to a warm, animated orb, follow the meaning when you need it, and practise words again in later conversations. Mural adjusts the challenge from the evidence in your replies.
 
-Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. Learning records stay on your device. This version connects directly to OpenAI using your own API key. It needs an internet connection, but no Mural account or running Mac.
+Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. Learning records stay on your device. The default route connects directly to OpenAI using your own API key. An optional subscription bridge can provide a separate account-backed route when you deploy and operate that bridge yourself; it is not required for the default API setup.
 
 ## Android
 
@@ -75,6 +75,12 @@ A free Personal Team can run the app on your own phone; TestFlight and App Store
 
 ## What works today
 
+### Optional learning extension
+
+This contribution adds an iPhone learning extension for learners who need explanations in a familiar language. It includes Simplified Chinese and Vietnamese interface translations, an explanation-language setting for the realtime teacher, the Ogden Basic 850-word classroom, article import from PDF, URL, TXT, Markdown, RTF, HTML, DOCX and EPUB, and switchable native orb skins with custom-photo support. See [the learning-extension overview](docs/learning-extension.md) and [the asset and source notes](docs/assets-and-sources.md) for the user rationale, entry points and provenance limits.
+
+The extension keeps Mural's existing realtime voice transport and voice choices. The subscription route is an experimental, opt-in adapter: it requires a user-controlled deployment that remains available to the phone, and its private hosts, ports, pairing data and credentials must never be committed. The public API route remains the default documented setup below.
+
 - **A warm welcome:** choose a learning language and a subtitle language in two short screens, with a greeting that changes languages.
 - **Conversation practice:** live voice, gentle corrections, optional meaning subtitles, word lookup, mute, and a typed reply when speaking is inconvenient.
 - **Themes:** 24 conversation settings, with cultural details supplied by each language module. You can also request a current topic; web search supplies source links.
@@ -117,7 +123,7 @@ xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
 
 For UI tests, create or select an iPhone 17 simulator in Xcode, then run **Product → Test**. The tests use in-memory fixtures and do not require an API key. More commands and preview options are in [the build guide](docs/build-and-test.md).
 
-The iPhone language release recorded on 13 September 2026 passed **70 core tests and 20 native UI tests**, including Mandarin pinyin, all four new onboarding choices and the largest accessibility text size. **79 backend tests** passed with an isolated PostgreSQL database and no skips. German, Italian, Brazilian Portuguese and Mandarin each passed a live iPhone check using synthetic typed replies and real voice output, meanings and word lookup. These checks do not establish human speech-recognition, pronunciation or correction quality. [Verification record](verification/validation.md)
+The current public iOS baseline passes **130 Swift tests** and an iOS Simulator build. The development extension was also installed on a personal iPhone, but that device build is not the public HEAD and cannot substitute for maintainer verification of this contribution. In particular, full audio-reactive skin motion, reduced-motion/background behaviour, realtime subtitle latency, and every supported article-import path still need exact-build checks. These checks do not establish human speech-recognition, pronunciation or correction quality. [Verification record](verification/validation.md)
 
 The Android release branch is being prepared separately. See [release progress](verification/android-release-progress.md) for its checks and remaining gates.
 

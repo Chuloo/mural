@@ -1,0 +1,10 @@
+{
+  "name": "mural-subscription-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "node bridge.js",
+    "setup": "node bridge.js --setup-token"
+  }
+}

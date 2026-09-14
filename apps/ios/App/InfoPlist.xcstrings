@@ -1,0 +1,29 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mural listens while you practise speaking. Your voice is sent to OpenAI during a conversation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mural 会在你练习口语时使用麦克风。对话期间，你的语音会发送给 OpenAI。"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mural sử dụng micrô khi bạn luyện nói. Giọng nói của bạn được gửi đến OpenAI trong cuộc trò chuyện."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

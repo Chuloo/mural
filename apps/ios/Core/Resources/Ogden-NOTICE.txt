@@ -1,0 +1,53 @@
+Ogden Basic — Chinese learner edition
+
+This curriculum is adapted from longlong-skyligo/Ogden by Skivein at the pinned revision:
+https://github.com/longlong-skyligo/Ogden/tree/9d924597f047342b7cd78ba7ac928d940d3190ed
+
+The source README describes Ogden as a secondary creation based on:
+https://ogden.munch.love/
+It also states that the original website author gave permission for that secondary creation.
+The source repository supplies an MIT license. Its word data is 850 entries in five groups:
+Operations (100), General Things (400), Picturable (200), Qualities (100), and Opposites (50).
+The source README identifies the bundled word data, IPA data, and US/UK audio directories as:
+app/src/main/assets/ogden_words.json
+app/src/main/assets/ogden_ipa.json
+app/src/main/assets/audio/us
+app/src/main/assets/audio/uk
+
+Mural retains stable word IDs and adapts the curriculum to native Swift. The app includes the
+850 English words, Chinese meanings, definitions, examples, related words, IPA, and US/UK word
+recordings from this pinned source. Four US spellings are displayed with the existing UK
+spellings searchable. Twenty-seven entries have documented editorial changes for clarity,
+grammar, sense alignment or translation. The imported English and Chinese text received
+AI-assisted semantic screening; it has not been certified by a human dictionary editor.
+Related words are not automatically interchangeable synonyms. IPA and individual pronunciations
+have not all been independently reviewed. The source does not identify the recording speaker or
+provider, and the recordings are not represented as OpenAI voices. Offline playback makes no
+network request. Vietnamese explanations are generated live by the teacher.
+
+The previous Mural word IDs and saved learning records remain readable. Earlier source material,
+if present in a pre-update backup, is not relicensed by this notice.
+
+Original source license (MIT):
+
+MIT License
+
+Copyright (c) 2026 Skivein
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

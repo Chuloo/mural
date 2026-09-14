@@ -75,7 +75,8 @@ data class TopicBrief(
 @Serializable
 data class SessionRecord(
     val id: String = UUID.randomUUID().toString(), val languageID: String = LanguageRegistry.defaultID,
-    var providerID: String? = null, var startedAt: Double = nowSeconds(), var endedAt: Double? = null,
+    var providerID: String? = null, // Opaque iOS classroom settings survive Android round-trips.
+    var classroom: JsonObject? = null, var startedAt: Double = nowSeconds(), var endedAt: Double? = null,
     var themeID: String? = null, var title: String = LanguageRegistry.get(languageID)?.defaultTitle ?: "A conversation",
     var fragments: MutableList<Fragment> = mutableListOf(), var assessments: MutableList<Assessment> = mutableListOf(),
     var translations: MutableMap<String,String> = mutableMapOf(), var topics: MutableList<TopicBrief> = mutableListOf(),
@@ -95,7 +96,11 @@ data class SessionRecord(
 data class Preferences(
     var learningLanguageID: String = LanguageRegistry.defaultID, var meaningVisible: Boolean = true,
     var meaningLanguage: String = "English", var sessionMinutes: Int = 15, var hiddenWords: List<String> = emptyList(),
-    var interests: String = "", var hasOnboarded: Boolean = false, var aiConsentVersion: Int? = null
+    var interests: String = "", var hasOnboarded: Boolean = false, var aiConsentVersion: Int? = null,
+    // iOS-only classroom and presentation state is preserved without an Android UI.
+    var classroom: JsonObject? = null, var conversationTeachingLanguage: String? = null,
+    var orbSkinID: String? = null, var pageBackgroundID: String? = null,
+    var ogdenLearning: JsonObject? = null, var avatar: JsonObject? = null
 )
 @Serializable data class Archive(var schemaVersion: Int = 2, var sessions: MutableList<SessionRecord> = mutableListOf(), var preferences: Preferences = Preferences())
 class ArchiveError private constructor(val kind: Kind) : Exception() {

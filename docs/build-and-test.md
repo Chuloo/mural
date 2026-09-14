@@ -71,3 +71,25 @@ Record the build, checks and remaining limitations in `verification/validation.m
 In a Debug build, launch with `--verify-audio --record-spanish-demo`. This uses the saved API key and temporary learning data. After a 30-second setup pause, it starts a café conversation with English meanings, mutes the microphone, and sends two scripted typed replies. Mural’s responses and speech come from the live APIs. The second reply contains a grammar mistake so the conversation can demonstrate a correction.
 
 This is a typed-input demo with live voice output. It does not verify speech recognition or a human conversation. The helper ends the session and writes a content-free `demo-verification.json` status in the app container. Actual recording is separate; select the Mural screen and its app audio in your recorder. The helper has been compiled on-device; a completed recording and playback review remain required.
+
+
+## Check the optional iOS learning extension
+
+The Swift suite includes a synthetic learning-extension archive shared with the Android tests. It checks that the additional classroom and appearance values form a valid iOS archive. Android preserves these optional values without exposing the iOS classroom UI. Archives using a custom target language remain unsupported on Android and are rejected explicitly.
+
+The subscription adapter tests are offline and require Node.js 22 or later:
+
+```sh
+(cd SubscriptionBridge && npm test)
+```
+
+On macOS, run the article redirect checks against the actual importer. The harness does not send network requests:
+
+```sh
+mkdir -p .build
+xcrun swiftc -swift-version 5 apps/ios/App/ArticleImporter.swift \
+  scripts/tests/ArticleImportURLTests.swift -o .build/article-import-url-tests
+.build/article-import-url-tests
+```
+
+Article web links must use HTTPS. The importer rejects credentials in URLs and insecure redirect destinations before following them. This test does not prove extraction quality on every publisher page or scanned-document support. Use paste or file import for unsupported sites.

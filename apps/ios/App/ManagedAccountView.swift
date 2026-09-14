@@ -4,26 +4,29 @@ import MuralCore
 
 /// Ready for a Settings navigation destination when managed accounts are configured.
 struct ManagedAccountView: View {
+    @Environment(\.locale) private var interfaceLocale
     @State private var store = ManagedAccountStore()
     @State private var confirmDeletion = false
     var body: some View {
+        let _ = interfaceLocale
         ScrollView {
-            VStack(spacing: 24) {
-                MuralOrb(active: !store.isBusy).frame(width: 112, height: 112).padding(.top, 16)
-                VStack(spacing: 8) {
-                    Text(store.session == nil ? "Welcome to Mural" : "Your Mural account")
-                        .font(.system(.title, design: .rounded, weight: .semibold)).multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(spacing: 12) {
+                    MuralOrb(active: !store.isBusy).frame(width: 112, height: 112)
+                    Text(LocalizedStringKey(store.session == nil ? "Welcome to Mural" : "Your Mural account"))
+                        .font(.title2.bold()).multilineTextAlignment(.center)
                     Text("Your conversations and learning history stay on this iPhone.")
-                        .font(.subheadline).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
-                }
+                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }.frame(maxWidth: .infinity).padding(.vertical, 20)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 if store.configuration == nil {
                     Text("Accounts aren’t available in this build yet. You can keep practising with your own OpenAI API key in Settings.")
                         .font(.body).multilineTextAlignment(.center)
-                        .padding(24).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 24))
+                        .padding(20).background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .accessibilityIdentifier("managedAccountUnavailable")
                 } else if let session = store.session {
                     VStack(spacing: 16) {
-                        Label(session.provider == .apple ? "Signed in with Apple" : "Signed in with Google", systemImage: "person.crop.circle")
+                        Label(LocalizedStringKey(session.provider == .apple ? "Signed in with Apple" : "Signed in with Google"), systemImage: "person.crop.circle")
                         if let email = store.profile?.email {
                             Text(email).font(.body).textSelection(.enabled)
                                 .accessibilityIdentifier("managed-account-email")
@@ -33,7 +36,7 @@ struct ManagedAccountView: View {
                         Button("Refresh account", action: store.refresh).buttonStyle(.bordered)
                         Button("Sign out on all devices", action: store.signOut).buttonStyle(.bordered)
                         Button("Delete account", role: .destructive) { confirmDeletion = true }
-                    }.padding(24).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 24))
+                    }.padding(20).background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .disabled(store.isBusy)
                 } else {
                     VStack(spacing: 14) {
@@ -56,7 +59,7 @@ struct ManagedAccountView: View {
                 }
                 if store.isBusy { ProgressView().accessibilityLabel("Updating account") }
                 if let message = store.message {
-                    Text(message).font(.callout).multilineTextAlignment(.center)
+                    Text(LocalizedStringKey(message)).font(.callout).multilineTextAlignment(.center)
                         .accessibilityIdentifier("managedAccountMessage")
                 }
                 HStack(spacing: 24) {
@@ -65,8 +68,8 @@ struct ManagedAccountView: View {
                 }.font(.footnote).tint(MuralColor.ink)
             }.padding(24).frame(maxWidth: 520).frame(maxWidth: .infinity)
         }
-        .background(MuralColor.cream).foregroundStyle(MuralColor.ink)
-        .navigationTitle("Account").navigationBarTitleDisplayMode(.inline)
+        .background(MuralBackdrop()).foregroundStyle(MuralColor.ink)
+        .navigationTitle(L10n.text("Account")).navigationBarTitleDisplayMode(.inline)
         .task { store.refresh() }
         .onDisappear { store.cancelSignIn() }
         .confirmationDialog("Delete your Mural account?", isPresented: $confirmDeletion, titleVisibility: .visible) {

@@ -111,6 +111,8 @@ public struct SessionRecord: Codable, Identifiable, Sendable {
     public var id = UUID()
     public let languageID: String
     public var providerID: String?
+    /// Nil in existing archives and in free conversation. Explanations are not target-language production.
+    public var classroom: ClassroomSettings?
     public var startedAt = Date()
     public var endedAt: Date?
     public var themeID: String?
@@ -156,6 +158,20 @@ public struct Preferences: Codable, Sendable {
     public var interests = ""
     public var hasOnboarded = false
     public var aiConsentVersion: Int?
+    /// Optional so existing version 2 archives decode without losing preferences or history.
+    public var classroom: ClassroomSettings?
+    public var conversationTeachingLanguage: String?
+    public var orbSkinID: String?
+    /// Missing in older archives; the interface uses the original background when nil.
+    public var pageBackgroundID: String?
+    /// Optional so archives created before the Ogden classroom was added remain readable.
+    public var ogdenLearning: OgdenLearningState?
+    public var avatar: AvatarSelection?
+    public var resolvedConversationTeachingLanguage: String {
+        let selected = conversationTeachingLanguage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let known = TeachingLanguage(rawValue: selected) { return known.name }
+        return selected.isEmpty ? (TeachingLanguage(rawValue: InterfaceLanguage.current.rawValue)?.name ?? "English") : selected
+    }
     public init() {}
 }
 
@@ -206,12 +222,23 @@ public struct Archive: Codable, Sendable {
     }
     private func validate() throws {
         guard LanguageRegistry.module(for: preferences.learningLanguageID) != nil else { throw ArchiveError.unsupportedLanguage }
+        guard preferences.classroom?.isValid ?? true else { throw ArchiveError.invalid }
+        if let ogden = preferences.ogdenLearning {
+            let curriculum = try OgdenCurriculum.load()
+            guard ogden.isValid(c: curriculum) else { throw ArchiveError.invalid }
+        }
+        guard preferences.avatar?.isValid ?? true else { throw ArchiveError.invalid }
+        guard ClassroomSettings.validLanguageName(preferences.resolvedConversationTeachingLanguage) else { throw ArchiveError.invalid }
         guard Set(sessions.map(\.id)).count == sessions.count,
               sessions.count <= Self.maximumSessions,
               preferences.sessionMinutes >= 1, preferences.sessionMinutes <= 60 else { throw ArchiveError.invalid }
         func validDate(_ date: Date) -> Bool { date >= .distantPast && date <= .distantFuture }
         for s in sessions {
-            guard LanguageRegistry.module(for: s.languageID) != nil else { throw ArchiveError.unsupportedLanguage }
+            guard LanguageRegistry.module(for: s.languageID) != nil ||
+                    (s.languageID == "other" && s.classroom?.isCustomTarget == true) else { throw ArchiveError.unsupportedLanguage }
+            if let classroom = s.classroom {
+                guard classroom.isValid, classroom.effectiveLanguageID == s.languageID else { throw ArchiveError.invalid }
+            }
             // These generous limits exceed a normal session while keeping UI conversions and totals safe.
             guard s.voiceSeconds.isFinite, (0...31_536_000).contains(s.voiceSeconds),
                   [s.inputTokens, s.outputTokens, s.searchCalls].allSatisfy({ (0...1_000_000_000).contains($0) }),

@@ -40,6 +40,10 @@ import MuralCore
         } else {
             document = StoredArchive(payload: try Archive().encoded()); context.insert(document)
         }
+        // Initialize once; later interface/subtitle changes must not retarget teaching.
+        if archive.preferences.conversationTeachingLanguage?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+            archive.preferences.conversationTeachingLanguage = InterfaceLanguage.current.rawValue
+        }
         persist()
     }
     var preferences: Preferences { archive.preferences }
