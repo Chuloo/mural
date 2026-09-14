@@ -16,6 +16,8 @@ public struct LanguageModule: Identifiable, Sendable {
     public let topicPlaceholder: String
     public let lookupUnavailableReply: String
     public let themeOverrides: [String: ConversationTheme]
+    /// Detector language IDs that also mean the target, for languages the system recognizer cannot name.
+    public var detectorAliases: [String] = []
 
     public var themes: [ConversationTheme] {
         ConversationTheme.shared.map { themeOverrides[$0.id] ?? $0 }
@@ -27,13 +29,13 @@ public struct LanguageModule: Identifiable, Sendable {
 
 public enum LanguageRegistry {
     public static let defaultID = "nb"
-    public static let all: [LanguageModule] = [.norwegian, .spanish, .english, .french, .german, .italian, .portuguese, .mandarin]
+    public static let all: [LanguageModule] = [.norwegian, .spanish, .english, .french, .german, .italian, .portuguese, .mandarin, .afrikaans]
     public static func module(for id: String) -> LanguageModule? { all.first { $0.id == id } }
 }
 
 public enum MeaningLanguages {
-    public static let all = ["English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian"]
+    public static let all = ["English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Afrikaans", "Polish", "Arabic", "Ukrainian"]
     public static func greeting(in language: String) -> String {
-        ["English": "Hi!", "French": "Salut !", "German": "Hallo!", "Spanish": "¡Hola!", "Norwegian": "Hei!", "Portuguese": "Olá!", "Italian": "Ciao!", "Chinese (Simplified)": "你好！", "Chinese": "你好！", "Polish": "Cześć!", "Arabic": "مرحبًا!", "Ukrainian": "Привіт!"][language] ?? "Hi!"
+        ["English": "Hi!", "French": "Salut !", "German": "Hallo!", "Spanish": "¡Hola!", "Norwegian": "Hei!", "Portuguese": "Olá!", "Italian": "Ciao!", "Chinese (Simplified)": "你好！", "Chinese": "你好！", "Afrikaans": "Hallo!", "Polish": "Cześć!", "Arabic": "مرحبًا!", "Ukrainian": "Привіт!"][language] ?? "Hi!"
     }
 }

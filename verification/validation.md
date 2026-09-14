@@ -177,3 +177,15 @@ Visual review after the full UI run found that the fixed consent footer crowded 
 After the owner unlocked the phone, the final build launched normally at 16:37:51 CEST. Its running process was confirmed. This reopened the persistent learning store without verification arguments.
 
 The device results verify the application/provider paths with synthetic typed input and real voice output. They do not verify recognition of a human speaker, pronunciation, tones, correction quality, unscripted interruptions, headphones or cellular operation. The proficient-speaker checks requested in issues #10–#13 remain open. Pinyin uses dictionary tones and may need correction for names, ambiguous words and connected-speech tone changes. The Android contribution is not integrated in this checkout, so there is no generated Android language catalog to update here.
+
+## Afrikaans
+
+14 September 2026
+
+Afrikaans from South Africa (`af`, locale `af-ZA`) joins the registry with its own greeting, speech, writing and lemma guidance, six teaching stages and five South African theme overrides. Apple's language recognizer has no Afrikaans class and labels Afrikaans transcripts as Dutch, so `LanguageModule` gains an optional `detectorAliases` list and `TeachingPolicy.detectedMatchesTarget` treats `nl` as the target for Afrikaans; the voice prompt separately instructs the model not to drift into Dutch. Afrikaans is also available as a subtitle language.
+
+- **72 core tests passed** with Xcode 26.5, including registry order, locale and greeting for `af`, prompt isolation, archive round trips across nine languages, Dutch detector IDs never triggering a redirect, and `'n` apostrophe word links.
+- **2 native UI tests passed** on an iPhone 17 simulator running iOS 26.5: Afrikaans onboarding, and selecting Afrikaans in Settings, checking its greeting and coffee theme, opening Words and returning to Norwegian.
+- The **server locale test passed** with `af-ZA` accepted and bare `af` and `nl-NL` rejected.
+- The signed device build was installed over the existing app on an iPhone 15 Pro Max running iOS 26.5.2 and launched.
+- OpenAI does not publish a GPT-Live language list and does not name Afrikaans; its guidance is that languages outside the most popular ones may have a non-native accent or gaps in fluency. A live Afrikaans conversation with `--verify-audio --verify-language-flow --verify-language=af` and a fluent-speaker review of accent, corrections and Dutch drift are still required before making any teaching claim.

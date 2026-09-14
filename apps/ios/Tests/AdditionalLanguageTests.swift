@@ -2,12 +2,13 @@ import XCTest
 @testable import MuralCore
 
 final class AdditionalLanguageTests: XCTestCase {
-    private let ids = ["de", "it", "pt", "zh"]
+    private let ids = ["de", "it", "pt", "zh", "af"]
     private let samples = [
         ("de", "Ich gehe über die Straße.", "die Straße", "Straße", "street"),
         ("it", "Vorrei un caffè.", "un caffè", "caffè", "coffee"),
         ("pt", "Eu gosto de pão e maçã.", "o pão", "pão", "bread"),
-        ("zh", "我想去银行。", "银行", "银行", "bank")
+        ("zh", "我想去银行。", "银行", "银行", "bank"),
+        ("af", "Ek hou van koffie en brood.", "koffie", "koffie", "coffee")
     ]
 
     private func session(_ id: String, text: String = "radio", lemma: String = "radio", form: String = "radio", meaning: String = "radio", day: Int = 0, supported: Bool = false, typed: Bool = false) -> SessionRecord {
@@ -24,13 +25,15 @@ final class AdditionalLanguageTests: XCTestCase {
     }
 
     func testRegistrationPreservesOldIDsAndSetsRequestedVarieties() {
-        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh"])
-        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！")] {
+        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "af"])
+        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("af", "af-ZA", "Hallo!")] {
             XCTAssertEqual(LanguageRegistry.module(for: id)?.locale, locale)
             XCTAssertEqual(LanguageRegistry.module(for: id)?.greeting, greeting)
         }
         XCTAssertTrue(MeaningLanguages.all.contains("Chinese (Simplified)"))
         XCTAssertEqual(MeaningLanguages.greeting(in: "Chinese (Simplified)"), "你好！")
+        XCTAssertTrue(MeaningLanguages.all.contains("Afrikaans"))
+        XCTAssertEqual(MeaningLanguages.greeting(in: "Afrikaans"), "Hallo!")
     }
 
     func testAllPromptPathsUseEachNewTargetAndItsRegionalGuidance() throws {
@@ -57,7 +60,7 @@ final class AdditionalLanguageTests: XCTestCase {
         }
     }
 
-    func testAllEightLanguagesRoundTripWithIsolatedProgressAndHiddenWords() throws {
+    func testAllLanguagesRoundTripWithIsolatedProgressAndHiddenWords() throws {
         var archive = Archive()
         archive.sessions = LanguageRegistry.all.flatMap { [session($0.id), session($0.id, day: 2)] }
         archive.preferences.meaningLanguage = "Chinese (Simplified)"
@@ -79,7 +82,7 @@ final class AdditionalLanguageTests: XCTestCase {
                 let hidden = LearningEngine.project(restored.sessions, languageID: language.id, hiddenWords: restored.preferences.hiddenWords)
                 XCTAssertEqual(hidden.words.count, language.id == "pt" ? 0 : 1)
             }
-            XCTAssertEqual(keys.count, 8)
+            XCTAssertEqual(keys.count, LanguageRegistry.all.count)
         }
     }
 
@@ -128,6 +131,33 @@ final class AdditionalLanguageTests: XCTestCase {
         XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .mandarin, detectedLanguageID: "ja", confidence: 0.99))
         XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .mandarin, detectedLanguageID: "zhx", confidence: 0.99))
         XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: .portuguese, detectedLanguageID: "pt-PT", confidence: 0.99))
+    }
+
+    func testAfrikaansAcceptsDutchDetectorIDsWithoutRedirectLoops() {
+        for detected in ["af", "af-ZA", "af_ZA", "nl", "nl-NL", "nl_BE"] {
+            XCTAssertTrue(TeachingPolicy.detectedMatchesTarget(language: .afrikaans, detectedLanguageID: detected), detected)
+            XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: .afrikaans, detectedLanguageID: detected, confidence: 0.99), detected)
+        }
+        for detected in ["en", "de", "nld", "nlx"] {
+            XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .afrikaans, detectedLanguageID: detected, confidence: 0.99), detected)
+        }
+        XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .german, detectedLanguageID: "nl", confidence: 0.99))
+        XCTAssertTrue(LanguageRegistry.all.filter { $0.id != "af" }.allSatisfy { $0.detectorAliases.isEmpty })
+        XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: .afrikaans, detectedLanguageID: "en", confidence: 0.5))
+    }
+
+    func testAfrikaansPromptsAvoidDutchAndKeepApostropheWordLinks() throws {
+        let language = try XCTUnwrap(LanguageRegistry.module(for: "af"))
+        let voice = TeachingPolicy.voice(language: language, learner: LearningEngine.project([], languageID: "af"), theme: language.themes[0], interests: "", meaningLanguage: "English")
+        XCTAssertTrue(voice.contains("Do not drift into Dutch."))
+        XCTAssertFalse(voice.contains("Speak ONLY Dutch"))
+        XCTAssertEqual(language.themes.first { $0.id == "coffee" }?.title, "'n Koffie?")
+        XCTAssertTrue(language.themes.allSatisfy { !$0.situation.contains("Germany") })
+        let text = "'n Koffie, asseblief.\nBaie dankie!"
+        let segments = CaptionWords.segments(text, languageID: "af")
+        XCTAssertEqual(segments.map(\.text).joined(), text)
+        XCTAssertTrue(segments.compactMap(\.lookup).contains("Koffie"))
+        XCTAssertTrue(segments.compactMap(\.lookup).contains("asseblief"))
     }
 
     func testPinyinUsesWordReadingsAndNormalizesUmlautVowels() {
