@@ -23,6 +23,7 @@ public struct LanguageModule: Identifiable, Sendable {{
     public let topicPlaceholder: String
     public let lookupUnavailableReply: String
     public let themeOverrides: [String: ConversationTheme]
+    public var detectorAliases: [String] = []
 
     public var themes: [ConversationTheme] {{
         ConversationTheme.shared.map {{ themeOverrides[$0.id] ?? $0 }}
@@ -149,6 +150,17 @@ class ExportAndroidContentTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             eac.theme('("coffee", "A coffee?", "Something warm", "cup", "Everyday", 0)')
         self.assertIn('ConversationTheme', str(ctx.exception))
+
+    def test_detector_aliases_are_exported_only_where_declared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = write_core(pathlib.Path(tmp), ['Norwegian', 'Afrikaans'],
+                               extra_by_name={'Afrikaans': 'detectorAliases: ["nl", "nl-BE"],\n        '})
+            result = eac.generate(core)
+            self.assertIn('val detectorAliases: List<String> = emptyList()', result)
+            self.assertIn('detectorAliases = listOf("nl", "nl-BE")', result)
+            self.assertEqual(result.count('detectorAliases = listOf('), 1)
+            self.assertNotIn('themes', eac.struct_fields((core / 'Languages/LanguageModule.swift').read_text()))
+            self.assertIn('detectorAliases', eac.struct_fields((core / 'Languages/LanguageModule.swift').read_text()))
 
     def test_generation_is_deterministic(self):
         with tempfile.TemporaryDirectory() as tmp:

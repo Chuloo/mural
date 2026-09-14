@@ -43,6 +43,7 @@ final class MuralUITests: XCTestCase {
     func testItalianOnboarding() { checkNewOnboarding(id: "it", greeting: "Ciao!") }
     func testBrazilianPortugueseOnboarding() { checkNewOnboarding(id: "pt", greeting: "Olá!") }
     func testMandarinOnboardingWithOptionalPinyin() { checkNewOnboarding(id: "zh", greeting: "你好！") }
+    func testAfrikaansOnboarding() { checkNewOnboarding(id: "af", greeting: "Hallo!") }
 
     func testMandarinSelectionAtLargestAccessibilityTextSize() {
         let app = XCUIApplication()
@@ -73,7 +74,8 @@ final class MuralUITests: XCTestCase {
             ("German · Germany", "German", "Hallo!", "Ein Kaffee?"),
             ("Italian · Italy", "Italian", "Ciao!", "Un caffè?"),
             ("Portuguese · Brazil", "Portuguese", "Olá!", "Um cafezinho?"),
-            ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？")
+            ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？"),
+            ("Afrikaans · South Africa", "Afrikaans", "Hallo!", "'n Koffie?")
         ] {
             app.buttons["Settings"].tap()
             app.buttons["learning-language-picker"].tap()

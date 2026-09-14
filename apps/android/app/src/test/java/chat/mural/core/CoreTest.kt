@@ -49,10 +49,21 @@ class CoreTest {
         assertEquals(2,merged.sessions.size)
     }
     @Test fun languageRegistryAndThemesStayStable() {
-        assertEquals(listOf("nb","es","en","fr","de","it","pt","zh"),LanguageRegistry.all.map { it.id })
+        assertEquals(listOf("nb","es","en","fr","de","it","pt","zh","af"),LanguageRegistry.all.map { it.id })
         assertEquals(24,Themes.shared.map { it.id }.toSet().size)
         assertEquals("Salut !",LanguageRegistry.get("fr")!!.greeting)
         assertEquals("Norwegian",LanguageRegistry.get("nb")!!.name)
         assertEquals("Hei!",MeaningLanguages.greeting("Norwegian"))
+    }
+    @Test fun afrikaansAcceptsDutchDetectorIDsWithoutRedirectLoops() {
+        val afrikaans=LanguageRegistry.get("af")!!
+        assertEquals("af-ZA",afrikaans.locale)
+        assertEquals(listOf("nl"),afrikaans.detectorAliases)
+        for(detected in listOf("af","af-ZA","af_ZA","nl","nl-NL","nl_BE")) assertFalse(detected,TeachingPolicy.shouldRedirectSpeech(afrikaans,detected,0.99))
+        for(detected in listOf("en","de","nld")) assertTrue(detected,TeachingPolicy.shouldRedirectSpeech(afrikaans,detected,0.99))
+        assertTrue(TeachingPolicy.shouldRedirectSpeech(LanguageRegistry.get("de")!!,"nl",0.99))
+        assertFalse(TeachingPolicy.shouldRedirectSpeech(LanguageRegistry.get("zh")!!,"zh-Hans",0.99))
+        assertTrue(LanguageRegistry.all.filter { it.id!="af" }.all { it.detectorAliases.isEmpty() })
+        assertEquals("Hallo!",MeaningLanguages.greeting("Afrikaans"))
     }
 }

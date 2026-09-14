@@ -84,7 +84,8 @@ extension AudioVerification {
                 "de": "Wenn du ein Café eröffnen würdest, wie würdest du regionale Zutaten und bezahlbare Preise miteinander vereinbaren?",
                 "it": "Se aprissi un bar, come riusciresti a usare ingredienti locali mantenendo prezzi accessibili?",
                 "pt": "Se você abrisse uma cafeteria, como conciliaria ingredientes locais com preços acessíveis?",
-                "zh": "如果你开一家咖啡馆，你会怎样在使用本地食材和保持价格合理之间取得平衡？"
+                "zh": "如果你开一家咖啡馆，你会怎样在使用本地食材和保持价格合理之间取得平衡？",
+                "af": "As jy 'n koffiewinkel sou oopmaak, hoe sou jy plaaslike bestanddele met bekostigbare pryse versoen?"
             ]
             for reply in ["I am learning. How can I politely order a coffee?", advanced[id] ?? "Tell me more."] {
                 let before = coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0
@@ -97,11 +98,11 @@ extension AudioVerification {
             let recognizer = NLLanguageRecognizer()
             recognizer.processString(coordinator.caption)
             if let detected = recognizer.dominantLanguage?.rawValue {
-                report.targetLanguageDetected = detected == id || detected.hasPrefix(id + "-")
+                report.targetLanguageDetected = TeachingPolicy.detectedMatchesTarget(language: coordinator.language, detectedLanguageID: detected)
             }
             report.pinyinAvailable = MandarinPinyin.reading(coordinator.caption) != nil
             report.translated = await waitFor(20) { !coordinator.meaning.isEmpty && !coordinator.translating }
-            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡"]
+            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡", "af": "koffie"]
             do {
                 let result = try await coordinator.lookup(word: lookupWords[id] ?? coordinator.language.greetingWord, sentence: coordinator.caption)
                 report.lookupReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

@@ -14,8 +14,11 @@ Language-specific content lives in `apps/ios/Core/Languages/`. Each module defin
 | `it` | Italian from Italy | `it-IT` |
 | `pt` | Brazilian Portuguese | `pt-BR` |
 | `zh` | Standard Mandarin, Simplified Chinese | `zh-CN` |
+| `af` | Afrikaans from South Africa | `af-ZA` |
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
+
+Apple's language recognizer has no Afrikaans class and labels Afrikaans transcripts as Dutch. The Afrikaans module therefore lists `nl` in `detectorAliases`, which `TeachingPolicy.detectedMatchesTarget` treats as the target so that a learner speaking Afrikaans is never redirected; the voice prompt separately instructs the model not to drift into Dutch.
 
 `TeachingPolicy` combines a module with the shared teaching rules. Voice, assessment, typed replies, help, word lookup, subtitles and current-topic search all use that policy. The audio transport and provider connection remain shared. A module can override selected theme IDs while inheriting the common conversation catalog.
 

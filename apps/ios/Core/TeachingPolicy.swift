@@ -37,14 +37,21 @@ public enum TeachingPolicy {
     public static func redirect(language: LanguageModule) -> String {
         "Return to \(language.name). Briefly restate the last idea in \(language.name) and continue ONLY in \(language.name). The learner may reply in any language; your speech must stay in \(language.name)."
     }
+    /// True when a detector ID names the learning target, including module aliases such as Dutch for Afrikaans.
+    public static func detectedMatchesTarget(language: LanguageModule, detectedLanguageID: String) -> Bool {
+        let detected = detectedLanguageID.replacingOccurrences(of: "_", with: "-").lowercased()
+        return ([language.id] + language.detectorAliases).contains { candidate in
+            let target = candidate.lowercased()
+            return detected == target || detected.hasPrefix(target + "-")
+        }
+    }
+
     public static func shouldRedirectSpeech(language: LanguageModule, detectedLanguageID: String, confidence: Double) -> Bool {
         let detected = detectedLanguageID.replacingOccurrences(of: "_", with: "-").lowercased()
         // NaturalLanguage reports Chinese script IDs (zh-Hans / zh-Hant).
         // These describe the transcript's script, not a different spoken language.
-        let target = language.id.lowercased()
-        let matchesTarget = detected == target || detected.hasPrefix(target + "-")
         return confidence.isFinite && confidence > 0.88 && confidence <= 1 &&
-            !detected.isEmpty && detected != "und" && !matchesTarget
+            !detected.isEmpty && detected != "und" && !detectedMatchesTarget(language: language, detectedLanguageID: detected)
     }
     public static func theme(_ theme: ConversationTheme?, language: LanguageModule) -> String {
         "Move naturally into this situation: \(theme?.situation ?? "Free conversation about the learner's interests.") Continue ONLY in \(language.name)."

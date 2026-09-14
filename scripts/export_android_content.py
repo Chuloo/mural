@@ -14,7 +14,7 @@ import re
 KOTLIN_DEST = 'apps/android/app/src/main/java/chat/mural/core/Languages.kt'
 # Fields whose value is a nested structure (array/dict), extracted separately from the
 # simple quoted-string fields.
-STRUCTURED_FIELDS = ('teachingFocus', 'themeOverrides')
+STRUCTURED_FIELDS = ('teachingFocus', 'themeOverrides', 'detectorAliases')
 
 
 def quoted(text):
@@ -34,8 +34,12 @@ def theme(text):
 
 
 def struct_fields(language_module_swift_text):
-    """Stored properties of the `LanguageModule` struct, in declaration order."""
-    return re.findall(r'\bpublic let (\w+):', language_module_swift_text)
+    """Stored properties of the `LanguageModule` struct, in declaration order.
+
+    Includes `public var` properties with a default value (such as `detectorAliases`),
+    but not computed properties, whose declaration line opens a brace.
+    """
+    return re.findall(r'^\s*public (?:let|var) (\w+):[^{\n]*$', language_module_swift_text, re.MULTILINE)
 
 
 def language_files(core):
@@ -74,7 +78,8 @@ def generate(core):
     val id: String, val name: String, val nativeName: String, val variety: String, val locale: String,
     val greeting: String, val greetingWord: String, val speechGuidance: String, val writingGuidance: String,
     val lemmaGuidance: String, val teachingFocus: List<String>, val topicPlaceholder: String,
-    val lookupUnavailableReply: String, val themeOverrides: Map<String, ConversationTheme> = emptyMap()
+    val lookupUnavailableReply: String, val themeOverrides: Map<String, ConversationTheme> = emptyMap(),
+    val detectorAliases: List<String> = emptyList()
 ) {
     val themes get() = Themes.shared.map { themeOverrides[it.id] ?: it }
     val defaultTitle get() = "A little $name"
@@ -108,12 +113,15 @@ def generate(core):
             if m:
                 overrides.append(quoted(m.group(1)) + ' to ' + theme(m.group(2).removesuffix(',')))
         args.append('        themeOverrides = mapOf(' + ',\n            '.join(overrides) + ')')
+        aliases_match = re.search(r'\bdetectorAliases:\s*\[(.*?)\]', text, re.S)
+        if aliases_match:
+            args.append('        detectorAliases = listOf(' + ', '.join(map(quoted, swift_strings(aliases_match.group(1)))) + ')')
         lines += [f'    private val {module_name} = LanguageModule(', ',\n'.join(args), '    )']
     lines += [f'    val all = listOf({", ".join(module_names)})',
               '    fun get(id: String) = all.firstOrNull { it.id == id }', '}', '',
               'object MeaningLanguages {',
-              '    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Polish", "Arabic", "Ukrainian")',
-              '    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"', '}', '']
+              '    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Afrikaans", "Polish", "Arabic", "Ukrainian")',
+              '    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Afrikaans" to "Hallo!", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"', '}', '']
     return '\n'.join(lines)
 
 
