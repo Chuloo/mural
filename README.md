@@ -9,9 +9,20 @@
   <img src="marketing/screenshots/iphone-17-spanish/04-palabras.png" width="24%" alt="Spanish vocabulary with three levels of recall strength" />
 </p>
 
-Mural is a native iPhone app for learning through conversation. Speak to a warm, animated orb, follow the meaning when you need it, and practise words again in later conversations. Mural adjusts the challenge from the evidence in your replies.
+Mural is a native iPhone and Android app for learning through conversation. Speak to a warm, animated orb, follow the meaning when you need it, and practise words again in later conversations. Mural adjusts the challenge from the evidence in your replies.
 
-Built with SwiftUI, Liquid Glass and local SwiftData storage. This version connects directly to OpenAI using your own API key. It needs an internet connection, but no Mural account or running Mac.
+Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. Learning records stay on your device. This version connects directly to OpenAI using your own API key. It needs an internet connection, but no Mural account or running Mac.
+
+## Android
+
+A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same eight language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and uses your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
+
+See the [Android installation/build guide](docs/run-on-android.md) and [Android verification record](verification/android-validation.md). Build a personal-install APK with Java 17 and Android SDK 36:
+
+```sh
+cd apps/android
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
 
 ## Get started
 
@@ -49,7 +60,9 @@ I still need to do on the phone. I will start the first live conversation.
 
 ### Install with Xcode
 
-1. Clone [Chuloo/mural](https://github.com/Chuloo/mural), or download its ZIP. Open `Mural.xcodeproj` from the directory containing this README.
+Updating an earlier checkout? The iPhone project now lives in `apps/ios/`. Before opening it, follow the [local-settings migration steps](docs/run-on-iphone.md#update-an-earlier-checkout) to preserve your signing team, account configuration and existing app identity.
+
+1. Clone [Chuloo/mural](https://github.com/Chuloo/mural), or download its ZIP. Open `apps/ios/Mural.xcodeproj`.
 2. In Xcode, open **Settings → Accounts** and add your Apple Account.
 3. Select the **Mural** target, open **Signing & Capabilities**, enable automatic signing, and choose your team. For your own fork, replace the bundle identifier with a unique value such as `com.yourname.mural`. Keep that value stable for later updates.
 4. Connect and unlock your iPhone. Trust the Mac if prompted. Turn on **Settings → Privacy & Security → Developer Mode** on the phone, restart, and confirm the setting.
@@ -74,11 +87,11 @@ The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Span
 
 Tagalog includes six teaching stages, Philippine conversation settings and vocabulary guidance that preserves verb focus. It uses the same meanings, word lookup and independent progress flows. [Teaching choices and references](docs/tagalog.md) explain the `tl` identity and the limits of automatic language detection.
 
-Mandarin includes optional pinyin in Talk, transcripts and word details. Chinese word lookup uses word boundaries, and the original characters remain available for copying from transcripts. Pinyin uses system dictionary readings; names, ambiguous words and tone changes in connected speech still need listening checks. Voice accent and teaching guidance are model instructions, and fluent-speaker review is still needed before making pronunciation or learning-effectiveness claims.
+On iPhone, Mandarin includes optional pinyin in Talk, transcripts and word details. Chinese word lookup uses word boundaries, and the original characters remain available for copying from transcripts. Pinyin uses system dictionary readings; names, ambiguous words and tone changes in connected speech still need listening checks. Voice accent and teaching guidance are model instructions, and fluent-speaker review is still needed before making pronunciation or learning-effectiveness claims.
 
 ## Privacy and API costs
 
-Mural stores conversations, vocabulary and preferences on your device. The iPhone app has no Mural cloud sync, analytics SDK, advertising or account connection in this version. Your API key is stored in the device’s Keychain, excluded from learning exports, and sent only to OpenAI.
+Mural stores conversations, vocabulary and preferences on your device. There is no Mural cloud sync, analytics SDK or advertising. The optional iPhone account feature stores signup data on the account service; conversations and vocabulary stay local. Your API key is stored in the device’s Keychain, excluded from learning exports, and sent only to OpenAI.
 
 During practice, audio, selected conversation text, learning context and requested searches go to OpenAI. Mural does not save raw audio. API requests set `store: false` where supported, but that does not disable all provider retention; OpenAI’s abuse-monitoring rules and your project’s settings still apply. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
 
@@ -86,7 +99,7 @@ OpenAI bills your project for voice, text and search. The app’s usage display 
 
 ## Planned public service
 
-Managed free minutes, accounts and credit purchases are **not available in the iPhone app or a live Mural service**. The [backend foundation](server/README.md) contains account verification, a credit ledger and sandbox payment support. Its runbook lists the remaining work before commercial activation. No shared provider key belongs in this repository or a distributed app binary.
+Hosted free conversations and minute purchases are **not active**. Optional Google sign-in exists on iPhone; Android account integration is in progress. The [API foundation](services/api/README.md) contains identity verification, audited minute allowances and guest transfers, plus the earlier sandbox payment support. [Minute controls](docs/conversation-minutes.md) describe what is implemented and what remains disabled. Its runbook lists the remaining work before commercial activation. No shared provider key belongs in this repository or a distributed app binary.
 
 A public TestFlight link and App Store listing are not yet available. [Release preparation](release/README.md) records the outstanding requirements.
 
@@ -94,11 +107,11 @@ The [Mural website](https://mural.chat) lives in the separate [Chuloo/mural-webs
 
 ## Build and test
 
-From the directory containing `Package.swift`:
+From the repository root:
 
 ```sh
-swift test
-xcodebuild -project Mural.xcodeproj -scheme Mural \
+swift test --package-path apps/ios
+xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath .build/DerivedData \
   CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
@@ -108,23 +121,29 @@ For UI tests, create a dedicated iPhone 17 simulator in Xcode, then run **Produc
 
 On 13 September 2026, the nine-language build passed **90 core tests, 25 native UI tests and 80 backend tests**, with no failures or skipped backend tests. Debug simulator and unsigned Release iPhone builds passed. Tagalog checks include the largest accessibility text size, transcript retention, language isolation and normal relaunch persistence. Tagalog real-device and proficient-speaker review remain pending. Earlier German, Italian, Brazilian Portuguese and Mandarin live checks used synthetic typed replies and real voice output; those checks do not establish human speech-recognition, pronunciation or correction quality. [Verification record](verification/validation.md)
 
+The Android release branch is being prepared separately. See [release progress](verification/android-release-progress.md) for its checks and remaining gates.
+
+After integration with the native-app monorepo on 14 September 2026, the Tagalog branch passed **93 Swift core tests, 25 iOS UI tests, 258 Android JVM tests, 304 API tests and 45 repository-tool tests**. Android lint and Debug APK assembly, cross-platform content checks, and the unsigned Release iPhone build passed. Tagalog is included in Android's generated catalog; physical-device and live-provider review remain pending. [Integration verification](verification/validation.md#14-september-2026--tagalog-integration-with-the-native-app-monorepo)
+
 ## Code map
 
 | Directory | Contents |
 | --- | --- |
-| `App/` | SwiftUI views, SwiftData storage, Keychain, WebRTC transport and API coordination |
-| `Core/` | Language modules, teaching policy, transcripts, vocabulary evidence and recall projection |
-| `Tests/` | Core learning and translation tests |
-| `UITests/` | Native interface tests |
-| `scripts/` | Xcode project and procedural icon generators |
+| `apps/android/` | Native Kotlin/Compose Android client and tests |
+| `apps/ios/App/` | SwiftUI views, SwiftData storage, Keychain, WebRTC transport and API coordination |
+| `apps/ios/Core/` | Language modules, teaching policy, transcripts, vocabulary evidence and recall projection |
+| `apps/ios/Tests/` | Core learning and translation tests |
+| `apps/ios/UITests/` | Native interface tests |
+| `shared/` | API contracts and fixtures exercised by both native clients |
+| `scripts/` | Project generation, language export and compatibility checks |
 | `docs/` | Setup, build and language-module guides |
 | `release/` | Submission drafts and public-release checks |
-| `server/` | Account, billing and hosted-service foundation; see its runbook before deploying |
+| `services/api/` | Account, billing and hosted-service foundation; see its runbook before deploying |
 
 Read [how the language architecture works](docs/language-architecture.md) and [how to add a language](docs/add-language.md). Contributions should follow [CONTRIBUTING.md](CONTRIBUTING.md); security issues belong in the [private reporting process](SECURITY.md).
 
 ## Dependencies and license
 
-The native WebRTC package is pinned to [stasel/WebRTC 152.0.0](https://github.com/stasel/WebRTC/tree/152.0.0). The app bundles [third-party notices](App/ThirdPartyNotices.txt) and the SDK’s privacy manifest. Review upstream notices when changing the dependency.
+The native WebRTC package is pinned to [stasel/WebRTC 152.0.0](https://github.com/stasel/WebRTC/tree/152.0.0). The app bundles [third-party notices](apps/ios/App/ThirdPartyNotices.txt) and the SDK’s privacy manifest. Review upstream notices when changing the dependency.
 
 Mural is released under the [MIT License](LICENSE). Third-party components retain their own licenses. The Mural name and logo identify the original project; the software license does not grant trademark rights.

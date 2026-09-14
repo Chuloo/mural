@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-13T23:48:26.584865+00:00",
+  "status": "passed",
+  "artifact": {
+    "filename": "Mural-Android-preview-2026-09-14-v3.apk",
+    "versionCode": 3,
+    "buildType": "debug",
+    "sha256": "938107cf13969422bf389252c88836c97701a93f6accc8f96d5266ed55ca0c2f"
+  },
+  "backendCommit": "471133e0e2facbea1184ad91832a1a3220ca766e",
+  "method": "Read-only production metadata query for the latest guest session after the coordinated synthetic Spanish test. No provider requests were made by this audit.",
+  "serverAccounting": {
+    "state": "closed",
+    "observedMilliseconds": 184000,
+    "chargedMilliseconds": 184000,
+    "availableMilliseconds": 68000,
+    "reservedMilliseconds": 0,
+    "voiceCostNanoUSD": "153333334",
+    "helperRequestsPerMinute": 24,
+    "helperCount": 13,
+    "helperSettledCount": 13,
+    "helperCostNanoUSD": "2555600",
+    "helperLimitBreachCount": 0
+  },
+  "checks": {
+    "sessionClosed": true,
+    "chargedDurationMatchesObserved": true,
+    "noMinuteReservationRemaining": true,
+    "allAdmittedHelpersSettled": true,
+    "noHelperLimitBreach": true,
+    "requestAllowance24PerMinute": true
+  },
+  "scope": "Server accounting evidence for the tested preview APK. The release coordinator records the interface observations separately. This does not verify paid checkout, physical audio hardware or a Play-signed installation.",
+  "privacy": "No account or session identifiers, user records, transcript text, audio, credentials or raw logs are included."
+}

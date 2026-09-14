@@ -1,12 +1,12 @@
 # How to build and test Mural
 
-Run commands from the directory containing `Package.swift` and `Mural.xcodeproj`. Core tests need Swift 6. Native builds need Xcode 26 or later.
+Run commands from the repository root unless a step changes directory. The iPhone project and Swift package live in `apps/ios/`. Core tests need Swift 6. Native builds need Xcode 26 or later.
 
 ## Run offline checks
 
 ```sh
-swift test
-xcodebuild -project Mural.xcodeproj -scheme Mural \
+swift test --package-path apps/ios
+xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath .build/DerivedData \
   CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
@@ -15,7 +15,7 @@ xcodebuild -project Mural.xcodeproj -scheme Mural \
 Create a dedicated iPhone 17 simulator in Xcode’s **Devices and Simulators** window. Most tests use temporary preview storage; the normal-relaunch test also writes language preferences to the simulator's persistent store. If you name it `iPhone 17`, run UI tests with:
 
 ```sh
-xcodebuild -project Mural.xcodeproj -scheme Mural \
+xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
   -destination 'platform=iOS Simulator,name=iPhone 17,arch=arm64' \
   -derivedDataPath .build/DerivedData \
   CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
@@ -23,6 +23,22 @@ xcodebuild -project Mural.xcodeproj -scheme Mural \
 ```
 
 The core suite covers evidence validation, transcript revisions, language isolation, recall spacing, archive validation, translation cancellation, and managed-account configuration and security parsing. Native UI tests exercise the screens with synthetic data and verify language selection across relaunch. Neither suite needs an API key. Configured provider sign-in and account deletion need the separate device checks in [managed accounts](managed-accounts.md).
+
+## Check the Android port and the cross-platform contracts
+
+```sh
+(cd apps/android && ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug)
+```
+
+From the repository root, run the same checks CI runs on every pull request:
+
+```sh
+python3 -m unittest discover -s scripts/tests -t .
+python3 scripts/export_android_content.py --check
+python3 scripts/check_cross_platform.py
+```
+
+The last two catch generated language content and a Swift core change without its Kotlin counterpart, respectively. See [how Mural keeps languages independent](language-architecture.md) for what each contract covers.
 
 ## Preview without saving learning data
 
@@ -32,13 +48,13 @@ Remove preview arguments before testing normal persistence. For actual speech, [
 
 ## Update the generated project
 
-After adding or removing files under `App/`, run:
+After adding or removing files under `apps/ios/App/`, run:
 
 ```sh
 python3 scripts/generate_project.py
 ```
 
-The generator moves a team selected in Xcode into the ignored `Config/Local.xcconfig`. The public `Config/Signing.xcconfig` includes that file when present. You can also copy `Config/Local.example.xcconfig` to `Config/Local.xcconfig` and enter your team ID there. Keep repeatable project settings in the generator; other manual project edits can be replaced on the next run. Swift Package Manager discovers files under `Core/` automatically.
+The generator moves a team selected in Xcode into the ignored `apps/ios/Config/Local.xcconfig`. The public `apps/ios/Config/Signing.xcconfig` includes that file when present. You can also copy `apps/ios/Config/Local.example.xcconfig` to `apps/ios/Config/Local.xcconfig` and enter your team ID there. Keep repeatable project settings in the generator; other manual project edits can be replaced on the next run. Swift Package Manager discovers files under `apps/ios/Core/` automatically.
 
 ## Verify live changes
 

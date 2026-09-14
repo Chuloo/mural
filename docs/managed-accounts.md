@@ -6,9 +6,9 @@ On 12 September 2026, the owner confirmed that real Google sign-in worked on the
 
 ## Enable Google
 
-1. Deploy the account service using the [server setup guide](../server/docs/enable-accounts.md). Use an HTTPS origin with no path, query, fragment or embedded credentials. Confirm the server's `/v1/auth/providers` response enables Google before distributing a configured app.
+1. Deploy the account service using the [server setup guide](../services/api/docs/enable-accounts.md). Use an HTTPS origin with no path, query, fragment or embedded credentials. Confirm the server's `/v1/auth/providers` response enables Google before distributing a configured app.
 2. Create a Google OAuth client of type **iOS** for the app's bundle ID. Set the server's `GOOGLE_CLIENT_ID` to the same value. This flow uses the native client's audience and requires no Google client secret. Configure the OAuth consent screen for your intended users.
-3. Add these public values to the ignored `Config/Local.xcconfig`, preserving its existing signing settings:
+3. Add these public values to the ignored `apps/ios/Config/Local.xcconfig`, preserving its existing signing settings:
 
 ```xcconfig
 MURAL_MANAGED_ACCOUNTS_ENABLED = YES
@@ -23,18 +23,18 @@ MURAL_APPLE_ENTITLEMENTS =
 
 These values identify Mural's public iOS client in Google Cloud project `mural-508413`, for bundle `no.william.mural`. For another backend or bundle ID, substitute its origin and matching OAuth client. Keep the `https:/$()/` syntax in an xcconfig file so `//` is not treated as a comment.
 
-4. Build and run the app using the [iPhone setup guide](run-on-iphone.md). Preserve the installed app's bundle ID and development team when updating it. `Config/Signing.xcconfig` loads the checked-in defaults from `Config/ManagedAccounts.xcconfig`, then applies the local overrides.
+4. Build and run the app using the [iPhone setup guide](run-on-iphone.md). Preserve the installed app's bundle ID and development team when updating it. `apps/ios/Config/Signing.xcconfig` loads the checked-in defaults from `apps/ios/Config/ManagedAccounts.xcconfig`, then applies the local overrides.
 5. Open **Settings → Account**. Confirm Google appears, Apple is absent, and the terms agreement and privacy acknowledgment are visible above the button. The registered callback is the reversed client ID followed by `:/oauth2redirect`, with one slash.
 6. Complete Google sign-in on the phone. Confirm the signed-in provider and verified email, when supplied, match the intended account. The app fetches `GET /v1/account` and validates its account ID against the active Mural session. It does not fetch or display a wallet in this release.
 
-Client IDs are public configuration. Keep OAuth secrets, Apple signing keys, OpenAI service keys and database credentials on the server. Do not add them to Info.plist, app resources or `Config/ManagedAccounts.xcconfig`.
+Client IDs are public configuration. Keep OAuth secrets, Apple signing keys, OpenAI service keys and database credentials on the server. Do not add them to Info.plist, app resources or `apps/ios/Config/ManagedAccounts.xcconfig`.
 
 ## Enable Apple when enrollment is approved
 
 Hackmamba Inc.'s Apple Developer enrollment was still processing on 12 September 2026. Keep Apple disabled until the developer account, provisioning and server revocation setup are ready. Google configuration does not require Apple capability.
 
 1. Enable **Sign in with Apple** for the app identifier on the enrolled Apple Developer team. Regenerate a matching provisioning profile. Coordinate any signing-team change before updating the existing personal installation.
-2. Configure the server's `APPLE_CLIENT_ID` with the app's bundle ID, plus its team ID, key ID and private key file. Follow the [server instructions](../server/docs/enable-accounts.md) and complete authorization revocation checks before offering Apple signup.
+2. Configure the server's `APPLE_CLIENT_ID` with the app's bundle ID, plus its team ID, key ID and private key file. Follow the [server instructions](../services/api/docs/enable-accounts.md) and complete authorization revocation checks before offering Apple signup.
 3. Set these local build values:
 
 ```xcconfig
@@ -72,7 +72,7 @@ Preview and UI-test launches using `--preview` do not load account credentials o
 
 ## Related references
 
-The [account API reference](../server/docs/accounts-reference.md) defines challenge, exchange, profile, sign-out and deletion payloads, nonce handling, retention and errors. The native client uses OAuth authorization code with PKCE and state for Google, and `ASAuthorizationController` with state for Apple. Provider tokens and authorization codes stay in memory; the server verifies them before issuing a Mural session.
+The [account API reference](../services/api/docs/accounts-reference.md) defines challenge, exchange, profile, sign-out and deletion payloads, nonce handling, retention and errors. The native client uses OAuth authorization code with PKCE and state for Google, and `ASAuthorizationController` with state for Apple. Provider tokens and authorization codes stay in memory; the server verifies them before issuing a Mural session.
 
 Provider documentation: [Google installed-app OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect), [Sign in with Apple](https://developer.apple.com/documentation/authenticationservices/implementing-user-authentication-with-sign-in-with-apple), and Apple's [nonce](https://developer.apple.com/documentation/authenticationservices/asauthorizationopenidrequest/nonce) and [state](https://developer.apple.com/documentation/authenticationservices/asauthorizationopenidrequest/state) properties.
 

@@ -1,0 +1,24 @@
+<resources>
+    <string name="guest_unavailable_title">Free minutes currently unavailable</string>
+    <string name="guest_unavailable_detail">Every conversation has an AI cost. We’re working to fund more free minutes so more people can learn with Mural.</string>
+    <string name="guest_ready_title">Your next conversation awaits</string>
+    <string name="guest_ready_detail">Start talking. You can sign in whenever you like to keep your remaining minutes with your account.</string>
+    <string name="guest_checking_title">A moment to get ready</string>
+    <string name="guest_checking_detail">We’re checking your conversation minutes.</string>
+    <string name="guest_retry_title">Let’s try that again</string>
+    <string name="guest_retry_detail">We couldn’t check your minutes. Check your connection and try again. Your allowance hasn’t been reset.</string>
+    <string name="guest_sign_in_title">Welcome back</string>
+    <string name="guest_sign_in_detail">Sign in to return to your minutes. This device has already claimed its welcome allowance.</string>
+    <string name="guest_more_title">Keep the conversation going</string>
+    <string name="guest_more_detail">Your available minutes are used up. Add more when purchases are available, or use your own API key in Settings.</string>
+    <string name="guest_link_title">Let’s keep your minutes together</string>
+    <string name="guest_link_detail">We still need to move your remaining guest minutes to your account. Check again to finish. Your remaining minutes will be added to any minutes you buy.</string>
+    <string name="guest_continue">Let’s talk</string>
+    <string name="guest_sign_in">Continue with Google</string>
+    <string name="guest_check_again">Check again</string>
+    <string name="guest_personal_key">Use my own API key</string>
+    <string name="guest_purchases_soon">Purchases aren’t available yet. You can use your own API key.</string>
+    <string name="guest_account_detail">Sign in to keep your remaining guest minutes with your account. Your learning stays on this device.</string>
+    <string name="consent_adult_confirmation">By continuing, you confirm you’re 18 or older.</string>
+    <string name="guest_member_trial_used">This account has already received its welcome minutes, so it won’t receive a second allowance. Your account balance is unchanged.</string>
+</resources>

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-13T23:45:43.529162+00:00",
+  "source": {
+    "baselineCommit": "471133e0e2facbea1184ad91832a1a3220ca766e",
+    "dirtyAtBuild": true,
+    "description": "Built from an uncommitted working tree; baseline commit is not the complete source snapshot.",
+    "androidSourceFingerprintSHA256": "66563f26c90a07bbdccec5f4c73e18d9272851873f100511e6fa7a5dd71a7ef0",
+    "sourceManifest": "release/private/android-final-2026-09-14-v3/build-snapshot.json",
+    "sourceUnchangedAtPackagingVerification": true
+  },
+  "tests": 45,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "seconds": 77.297,
+  "user": 11,
+  "device": {
+    "user": "11",
+    "size": "Physical size: 1080x2424",
+    "density": "Physical density: 420",
+    "fontScale": "1.0",
+    "sdk": "36",
+    "build": "google/sdk_gphone64_arm64/emu64a:16/BE2A.250530.026.D1/13818094:user/release-keys"
+  },
+  "appSHA256": "1d7ffa55786cb54cd7fc4192f3a911a86db264e9a4e1b09ea4e86f46dfa807f7",
+  "testAPKSHA256": "b1dffee9d2e54f8da514090df546bf4cca9e83567969634d3abf88a311603a39",
+  "logSHA256": "5d31ea981c258d64ce116a0cc5dc08e07e61112aa623526d9a6812a8f5a85f4c",
+  "personalDataPreserved": true,
+  "userSwitchPerformed": false,
+  "deviceSettingsPreserved": true,
+  "includes": [
+    "Long Spanish reply with visible, independently scrollable meaning",
+    "Greeting, short conversation and floating navigation",
+    "Account lifecycle and secure storage",
+    "Purchase estimated-time and fee disclosure",
+    "Onboarding, settings, large text and keyboard",
+    "In-app report, history and offline native compatibility"
+  ],
+  "scope": "Offline isolated test package, not live provider or Play-signed verification."
+}

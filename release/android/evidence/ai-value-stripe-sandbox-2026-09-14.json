@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-09-13T22:29:11.308Z",
+  "provider": "stripe",
+  "environment": "test",
+  "scope": "Hosted Stripe Checkout with real sandbox payment, signed webhook delivery and proportional refunds",
+  "billingBasis": "actual-ai-usage",
+  "realMoneyCharged": false,
+  "productionModified": false,
+  "syntheticQuote": {
+    "currency": "USD",
+    "checkoutTotalMinor": 300,
+    "aiAllocationMinor": 200,
+    "muralFeeMinor": 30,
+    "paymentCostFixtureMinor": 70,
+    "launchOffer": false,
+    "actualProcessingFeeClaim": false
+  },
+  "verified": {
+    "sameCheckoutOnRetry": true,
+    "checkoutCurrencyPinned": true,
+    "signedWebhookReplay": true,
+    "purchaseGrantedOnce": true,
+    "grantedAINanoUSD": "2000000000",
+    "feesExcludedFromAIValue": true,
+    "fixedMinutesGranted": false,
+    "publicAvailabilityAlwaysZero": true,
+    "partialCheckoutRefundMinor": 100,
+    "remainingAINanoUSDAfterPartialRefund": "1333333333",
+    "totalCheckoutRefundMinor": 300,
+    "remainingAINanoUSDAfterFullRefund": "0",
+    "successfulRefundCount": 2,
+    "receiptEncrypted": true,
+    "testProductAndPriceArchived": true,
+    "additionalOwnedTestCleanupRequired": false
+  },
+  "apiRegression": {
+    "tests": 292,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "cancellations": 0
+  },
+  "outsideScope": [
+    "Live payments",
+    "Google Play real purchase verification",
+    "Approved launch prices and payment costs",
+    "Production deployment"
+  ],
+  "runtimePolicyPermissions": {
+    "environment": "isolated local PostgreSQL test role",
+    "orderCreationFulfillmentRefundsPassed": true,
+    "policyAndAuditWritesDenied": true,
+    "privilegedLookupSchemaQualified": true,
+    "temporaryTableCannotReplacePolicy": true,
+    "policyRowLockedUntilTransactionEnd": true
+  }
+}

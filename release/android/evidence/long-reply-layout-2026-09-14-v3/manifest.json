@@ -1,0 +1,20 @@
+{
+  "scope": "Review screenshots of the real version3 isolated UI using synthetic Spanish conversation fixtures. These are not Play listing assets or evidence of live speech.",
+  "screenshots": [
+    {
+      "file": "long-reply-layout-2026-09-14-v3/long-reply-before-greeting.png",
+      "sha256": "4f68a18e44ef9828557702e006fb9730f53e58912197df246f7b72744c3f7392",
+      "bytes": 222651
+    },
+    {
+      "file": "long-reply-layout-2026-09-14-v3/long-reply-with-meaning.png",
+      "sha256": "2bb24eb2987fc978ca0139fd0a7d8e1fbbe7c5cd34a8b0af924a19b8505be960",
+      "bytes": 253179
+    },
+    {
+      "file": "long-reply-layout-2026-09-14-v3/long-reply-scrolled.png",
+      "sha256": "01f8a537f6ee0140949859ce76e9a65a604eefda6f2a6be8ba6694b2efc59f98",
+      "bytes": 251059
+    }
+  ]
+}

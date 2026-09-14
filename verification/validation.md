@@ -194,3 +194,21 @@ Xcode's initial WebRTC artifact download stalled. The same pinned release archiv
 The speech guard intentionally skips Tagalog because the local Apple recognizer misclassified valid Tagalog as Indonesian above 99% confidence on both macOS and the iOS 26.5 simulator. Other languages retain their previous detector behavior. The Debug report now separates mechanical `flowPassed` from reliable target detection and records the actual detector label/confidence. It does not turn unavailable language validation into a passing result.
 
 No real-provider call or physical-device speech test was performed for this change. The owner chose automated verification with device review pending. Synthetic fixtures do not validate human speech recognition, generated pronunciation, translation accuracy, correction quality or model-generated lemmas. A proficient Tagalog speaker should review a real conversation before making those claims. Check a greeting, English support and mixed replies, café/market requests, polite register, a longer answer, meaningful corrections, English meanings, contextual lookup, a sourced topic and unavailable-lookup fallback; then interruption, mute, speaker/headphones and closure. Include unaided spoken evidence and switching/relaunch with the persistent store.
+
+
+## 14 September 2026 — Tagalog integration with the native-app monorepo
+
+Integrated upstream `main` at `1c175af64b863335bc5155588968f45f8d29d839`. The Tagalog module and tests now live under `apps/ios`, and the hosted locale and regression tests live under `services/api`. The deleted legacy `server/tests/hosted.test.ts` was not restored. Its Tagalog case was ported into the current suite and now verifies both credit-funded and minute-funded reservation/settlement, including rejection of aliases before any provider call or reservation.
+
+Android's generated language catalog includes the same Tagalog module. A new Kotlin regression checks its label, locale, greeting, six stages, Philippine café theme, English support, single namespace and isolated archive progress. The Apple recognizer exception remains iPhone-specific; no Android classifier behavior was changed.
+
+Checks on the integrated tree:
+
+- **93 Swift core tests passed**, including the shared archive compatibility fixtures and all 17 focused Tagalog cases.
+- **304 API tests passed with zero failures and zero skips**, using a dedicated PostgreSQL 17 test database. TypeScript check and build passed. The initial database launch used the default port while the test URL selected the dedicated port; correcting that local launch configuration allowed the full suite to run. The database was stopped afterward.
+- **258 Android JVM tests passed with zero failures, errors or skips**. `:app:lintDebug` completed with zero errors (44 warnings and two hints), and `:app:assembleDebug` produced the APK. Java 17 and Android SDK 36 were used.
+- **45 repository-tool tests passed**. Android generated-content, cross-platform contract and release-file checks passed.
+- **Unsigned Release iPhone build passed** from `apps/ios/Mural.xcodeproj`.
+- **25 native iOS UI tests passed with zero failures** on the iPhone 17 / iOS 26.5 simulator, including the complete Tagalog and existing-language flows. The Debug build and tests used the relocated project. Result: `.build/Tagalog-Merge-UI.xcresult`.
+
+No physical-device or live-provider check was performed. The original pending Tagalog pronunciation, recognition, correction and proficient-speaker review remains pending on both platforms. Android verification here covers JVM behavior, lint and compilation; it is not an Android emulator or device conversation check.

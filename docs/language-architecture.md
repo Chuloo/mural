@@ -2,7 +2,7 @@
 
 A learner can be comfortable in Norwegian and new to Spanish. Mural therefore gives each conversation an immutable language ID and projects vocabulary, challenge level and capability observations from that language's evidence only. Identical word forms have different vocabulary keys across languages, so hiding or recalling a word in one language does not affect another.
 
-Language-specific content lives in `Core/Languages/`. Each module defines its greeting, regional speech guidance, writing conventions, lemma rules, six teaching stages and cultural theme overrides. `LanguageRegistry` supplies the available choices to the UI.
+Language-specific content lives in `apps/ios/Core/Languages/`. Each module defines its greeting, regional speech guidance, writing conventions, lemma rules, six teaching stages and cultural theme overrides. `LanguageRegistry` supplies the available choices to the UI.
 
 | Storage ID | Learning target | Locale |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Language-specific content lives in `Core/Languages/`. Each module defines its gr
 | `zh` | Standard Mandarin, Simplified Chinese | `zh-CN` |
 | `tl` | Tagalog (Filipino) from the Philippines | `tl-PH` |
 
-Tagalog uses Filipino as a display alias and keeps one `tl` storage namespace. Its automatic speech-language detector is disabled because valid Tagalog can be classified as Indonesian with high confidence; explicit target-language teaching instructions remain in use. See [Tagalog teaching choices and references](tagalog.md) for the evidence, vocabulary conventions and verification limits.
+Tagalog uses Filipino as a display alias and keeps one `tl` storage namespace. Its iPhone automatic speech-language detector is disabled because valid Tagalog can be classified as Indonesian with high confidence; explicit target-language teaching instructions remain in use. See [Tagalog teaching choices and references](tagalog.md) for the evidence, vocabulary conventions and verification limits.
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
 
@@ -30,6 +30,14 @@ Mandarin builds on [richardguerre's contribution in #4](https://github.com/Chulo
 
 Pinyin appears separately below selectable Chinese text, with a Show/Hide control. Word links use Chinese word boundaries. Lemmas stay in characters, observed forms and quotations stay unchanged, and generated pinyin never becomes learning evidence. Script identifiers such as `zh-Hans` and `zh-Hant` are accepted by the spoken-language check, so Chinese text does not trigger a false language redirect. Simplified Chinese is also available for meaning subtitles.
 
-These are compiled modules. Adding one ships with an app update; there is no remote module download or extra service. Every new language needs a proficient-speaker teaching and pronunciation review. The Android contribution is not integrated in this checkout, so there is no Android generated catalog to update here.
+These are compiled modules. Adding one ships with an app update; there is no remote module download or extra service. Every new language needs a proficient-speaker teaching and pronunciation review. Regenerate the Android catalog when adding or changing a Swift language module.
 
 See [how to add a language](add-language.md) for the implementation steps.
+
+## Two native cores, one contract
+
+The Android client is a separate Kotlin/Compose app, not a shared build. `scripts/export_android_content.py` generates Android's language content (`Languages.kt`) from the Swift modules under `apps/ios/Core/Languages/`, so a module registered in `LanguageRegistry.all` reaches both platforms without being written twice.
+
+Everything else in the learning core is ported by hand, so `scripts/check_cross_platform.py` checks that the two ports stay in agreement: the teaching prompts sent to the model, a fixed table of shared numeric constants (recall spacing, evidence thresholds, session limits), and the required fields of the JSON backup archive. Golden fixtures under `shared/fixtures/cross-platform/` are read by both `swift test` and the Android unit tests, so a behavior change can be verified identically on both cores.
+
+An export is semantically, not byte-for-byte, compatible with what it describes: Swift's `JSONEncoder` sorts keys when writing an archive, while Kotlin does not attempt to reproduce that ordering. Backups exchanged between platforms are compared by decoding and re-validating, never by comparing raw bytes.

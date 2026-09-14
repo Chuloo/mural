@@ -1,0 +1,56 @@
+{
+  "recordedAtUTC": "2026-09-13T19:30:46.271084+00:00",
+  "status": "not_run_insufficient_emulator_userdata_space",
+  "runtimeBootCompleted": false,
+  "pageSize16384Observed": false,
+  "webRtcRuntimeTestPerformed": false,
+  "physicalAudioTestPerformed": false,
+  "providerCallsPerformed": false,
+  "existingAVDUntouched": true,
+  "isolatedAVDName": "Mural_16KB_API_35",
+  "intendedSerial": "emulator-5556",
+  "emulatorVersion": "37.1.11.0",
+  "emulatorBuild": "15917651",
+  "imagePackage": "system-images;android-35;google_apis_playstore_ps16k;arm64-v8a",
+  "imageRevision": 5,
+  "imageDownloadBytes": 1590150760,
+  "imageUncompressedBytes": 2619616876,
+  "installedImageSourcePropertiesSHA256": "4630570821d0a6a3d60a2d496fa45b1ef5f132ebe0b9eb64ab57dfec5e476bea",
+  "installedPackageMetadataSHA256": "acff7738e8f5dc80cceb403b6a7006a774bc863d3ee682563136b1e77ffc97eb",
+  "imageInstallCompleted": true,
+  "compressedDownloadRetained": false,
+  "startupFailure": "Not enough space to create userdata partition. Available: 3199.89 MB; need 7372.80 MB.",
+  "attempts": [
+    "Fresh isolated config disk.dataPartition.size=1536M",
+    "Documented emulator -partition-size 1536 override"
+  ],
+  "observedEnforcedDataPartitionBytes": 6442450944,
+  "startupStorageRequirementMBAsReported": 7372.8,
+  "startupStorageAvailableMBAsReported": 3199.89,
+  "additionalStorageMBAsReported": 4172.91,
+  "workaroundAttempted": "Only the documented partition-size override; no image geometry modification.",
+  "preparedTestPayload": {
+    "appSHA256": "7151e3d53f625d8e7abe23fc6730bead434a33df6832c3d2daf6fdb803bb2ef4",
+    "testAPKSHA256": "cef93eebbfd790d4ebbf92db6ddf25d2cc09b201078d79af16b093f01208ab91",
+    "targetPackage": "chat.mural.android.uitest",
+    "testClass": "chat.mural.network.NativeCompatibilityTest",
+    "testMethod": "nativeWebRtcBuildsAnAudioAndDataOfferWithoutMicrophoneOrInternet",
+    "testSourceSHA256": "4892eab0be60f251b25bcdeff5026cc43e3711acdfc53006ded5a59f4b6db910",
+    "nativeLibraries": [
+      {
+        "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+        "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+        "matchesCandidate": true
+      },
+      {
+        "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+        "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+        "matchesCandidate": true
+      }
+    ]
+  },
+  "logSHA256": {
+    "emulator.log": "b4db8b64e2e4b458bdd7c357b790040ef9234ea511553b0b1d3150fc99e7fbba",
+    "emulator-partition-override.log": "9685ce08e4de888a1f2885fe0bcb37381f11f94bb42b9b7218003cd8b9ce2518"
+  }
+}

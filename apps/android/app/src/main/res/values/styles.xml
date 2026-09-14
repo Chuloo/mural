@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.Mural.Base" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/mural_cream</item>
+        <item name="android:navigationBarColor">#362A22</item>
+        <item name="android:windowBackground">@drawable/mural_launch_background</item>
+        <item name="android:colorAccent">#FF8A4D</item>
+    </style>
+    <style name="Theme.Mural" parent="Theme.Mural.Base" />
+</resources>

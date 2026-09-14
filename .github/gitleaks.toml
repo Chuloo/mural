@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Reviewed SHA-256 source/report digests in two historical Android build manifests; not credentials."
+condition = "AND"
+paths = ['''(?:^|/)release/android/evidence/unsigned-candidate-build-(?:8768c86-)?2026-09-13\.json$''']
+regexTarget = "secret"
+regexes = [
+  '''^(?:c2ca91282a0459cd9b578466001375e87ebf82c57e0641cb5d973825bbf63e05|b566f366ae9c714b289c20213a73f2911a079279f62c92f882ccd40b2ed36c29|08b806115834785a43b5621a8cc1406982215cedad9d7c8173b68e3998d50089|8ac381312930888181bca3345086f8d388741cd51929054f95c0f7081e41e1a3|1f0921533511febcf73d26993bb8b7f55eecfda23b8e242e5b8b404ffb9a36b7|6116ea930debdcc29cc5030568dd24d470fd9cc647b79579ba06e32a8926eef6)$'''
+]

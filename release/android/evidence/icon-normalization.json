@@ -1,0 +1,14 @@
+{
+  "conversion": "RGB to RGBA with opaque alpha; no resampling or RGB pixel changes",
+  "beforeSHA256": "2b4351a9172fcdddde8c96e280839c20bdb5c9236a92082bd739ea388e2a1120",
+  "afterSHA256": "be9791ab74bad75b6340c2ec41524d4ba32c9fd0cdf84d6d04d0f78846d34b21",
+  "decodedRGBSHA256": "be3832d8746ffead743d866da26ef3644ade977a5a4d18e849401978829dce9c",
+  "rgbPixelsIdentical": true,
+  "alphaRange": [
+    255,
+    255
+  ],
+  "bytes": 62428,
+  "colorSpace": "sRGB",
+  "renderingIntent": 0
+}

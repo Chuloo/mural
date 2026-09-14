@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-13T22:36:54.376468+00:00",
+  "scope": "Full isolated Android UI suite before the final paid-catalog validation adjustment. No live provider, account or purchase assertion is implied.",
+  "source": {
+    "baselineCommit": "334ad8931e260da74b8cf4b9efc749ff586dc3ba",
+    "dirty": true,
+    "androidSourceFingerprintSHA256": "648dd412cdd9279952585e6429dfc0a6e1e3b1b8297779ee28e21c993f65cc0a",
+    "sourceManifest": "release/private/android-candidate-2026-09-14/build-snapshot.json"
+  },
+  "artifacts": [
+    {
+      "path": "release/private/android-candidate-2026-09-14/app-uiTest.apk",
+      "source": "apps/android/app/build/outputs/apk/uiTest/app-uiTest.apk",
+      "bytes": 66327421,
+      "sha256": "a5d63f7c00c58fc62e0b8a8c9f101cd243e0d55f9677f1480ce2f01a82a33e8e"
+    },
+    {
+      "path": "release/private/android-candidate-2026-09-14/app-uiTest-androidTest.apk",
+      "source": "apps/android/app/build/outputs/apk/androidTest/uiTest/app-uiTest-androidTest.apk",
+      "bytes": 1182001,
+      "sha256": "d39c7d82df22b9847649b0e6711f953f178dd2e25cd889837e3ab51eab23e59a"
+    }
+  ],
+  "device": {
+    "serial": "emulator-5554",
+    "user": 0,
+    "display": "1080x2424",
+    "densityDPI": 420,
+    "fontScale": 1.0,
+    "testApplicationID": "chat.mural.android.uitest",
+    "personalApplicationID": "chat.mural.android",
+    "personalDataPreserved": true,
+    "originalDeviceSettingsRestored": true
+  },
+  "result": {
+    "tests": 44,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "seconds": 81.144,
+    "newRequiredMethod": "purchasedTimeIsEstimatedAndAllFeesAreVisibleBeforeCheckout",
+    "requiredMethodConfirmedInsideTestAPK": true
+  },
+  "logs": {
+    "ui": {
+      "path": "release/private/android-candidate-2026-09-14/full-ui.log",
+      "sha256": "28be8b0b87b63dee7d27e620177ad464ccfa1915b41f2e078192a84638a12cbc"
+    },
+    "build": {
+      "path": "release/private/android-candidate-2026-09-14/build.log",
+      "sha256": "4e1c83fc57faa3e0e0a1840191bc8774501c2993c53813b9f39e9e10ecdddebd"
+    }
+  },
+  "notVerified": [
+    "Physical microphone, speaker or Bluetooth audio",
+    "API 26 runtime",
+    "Play-signed installation and OAuth",
+    "Live purchases or refunds"
+  ]
+}

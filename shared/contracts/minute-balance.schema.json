@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mural.chat/contracts/minute-balance-v1.json",
+  "title": "Mural free time and estimated paid balance",
+  "type": "object",
+  "required": [
+    "unit",
+    "balanceMilliseconds",
+    "reservedMilliseconds",
+    "availableMilliseconds",
+    "billingBasis"
+  ],
+  "properties": {
+    "unit": {
+      "const": "milliseconds"
+    },
+    "billingBasis": {
+      "const": "connected-conversation-time"
+    },
+    "balanceMilliseconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "reservedMilliseconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "availableMilliseconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "paid": {
+      "type": "object",
+      "description": "Optional verified AI value. Estimated time is display guidance; actual provider costs settle against the balance. Free and gifted time is separate.",
+      "required": [
+        "currency",
+        "billingBasis",
+        "balanceNanoUSD",
+        "reservedNanoUSD",
+        "availableNanoUSD",
+        "estimatedMilliseconds",
+        "estimatedNanoUSDPerMinute",
+        "minimumSessionNanoUSD",
+        "available"
+      ],
+      "properties": {
+        "currency": {
+          "const": "USD"
+        },
+        "billingBasis": {
+          "const": "actual-ai-usage"
+        },
+        "balanceNanoUSD": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]{0,29})$"
+        },
+        "reservedNanoUSD": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,29})$"
+        },
+        "availableNanoUSD": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,29})$"
+        },
+        "estimatedMilliseconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "estimatedNanoUSDPerMinute": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,29})$"
+        },
+        "minimumSessionNanoUSD": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,29})$"
+        },
+        "available": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

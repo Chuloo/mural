@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-13T23:16:10.912133+00:00",
+  "status": "Version 2 packaging verified; no upload or runtime test performed by this audit.",
+  "artifact": {
+    "filename": "Mural-Android-release-2026-09-14-v2.aab",
+    "location": "Hej/deliverables (outside repository)",
+    "bytes": 33031535,
+    "sha256": "613cf25edc8db5bfe154f15d7cfd878197a0392e300c5eb671e5fd7240f70ce3",
+    "unsignedSHA256": "4f63489deea996982f6b16be8bb1bb15ca0f09e76b03910ca3a0c6c44562d2a0"
+  },
+  "previewAPK": {
+    "filename": "Mural-Android-preview-2026-09-14-v2.apk",
+    "bytes": 63458443,
+    "sha256": "52f5e9997dd565e39207f2d1662f264bfc0573e48c78d4f9e2279eafc280be86",
+    "manifest": {
+      "package": "chat.mural.android",
+      "versionCode": 2,
+      "versionName": "0.1",
+      "minSdk": 26,
+      "targetSdk": 36,
+      "debuggable": true,
+      "testOnly": false,
+      "allowBackup": false,
+      "usesCleartextTraffic": false
+    },
+    "buildType": "debug",
+    "apiOrigin": "https://api.mural.chat",
+    "minutePurchasesEnabled": false,
+    "minutePurchaseEnvironment": "test",
+    "signatureVerified": true,
+    "signatureScheme": "v2",
+    "signerCertificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+    "matchesExistingPersonalDebugIdentity": true,
+    "zipalign16KB": true,
+    "embeddedSecretScan": {
+      "entriesScanned": 605,
+      "patterns": [
+        "OpenAI secret key",
+        "Stripe secret or restricted key",
+        "Google OAuth client secret",
+        "GitHub token",
+        "private key material"
+      ],
+      "findings": 0,
+      "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+    },
+    "requiredNotices": {
+      "Mural-LICENSE.txt": true,
+      "Apache-2.0.txt": true,
+      "Nunito-OFL.txt": true,
+      "THIRD-PARTY-NOTICES.txt": true,
+      "WebRTC-SDK-LICENSE.txt": true,
+      "WebRTC-THIRD-PARTY-NOTICES.md": true
+    },
+    "nativeLibraries": {
+      "lib/arm64-v8a/libandroidx.graphics.path.so": {
+        "bytes": 10096,
+        "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6"
+      },
+      "lib/arm64-v8a/libjingle_peerconnection_so.so": {
+        "bytes": 12287312,
+        "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca"
+      }
+    },
+    "scope": "Installable personal test build, not a Play-signed release. No emulator installation or runtime testing performed by this packaging audit."
+  },
+  "source": {
+    "baselineCommit": "8721d2c1e453bae02ee295fa3696fa5e6fb5fcc1",
+    "dirtyAtBuild": true,
+    "description": "Built from an uncommitted working tree; baseline commit is not the complete source snapshot.",
+    "androidSourceFingerprintSHA256": "4927443f994cee3914fda27afe91f93fd41ce6c502efc8c345d449e5f6c93070",
+    "sourceManifest": "release/private/android-final-2026-09-14-v2/build-snapshot.json",
+    "sourceUnchangedAtPackagingVerification": true
+  },
+  "buildConfiguration": {
+    "package": "chat.mural.android",
+    "versionCode": 2,
+    "versionName": "0.1",
+    "buildType": "release",
+    "debuggable": false,
+    "minSdk": 26,
+    "targetSdk": 36,
+    "apiOrigin": "https://api.mural.chat",
+    "googleServerClientID": "1034240936303-v182map9ntca934qc10i2ql3366onue7.apps.googleusercontent.com",
+    "minutePurchasesEnabled": false,
+    "minutePurchaseEnvironment": "test",
+    "confirmedFrom": "Manifest and BuildConfig DEX in the bundletool-generated base-master APK"
+  },
+  "signature": {
+    "allPayloadSignaturesValid": true,
+    "payloadEntriesVerified": 607,
+    "certificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c",
+    "certificateSubject": "CN=Mural Upload, O=Hackmamba Inc., C=US",
+    "algorithm": "SHA256withRSA",
+    "keySizeBits": 3072,
+    "jarsignerVerified": true,
+    "trustWarnings": "The upload certificate is self-signed and has no trusted timestamp; every payload signature verifies against the approved certificate.",
+    "approvedExistingKeyUsed": true
+  },
+  "verification": {
+    "jvm": {
+      "tests": 246,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "releaseLint": {
+      "errors": 0,
+      "warnings": 44
+    },
+    "releaseFiles": {
+      "evidence": "signed-release-files-2026-09-14-v2.json",
+      "passed": true,
+      "storeAssets": 8,
+      "embeddedSecretScan": {
+        "entriesScanned": 610,
+        "patterns": [
+          "OpenAI secret key",
+          "Stripe secret or restricted key",
+          "Google OAuth client secret",
+          "GitHub token",
+          "private key material"
+        ],
+        "findings": 0,
+        "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+      }
+    },
+    "nativeRuntime": {
+      "evidence": "16kb-runtime-verified-2026-09-13.json",
+      "pageSize": 16384,
+      "tests": 2,
+      "scope": "Prior offline ARM64 library loading and WebRTC offer creation using identical native binaries. This is not a runtime test of version 2.",
+      "libraries": [
+        {
+          "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+          "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+          "matchesVerified16KBRuntime": true
+        },
+        {
+          "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+          "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+          "matchesVerified16KBRuntime": true
+        }
+      ]
+    },
+    "splits": {
+      "sourceAABSHA256": "613cf25edc8db5bfe154f15d7cfd878197a0392e300c5eb671e5fd7240f70ce3",
+      "deviceSpec": {
+        "supportedAbis": [
+          "arm64-v8a"
+        ],
+        "supportedLocales": [
+          "en",
+          "es"
+        ],
+        "screenDensity": 420,
+        "sdkVersion": 36
+      },
+      "tool": "bundletool 1.18.0",
+      "localSplitSigning": "Approved upload certificate; these are not Play-signed installs.",
+      "installed": false,
+      "apks": [
+        {
+          "apk": "splits/base-arm64_v8a.apk",
+          "bytes": 12333520,
+          "sha256": "57e81589887f6526beaf4f39679a1fbbddb6ec1dedaaea7bf8e0136a5f163c62",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-en.apk",
+          "bytes": 86362,
+          "sha256": "26992aab22a3a6fb14888cc00ad44ec0fbe942b5da1b86daac916abe0f675f6e",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-es.apk",
+          "bytes": 69978,
+          "sha256": "68f70e014ce3eba2f8cd1f32d755e4e4d52a0f12e5da3bdac418fba2f6a18b95",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-master.apk",
+          "bytes": 26873990,
+          "sha256": "acd1596e599d2a8c1c83aa2fd012707023b65b160d14f9197d351c0a499d4336",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-xxhdpi.apk",
+          "bytes": 84832,
+          "sha256": "6a7c8855ffb7b9e8d30fa66b709a0f6283841f262593bb2a695d2cf40f4444bb",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        }
+      ],
+      "releaseBuildConfigVerified": true
+    }
+  },
+  "notPerformedByThisAudit": [
+    "Any emulator or browser interaction",
+    "Version 2 end-to-end or live provider testing",
+    "Play upload, rollout or Play-signed install and Google login",
+    "API 26 or physical microphone, speaker and Bluetooth tests",
+    "Paid purchase or refund testing",
+    "Git commit or push"
+  ],
+  "history": "Version 1 deliverables and evidence were retained without modification."
+}

@@ -1,0 +1,67 @@
+{
+  "sourceCommit": "8768c863890e5583d76daf3e3a3fcdda542b785f",
+  "sourceBundleSHA256": "aeb94501a7dfe15a66796d6f983b46e017e5b2cced8f278944e5843abea8ec42",
+  "signing": "Local Android debug certificate for test installation only. The source AAB remains unsigned. Not a production/Play signature.",
+  "deviceSpec": {
+    "supportedAbis": [
+      "arm64-v8a"
+    ],
+    "supportedLocales": [
+      "en-US"
+    ],
+    "screenDensity": 420,
+    "sdkVersion": 35
+  },
+  "apkSetSHA256": "8cb91b3b81b47a3254a7763e46e0b26181cfd2691013e1ced261cfbb282629f9",
+  "splits": [
+    {
+      "name": "splits/base-arm64_v8a.apk",
+      "sha256": "627adde5dc2e3d7f9210c39d58d4ae5b7c7b4ed1b01a9a492b585619fecfb334",
+      "bytes": 12329424,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": [
+        {
+          "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+          "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+          "bytes": 10096
+        },
+        {
+          "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+          "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+          "bytes": 12287312
+        }
+      ]
+    },
+    {
+      "name": "splits/base-en.apk",
+      "sha256": "5dcd935723770244be6ff210c545798a05525d6e73842b6972c1796240bdbb39",
+      "bytes": 82266,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": []
+    },
+    {
+      "name": "splits/base-master.apk",
+      "sha256": "87caa4ea544abc87f5dddde838e49c6ce3244bf6f383f6b1450c8f42d334ea68",
+      "bytes": 26726448,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": []
+    },
+    {
+      "name": "splits/base-xxhdpi.apk",
+      "sha256": "dfc528a9767c20e23e92cfcc9c00c8f082025de6fcdc8608ed00de879a7212e4",
+      "bytes": 76640,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": []
+    }
+  ],
+  "installationPerformed": false,
+  "runtime16KBTestPerformed": false
+}

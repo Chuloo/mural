@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "artifactSha256": "938107cf13969422bf389252c88836c97701a93f6accc8f96d5266ed55ca0c2f",
+  "backendCommit": "471133e0e2facbea1184ad91832a1a3220ca766e",
+  "method": "Coordinator observed a synthetic Spanish conversation through the sealed debug APK using the typed fallback. The emulator had no host microphone or speaker.",
+  "checks": {
+    "greetingMeaningAutomatic": true,
+    "longReplyMeaningAutomatic": true,
+    "spellingCorrectionInSpanish": true,
+    "noManualMeaningRetry": true,
+    "targetAndMeaningRegionsVisible": true,
+    "meaningRetainedAfterEnd": true,
+    "automaticIdleReset": true,
+    "finalProcessHelperFailureLogEmpty": true
+  },
+  "screenshot": {
+    "path": "long-reply-layout-2026-09-14-v3/live-spanish-meaning.png",
+    "sha256": "b466c2ced6ccee90ec9e31081cf128762cd5adcb8caa0949b87626aa2dd3f119",
+    "content": "Synthetic live response; each full passage is independently scrollable. All names and learner input were test fixtures."
+  },
+  "limitations": [
+    "No physical microphone, speaker or Bluetooth verification.",
+    "No Play-signed installation or live purchase verification.",
+    "A successful test does not guarantee every provider response."
+  ]
+}

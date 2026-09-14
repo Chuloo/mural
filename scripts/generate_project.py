@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 
-root = Path(__file__).resolve().parents[1]
+root = Path(__file__).resolve().parents[1] / 'apps' / 'ios'
 existing_project = root/'Mural.xcodeproj'/'project.pbxproj'
 existing_team = re.search(r'DEVELOPMENT_TEAM\s*=\s*"?([A-Z0-9]+)', existing_project.read_text()) if existing_project.exists() else None
 if existing_team:

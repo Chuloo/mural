@@ -1,0 +1,24 @@
+<resources>
+    <string name="guest_unavailable_title">Los minutos gratuitos no están disponibles ahora</string>
+    <string name="guest_unavailable_detail">Cada conversación tiene un coste de IA. Estamos trabajando para financiar más minutos gratuitos y que más personas puedan aprender con Mural.</string>
+    <string name="guest_ready_title">Tu próxima conversación te espera</string>
+    <string name="guest_ready_detail">Empieza a hablar. Puedes iniciar sesión cuando quieras para conservar los minutos que te quedan en tu cuenta.</string>
+    <string name="guest_checking_title">Un momento para prepararnos</string>
+    <string name="guest_checking_detail">Estamos comprobando tus minutos de conversación.</string>
+    <string name="guest_retry_title">Vamos a intentarlo de nuevo</string>
+    <string name="guest_retry_detail">No hemos podido consultar tus minutos. Comprueba tu conexión e inténtalo de nuevo. Tu saldo no se ha restablecido.</string>
+    <string name="guest_sign_in_title">Te damos la bienvenida de nuevo</string>
+    <string name="guest_sign_in_detail">Inicia sesión para volver a tus minutos. Este dispositivo ya ha recibido su saldo de bienvenida.</string>
+    <string name="guest_more_title">Que siga la conversación</string>
+    <string name="guest_more_detail">Has agotado tus minutos disponibles. Añade más cuando se activen las compras o usa tu propia clave de API en Ajustes.</string>
+    <string name="guest_link_title">Vamos a reunir tus minutos</string>
+    <string name="guest_link_detail">Aún tenemos que pasar los minutos que te quedan como invitado a tu cuenta. Comprueba de nuevo para terminar. Se sumarán a los minutos que compres.</string>
+    <string name="guest_continue">Vamos a hablar</string>
+    <string name="guest_sign_in">Continuar con Google</string>
+    <string name="guest_check_again">Comprobar de nuevo</string>
+    <string name="guest_personal_key">Usar mi propia clave de API</string>
+    <string name="guest_purchases_soon">Las compras aún no están disponibles. Puedes usar tu propia clave de API.</string>
+    <string name="guest_account_detail">Inicia sesión para conservar en tu cuenta los minutos que te quedan como invitado. Tu aprendizaje se queda en este dispositivo.</string>
+    <string name="consent_adult_confirmation">Al continuar, confirmas que tienes 18 años o más.</string>
+    <string name="guest_member_trial_used">Esta cuenta ya ha recibido sus minutos de bienvenida, así que no recibirá un segundo saldo gratuito. El saldo de tu cuenta no ha cambiado.</string>
+</resources>

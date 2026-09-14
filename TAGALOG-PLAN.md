@@ -6,7 +6,7 @@ This completes the repository plan prepared on 13 September 2026 against `4aef37
 
 | Field | Value |
 | --- | --- |
-| Module | `LanguageModule.tagalog` in `Core/Languages/Tagalog.swift` |
+| Module | `LanguageModule.tagalog` in `apps/ios/Core/Languages/Tagalog.swift` |
 | Stable learning/storage ID | `tl` |
 | Display name and native name | `Tagalog (Filipino)` |
 | Variety / picker label | `Philippines` / `Tagalog (Filipino) · Philippines` |
@@ -20,17 +20,18 @@ Filipino is a learner-facing alias, with a single Tagalog progress namespace. Th
 
 | Planned work | Implementation |
 | --- | --- |
-| Complete compiled language module | `Core/Languages/Tagalog.swift`: regional speech, writing, lemma rules, six challenge stages, topic placeholder and target-language lookup fallback. |
-| Register the ninth target | `Core/Languages/LanguageModule.swift`: append `.tagalog`; both pickers derive their options and labels automatically. |
+| Complete compiled language module | `apps/ios/Core/Languages/Tagalog.swift`: regional speech, writing, lemma rules, six challenge stages, topic placeholder and target-language lookup fallback. |
+| Register the ninth target | `apps/ios/Core/Languages/LanguageModule.swift`: append `.tagalog`; both pickers derive their options and labels automatically. |
 | Philippine themes | Override the existing `coffee`, `groceries`, `travel`, `cabin` and `traditions` IDs; inherit the other 19 themes. |
 | All prompt paths | Existing `TeachingPolicy` functions interpolate the module, including its display alias; language-specific guidance keeps the target explicit. |
 | Prevent false speech redirects | `TeachingPolicy.supportsSpeechLanguageDetection` declines automatic detection for `tl`; the coordinator avoids that unreliable check. Other targets retain their previous behavior. |
-| Honest live-check diagnostics | `App/LanguageVerification.swift`: Tagalog reply/lookup fixtures, actual detector label/confidence, separate mechanical `flowPassed`, detection-dependent `passed` and pending language-quality review. |
+| Honest live-check diagnostics | `apps/ios/App/LanguageVerification.swift`: Tagalog reply/lookup fixtures, actual detector label/confidence, separate mechanical `flowPassed`, detection-dependent `passed` and pending language-quality review. |
 | Native previews | `ConversationCoordinator.prepareConversationPreview`: matched Tagalog caption/meaning; Debug active-state fixture for the language-switch lock. |
-| Experimental hosted locale | `server/src/live-provider.ts`: `tl-PH` regional target; negative aliases remain unsupported before any reservation/provider call. |
-| Core regressions | `Tests/TagalogTests.swift`, expanded catalog fixtures, cross-language meaning and final-assessment cases. |
-| Native regressions | `UITests/MuralUITests.swift`: onboarding, largest accessibility text, subtitle choice, Settings/themes/Words, transcript retention, switching lock and normal relaunch persistence. |
-| Hosted regressions | Locale/provider request test plus a PostgreSQL-backed Tagalog reservation, settlement and invalid-alias test. |
+| Experimental hosted locale | `services/api/src/live-provider.ts`: `tl-PH` regional target; negative aliases remain unsupported before any reservation/provider call. |
+| Core regressions | `apps/ios/Tests/TagalogTests.swift`, expanded catalog fixtures, cross-language meaning and final-assessment cases. |
+| Native regressions | `apps/ios/UITests/MuralUITests.swift`: onboarding, largest accessibility text, subtitle choice, Settings/themes/Words, transcript retention, switching lock and normal relaunch persistence. |
+| Hosted regressions | Locale/provider request test plus PostgreSQL-backed Tagalog credit/minute reservation, settlement and invalid-alias coverage. |
+| Android integration | Regenerated `apps/android/app/src/main/java/chat/mural/core/Languages.kt` from the Swift catalog; registry, English-support and archive-isolation regression tests. |
 | Documentation | README, architecture, add-language/build guides, server contract, store metadata, [Tagalog references](docs/tagalog.md) and [verification record](verification/validation.md). |
 
 ## Research and teaching decisions

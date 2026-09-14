@@ -1,0 +1,11 @@
+<resources>
+    <string name="paid_balance_estimate">Unos %1$s minutos comprados</string>
+    <string name="paid_balance_small">Queda menos de un minuto comprado</string>
+    <string name="paid_balance_detail">El tiempo es estimado. La voz y la enseñanza descuentan de tu saldo el coste real de la IA.</string>
+    <string name="paid_balance_free_first">Primero se usan tus minutos gratuitos.</string>
+    <string name="paid_pack_estimate">Unos %1$s minutos</string>
+    <string name="paid_ai_allocation">Para uso de la IA</string>
+    <string name="paid_mural_fee">Comisión de Mural (%1$s%%)</string>
+    <string name="paid_processing_fee">Comisión de pago estimada</string>
+    <string name="paid_processing_buffer">Margen para costes de pago</string>
+</resources>

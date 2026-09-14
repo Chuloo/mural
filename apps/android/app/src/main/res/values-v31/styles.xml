@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Mural" parent="Theme.Mural.Base">
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">@color/mural_cream</item>
+        <item name="android:windowSplashScreenBackground">@color/mural_cream</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/mural_icon</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+        <item name="android:windowSplashScreenBrandingImage">@null</item>
+    </style>
+</resources>

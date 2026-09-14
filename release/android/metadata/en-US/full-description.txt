@@ -1,0 +1,29 @@
+Start with a hello. Mural helps you practise a language through voice conversations that respond to how you are getting on.
+
+Speak naturally
+Mural aims to stay in the language you are learning, even when you reply in another language. Turn on meaning subtitles when you need a hand. Ask for a simpler explanation, try again after a correction, or use a typed reply when speaking is difficult.
+
+Find something to talk about
+Choose an everyday theme, from ordering coffee to discussing a film. With your own API key, you can also explore a current topic and follow the sources behind it.
+
+Build vocabulary in context
+Revisit words from your conversations. Three recall bars reflect the evidence from your practice over time. They are learning guidance, not a test score or a promise of fluency.
+
+Choose your language
+Practise Norwegian Bokmål, Spanish from Spain, international English, French from France, German, Italian, Brazilian Portuguese or Mandarin. Mandarin uses Simplified Chinese with optional pinyin. Each language keeps its own learning history.
+
+Keep your learning with you
+Conversations, vocabulary and progress are saved on your device. Export a learning backup and import it on another Mural installation. Mural does not save raw audio. Your audio and selected text are sent to OpenAI while you practise, and provider retention policies apply.
+
+Start as a guest
+During this preview, eligible new installations can receive 10 free conversation minutes while trial funding is available. Choose your learning and meaning languages, then start talking. Sign in with Google to link an eligible guest allowance to your account. Each account receives one welcome allowance. Learning history stays on your device and moves through export and import.
+
+About this preview
+Mural is for adults aged 18 and older. An internet connection is required. AI can make mistakes in language, translations and factual answers.
+
+Paid top-ups are not available yet. You can optionally add your own OpenAI API key in Advanced settings. This requires your own OpenAI billing and access to the supported models; OpenAI charges your project directly for that usage.
+
+Mural is open source under the MIT License. Explore the code at github.com/Chuloo/mural.
+
+Support: hi@hackmamba.io
+Privacy: mural.chat/privacy/

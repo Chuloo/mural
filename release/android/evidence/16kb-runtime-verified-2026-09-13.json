@@ -1,0 +1,35 @@
+{
+  "recordedAtUTC": "2026-09-13T21:37:08.649351+00:00",
+  "status": "passed",
+  "runtime": "Android 15 / API 35 / ARM64 / Google Play 16 KB image",
+  "observedPageSizeBytes": 16384,
+  "emulator": "37.1.11.0",
+  "tests": {
+    "class": "chat.mural.network.NativeCompatibilityTest",
+    "passed": 2,
+    "failed": 0,
+    "scope": "Load bundled native libraries and construct a WebRTC audio/data offer offline"
+  },
+  "previewAPK": {
+    "sha256": "8aca837413d40f15e70cbe74a14083f03bedc5d3906e0ddbe7f3ada7164604a5",
+    "bytes": 65921525
+  },
+  "instrumentedAppSHA256": "545e9361ca364c852228506fe5ecb16813ff16498b5b53ed9a8e13b110b5aa29",
+  "testAPKSHA256": "94e24214f91a234a973e073f264af54ac7eb69202e274507b3d22d55374de1d1",
+  "logSHA256": "230db03883341148a76e3b1de918c1595df524add3f559cb825649332d8ff808",
+  "nativeLibraries": [
+    {
+      "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+      "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+      "matchesPreviewAPK": true
+    },
+    {
+      "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+      "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+      "matchesPreviewAPK": true
+    }
+  ],
+  "physicalAudioTestPerformed": false,
+  "providerCallsPerformed": false,
+  "finalPlaySignedBundleCertified": false
+}

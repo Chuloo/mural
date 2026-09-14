@@ -36,6 +36,6 @@ The Debug language-flow report separates `flowPassed` from `passed`, which addit
 
 Tagalog uses archive version 2 with its own vocabulary, topics and progress. Existing IDs and the Norwegian default are unchanged. Older app versions that do not contain `tl` reject Tagalog archives; upgrade them before importing. Retain the module in subsequent versions so existing learning records remain readable.
 
-The BYOK iPhone flow uses the module's teaching instructions directly. The experimental hosted service separately accepts `tl-PH` and rejects bare IDs and unconfigured aliases before reserving credit. This addition does not enable hosted billing or require a deployment for native BYOK use.
+The BYOK iPhone flow uses the module's teaching instructions directly. Android's catalog is generated from the same Swift module; its regression tests cover the display alias, English support and isolated archive progress. The Apple detector exception applies only to iPhone; Android uses its own platform classifier and still needs live Tagalog review. The hosted service separately accepts `tl-PH` and rejects bare IDs and unconfigured aliases before reserving credit or conversation minutes. This addition does not enable hosted billing or require a deployment for native BYOK use.
 
 See [build and test instructions](build-and-test.md) and [verification results](../verification/validation.md). Real-device conversation and proficient-speaker review remain separate from automated test completion.

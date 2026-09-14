@@ -1,0 +1,14 @@
+<resources>
+    <string name="hosted_checking_previous">Mural is checking your previous conversation. Please try again shortly.</string>
+    <string name="hosted_not_ready">Mural minutes are not ready for this account yet.</string>
+    <string name="hosted_typed_start">Start a voice conversation before sending a typed reply with Mural minutes.</string>
+    <string name="provider_preference_save_failed">Your conversation preference could not be saved.</string>
+    <string name="hosted_sign_in">Sign in to use your Mural minutes.</string>
+    <string name="hosted_unconfirmed">Mural could not confirm that request. It will not be sent again automatically.</string>
+    <string name="hosted_unavailable">Mural minutes are not available for this request right now.</string>
+    <string name="hosted_no_minutes">You have no conversation minutes available.</string>
+    <string name="hosted_extra_help_limit">This conversation has reached its limit for extra explanations.</string>
+    <string name="hosted_window_closed">Start a new conversation for more help. Your saved meanings are still available.</string>
+    <string name="hosted_request_failed">Mural could not complete that request. Please try again later.</string>
+    <string name="hosted_minimum_charge_disclosure">15-second minimum per conversation. Longer conversations use the time you are connected. Your remaining balance caps the charge.</string>
+</resources>

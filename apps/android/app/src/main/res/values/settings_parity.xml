@@ -1,0 +1,14 @@
+<resources>
+    <string name="settings_navigation_title">Make yourself comfortable</string>
+    <string name="settings_done">Done</string>
+    <string name="settings_just_your_pace">Just your pace</string>
+    <string name="settings_meaning_subtitles">Meaning subtitles</string>
+    <string name="settings_language_footer">Each language keeps its own words and progress. Mural finds your pace through conversation.</string>
+    <string name="settings_language_running_footer">End this conversation to switch languages. Each language keeps its own words and progress.</string>
+    <string name="settings_advanced">Advanced</string>
+    <string name="settings_use_own_key">Use your own API key</string>
+    <string name="settings_byok_version_footer">An optional way to use Mural. OpenAI bills usage on your own key directly to you.</string>
+    <string name="settings_key_owner_footer">Your OpenAI account pays for usage. The key stays encrypted on this phone and is sent only to OpenAI.</string>
+    <string name="settings_keep_comfortable">Keep it comfortable</string>
+    <string name="settings_limit_minutes">%1$d minutes</string>
+</resources>

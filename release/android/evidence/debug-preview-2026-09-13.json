@@ -1,0 +1,271 @@
+{
+  "artifact": {
+    "path": "../deliverables/Mural-Android-preview-2026-09-13.apk",
+    "bytes": 65921525,
+    "sha256": "8aca837413d40f15e70cbe74a14083f03bedc5d3906e0ddbe7f3ada7164604a5"
+  },
+  "manifest": {
+    "packageName": "chat.mural.android",
+    "versionCode": 1,
+    "versionName": "0.1",
+    "minSdk": 26,
+    "targetSdk": 36,
+    "debuggable": true,
+    "testOnly": false,
+    "allowBackup": false,
+    "usesCleartextTraffic": false
+  },
+  "publicBuildConfig": {
+    "buildType": "debug",
+    "apiOrigin": "https://api.mural.chat",
+    "googleServerClientID": "1034240936303-v182map9ntca934qc10i2ql3366onue7.apps.googleusercontent.com",
+    "minutePurchasesEnabled": false,
+    "minutePurchaseEnvironment": "test"
+  },
+  "signer": {
+    "type": "Android Debug",
+    "sha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+    "signatureV2Verified": true,
+    "matchesExistingDebugIdentity": true
+  },
+  "knownCredentialScan": {
+    "entriesScanned": 605,
+    "patterns": [
+      "OpenAI secret key",
+      "Stripe secret or restricted key",
+      "Google OAuth client secret",
+      "GitHub token",
+      "private key material"
+    ],
+    "findings": 0,
+    "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+  },
+  "nativeLibraries": [
+    {
+      "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+      "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+      "bytes": 10096
+    },
+    {
+      "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+      "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+      "bytes": 12287312
+    }
+  ],
+  "requiredNotices": {
+    "Mural-LICENSE.txt": true,
+    "Apache-2.0.txt": true,
+    "Nunito-OFL.txt": true,
+    "THIRD-PARTY-NOTICES.txt": true,
+    "WebRTC-SDK-LICENSE.txt": true,
+    "WebRTC-THIRD-PARTY-NOTICES.md": true
+  },
+  "jvm": {
+    "reportFiles": 33,
+    "tests": 227,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "reportSHA256": [
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.MinutePurchaseLaunchTest.xml",
+        "sha256": "7b27b723f52e3bde98e0bc3dae1fdc812fbd426ab840c9ed7c612aeedacd8984"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.MinutePurchaseMemberAccessTest.xml",
+        "sha256": "a29c6989b0bbc54f86b5ec8a672dc1d2409ee2eb4dadd215b8e0c897eeaf0845"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.MuralViewModelTest.xml",
+        "sha256": "0a82ec644c692a8b7f0e5ff7038867d51f4a498cae8dea5650bc877ed9111ac3"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.AccountControllerTest.xml",
+        "sha256": "2bec8cb878c83c9658caf3a5bc39c725e0f3047c061b4b95c847b136cf3c1890"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.AccountMutationCoordinatorTest.xml",
+        "sha256": "89c843812a491f8f5bdeb6231e9970ba02e4bfa731a665e1ce186e9888015d5b"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.ArchiveCompatibilityTest.xml",
+        "sha256": "57c36a112c36617a4aceba07b785ba66af7cf218ac4e5640b36d09ce1e18d181"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.ConversationProvidersTest.xml",
+        "sha256": "35a4d0d30a270e32c8d9350dbd3394c302f6a63c5117f579fb00e2d8010c0e92"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.CoreTest.xml",
+        "sha256": "c88404362991bbc94d3c177996409a28dbc6118b2256967d60a8c25986b267ab"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.CrossPlatformFixtureTest.xml",
+        "sha256": "bcc9605dd89b508710ee86a3a76d5c494e0bf539a88dca9cf64285c3e05f7f39"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.EvidenceTest.xml",
+        "sha256": "5e02cda4d5beb04cd4f464f0fc402afa3d152c601fb4855b94d230b6111f18b5"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.FinalAssessmentQueueTest.xml",
+        "sha256": "2af746682d695842444892c9068619c1fec396dc7fe838814ed0975f5b488943"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.GuestMinuteControllerTest.xml",
+        "sha256": "aec7a564515b391e6619be2291d23bc508d9a0858973ce48f7c68af21d63b30f"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.HostedReadinessControllerTest.xml",
+        "sha256": "2b03f33a5372765d7039650b44a9a5402baca13d401bd2ec72f727c56bc1a201"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.MeaningControllerTest.xml",
+        "sha256": "e9f438a69b058781b3e32a2cc717a9d42ee8473be68b285f08656311eade1a40"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.MinutePurchaseControllerTest.xml",
+        "sha256": "1efa13f3e06ab124fc569a125edea0527ec52ff5e022e433af17d12e287b40cb"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.ReportControllerTest.xml",
+        "sha256": "71566c2b04c664d6480c76434f83fb26a88dd712bc38c65e792a2db6d5d92a4b"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.SessionLimitsTest.xml",
+        "sha256": "27841599e6031e4f4b5bf1964c27597febb50545f0dc87428b356570739c6cfb"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.core.UsageSummaryTest.xml",
+        "sha256": "c77034f9d2b0828b3c6c88f5b831b4d2d63e6f774646f1abbafd2695fba52486"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.APIClientTest.xml",
+        "sha256": "d93050bca64e24a0617d643ce10d3acfe74fcf862aa67cea8473849c8f49539b"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.CommunicationAudioRouteTest.xml",
+        "sha256": "ccd6cfd2ecf608fe587e98e9ff0d45ed7865ddafea0a6fe0c3bded178d70aba5"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.GuestMinuteClientTest.xml",
+        "sha256": "c9dc7c0ba55b5a2ce73f791396cd9f60ad1555a4502719057825101d85a4f0c2"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.HostedAPIClientTest.xml",
+        "sha256": "8857d67cf95f8a646fe80b9af703b3d5ee42d32da681fa39e7d7b7c689007c35"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.LanguageDetectorTest.xml",
+        "sha256": "2a493d3a9ade0b6e67cdf00d594a608ceb16329c6896d59db1be0dd4135a554b"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.LegacyScoControllerTest.xml",
+        "sha256": "cc69dda6c04700a33308f8aedacb9a1b05b8c1505b7aa35cb65ae732699813b8"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.LiveSessionOwnershipTest.xml",
+        "sha256": "e9e9a543441a970345434d9083b4fb9b4819e30227f028b0ea135ec4cab4b390"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.ManagedAccountClientTest.xml",
+        "sha256": "439bde40a6ecd31bbfca7fbf7dcd552b72beea2515bb1ce3ff7cd4d875364e59"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.MinuteCommerceClientTest.xml",
+        "sha256": "2cd8e97a665464e372cf27d686412913b17fd24a1613a8a0a88dd10b5795f512"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.PlayBillingAdapterTest.xml",
+        "sha256": "c1473699ea694baa49f5e7d586db4db8c44ff78cd2148b5e1e26737ed9a09414"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.network.ReportClientTest.xml",
+        "sha256": "f729fd393c475cbaa891df33e7ece1500a2455a5f28bea2c11ae532f985d7fdc"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.ui.CaptionLinksTest.xml",
+        "sha256": "0113471c6e22928840a689d1fcca2f65f8ca485f1eb3d0c649c6b596b4bf9647"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.ui.InlineMarkdownTest.xml",
+        "sha256": "5cd0d020d3889859660a78566e13539a48868c24dfad51210af79992bc27006d"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.ui.ReportSubmissionTest.xml",
+        "sha256": "3710a83647ec496377a59767ba4e58ce9b82972819aac9036b5880e0ae35d702"
+      },
+      {
+        "path": "apps/android/app/build/test-results/testDebugUnitTest/TEST-chat.mural.ui.WordExplanationTest.xml",
+        "sha256": "02f1593462d509c785211306a47298b522f7af45dcb039408580da84208a190f"
+      }
+    ]
+  },
+  "instrumentation": {
+    "reportFiles": 1,
+    "tests": 40,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "reportSHA256": [
+      {
+        "path": "apps/android/app/build/outputs/androidTest-results/connected/uiTest/TEST-Mural_Pixel_API_36(AVD) - 16-_app-.xml",
+        "sha256": "a0943a874ae1a73dd11c8924537bdf130898a88e6e8b454da598c3cc94c1ce01"
+      }
+    ]
+  },
+  "runtime16KB": {
+    "evidence": "16kb-runtime-verified-2026-09-13.json",
+    "evidenceSHA256": "b9f1a9eb7034ee49c81d0af3e29da5e056b84231ec620b990e982f1312392702",
+    "observedPageSizeBytes": 16384,
+    "testsPassed": 2,
+    "bothARM64NativeLibrariesMatchPreview": true,
+    "physicalAudioTestPerformed": false
+  },
+  "scope": "debug-guest-preview; not a Play release candidate",
+  "recordedAtUTC": "2026-09-13T21:54:41.673686+00:00",
+  "sourceProvenance": {
+    "associatedBaseline": "334ad8931e260da74b8cf4b9efc749ff586dc3ba",
+    "exactCleanSourceReproductionEstablished": false,
+    "note": "Artifact inspected directly; later working-tree changes exist. Freeze and record final source/configuration before release AAB."
+  },
+  "notVerified": [
+    "final release AAB and Play-signed installation",
+    "API26 runtime",
+    "physical microphone, speaker and Bluetooth",
+    "live guest-to-member transfer in fresh profile",
+    "actual-cost paid fulfillment, settlement and refunds",
+    "deployed AI-output reports",
+    "store declarations and reviewer access"
+  ],
+  "existingLintReports": {
+    "debug": {
+      "sha256": "48add7661dcaafcbdf82dcdb365cff0234368ad79157caf6642868c33c549ecd",
+      "issuesBySeverity": {
+        "Warning": 44,
+        "Hint": 2
+      },
+      "scope": "Existing report; debug reflects current build, release may predate current preview"
+    },
+    "release": {
+      "sha256": "6496e5be07316f043015867b3bc184f9a7d6173d672e5dadde51e5ed24eaf295",
+      "issuesBySeverity": {
+        "Warning": 42,
+        "Hint": 2
+      },
+      "scope": "Existing report; debug reflects current build, release may predate current preview"
+    }
+  },
+  "laterUpdates": {
+    "signingBackup": {
+      "status": "verified-local-copy",
+      "scope": "Owner-requested second copy in Documents on the same Mac",
+      "verifiedBy": "release operator",
+      "privateFilesReadByThisAudit": false
+    },
+    "storeAssets": {
+      "status": "prepared for review from later isolated capture build",
+      "evidence": "play-assets-2026-09-14.json"
+    }
+  }
+}

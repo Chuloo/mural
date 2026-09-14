@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="talk_microphone_on">Microphone on</string>
+    <string name="talk_microphone_off">Microphone off</string>
+    <string name="talk_reply_any_language">Reply in whichever language comes to you.</string>
+
+    <string name="onboarding_subtitle_language">Subtitle language</string>
+    <string name="account_agreement">By signing in, you agree to the Terms and acknowledge the Privacy Policy.</string>
+    <string name="account_title">Your account</string>
+    <string name="account_settings_detail">Sign-in and conversation time</string>
+    <string name="account_welcome">Make yourself at home.</string>
+    <string name="account_welcome_back">Welcome back.</string>
+    <string name="account_connected">You’re signed in to Mural.</string>
+    <string name="account_intro">Sign in to keep your conversation time with you. Your words and conversations stay on this device.</string>
+    <string name="account_google">Sign in with Google</string>
+    <string name="account_time_label">Time for a conversation</string>
+    <string name="account_time_unavailable">Not available yet</string>
+    <string name="account_minutes_value">%1$s minutes</string>
+    <string name="account_seconds_value">%1$s sec</string>
+    <string name="account_add_minutes">Add minutes</string>
+    <string name="account_conversation_source">Your conversations</string>
+    <string name="account_use">Use</string>
+    <string name="account_mural_minutes">Mural minutes</string>
+    <string name="account_personal_key">Your API key</string>
+    <string name="account_local_data">Your learning history stays on this device. Export it in Settings to move it to another phone.</string>
+    <string name="account_not_ready">Sign-in is not available right now. You can keep using Mural without an account.</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_delete">Delete account</string>
+    <string name="account_refresh">Refresh</string>
+    <string name="account_privacy">Privacy</string>
+    <string name="account_terms">Terms</string>
+    <string name="account_sign_out_detail">This signs you out of Mural on all devices. Your learning data and saved API key stay on this device.</string>
+    <string name="account_delete_detail">Delete your Mural account and forfeit any unused free minutes? Your learning data stays on this device. Records needed for billing or trial eligibility may be retained.</string>
+    <string name="account_request_deletion">Request deletion through support</string>
+    <string name="account_deletion_support_detail">Send a deletion request from your Mural account email. Support will verify ownership and review any balance or pending payment. Your account stays active until deletion is completed.</string>
+    <string name="account_deletion_draft_detail">Opening your email app prepares a draft. Send it to submit your request. Do not include passwords, API keys or conversation exports.</string>
+    <string name="account_deletion_email">Write email</string>
+    <string name="account_deletion_copy_email">Copy email address</string>
+    <string name="account_deletion_email_copied">Email address copied</string>
+    <string name="account_deletion_web">Deletion details on the web</string>
+    <string name="account_deletion_open_failed">We couldn’t open an app for this link. Copy the email address above and send your deletion request from your preferred email service.</string>
+    <string name="account_error_connection">We couldn’t reach Mural. Please try again.</string>
+    <string name="account_error_expired">Your sign-in has expired. Sign in again to continue.</string>
+    <string name="account_error_response">We couldn’t load your account. Please try again.</string>
+    <string name="account_error_storage">We couldn’t update your secure sign-in on this device. Unlock it and try again.</string>
+    <string name="account_error_google">Google sign-in didn’t finish. Please try again.</string>
+    <string name="account_error_billing">Automatic deletion couldn’t finish because of an active conversation, a balance or a payment awaiting confirmation. End any conversation and try again, or request deletion through support. Your account and balance are unchanged.</string>
+    <string name="account_error_apple">This account is linked to Apple. Delete it from Mural on your iPhone, or request deletion through support.</string>
+    <string name="account_signed_out_locally">You’re signed out on this device. We couldn’t reach Mural to end your other sessions.</string>
+    <string name="account_deleted">Your account has been deleted.</string>
+    <string name="account_same_account_required">Sign in with the same account to finish your previous conversation.</string>
+</resources>

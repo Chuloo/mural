@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="talk_microphone_on">Micrófono activado</string>
+    <string name="talk_microphone_off">Micrófono desactivado</string>
+    <string name="talk_reply_any_language">Responde en el idioma que te salga.</string>
+
+    <string name="onboarding_subtitle_language">Idioma de los subtítulos</string>
+    <string name="account_agreement">Al iniciar sesión, aceptas las Condiciones y confirmas que has leído la Política de privacidad.</string>
+    <string name="account_title">Tu cuenta</string>
+    <string name="account_settings_detail">Acceso y tiempo de conversación</string>
+    <string name="account_welcome">Estás en casa.</string>
+    <string name="account_welcome_back">Qué bien verte de nuevo.</string>
+    <string name="account_connected">Has iniciado sesión en Mural.</string>
+    <string name="account_intro">Inicia sesión para llevar contigo tu tiempo de conversación. Tus palabras y conversaciones se quedan en este dispositivo.</string>
+    <string name="account_google">Iniciar sesión con Google</string>
+    <string name="account_time_label">Tiempo para conversar</string>
+    <string name="account_time_unavailable">Aún no disponible</string>
+    <string name="account_minutes_value">%1$s minutos</string>
+    <string name="account_seconds_value">%1$s s</string>
+    <string name="account_add_minutes">Añadir minutos</string>
+    <string name="account_conversation_source">Tus conversaciones</string>
+    <string name="account_use">Usar</string>
+    <string name="account_mural_minutes">Minutos de Mural</string>
+    <string name="account_personal_key">Tu clave API</string>
+    <string name="account_local_data">Tu historial de aprendizaje se queda en este dispositivo. Expórtalo desde Ajustes para pasarlo a otro teléfono.</string>
+    <string name="account_not_ready">El inicio de sesión no está disponible ahora. Puedes seguir usando Mural sin cuenta.</string>
+    <string name="account_sign_out">Cerrar sesión</string>
+    <string name="account_delete">Eliminar cuenta</string>
+    <string name="account_refresh">Actualizar</string>
+    <string name="account_privacy">Privacidad</string>
+    <string name="account_terms">Condiciones</string>
+    <string name="account_sign_out_detail">Se cerrará tu sesión de Mural en todos los dispositivos. Tus datos de aprendizaje y tu clave API guardada se quedan en este dispositivo.</string>
+    <string name="account_delete_detail">¿Quieres eliminar tu cuenta de Mural y renunciar a los minutos gratuitos que te queden? Tus datos de aprendizaje se quedan en este dispositivo. Podremos conservar los registros necesarios para la facturación o el acceso a la prueba gratuita.</string>
+    <string name="account_request_deletion">Solicitar la eliminación a soporte</string>
+    <string name="account_deletion_support_detail">Envía la solicitud desde el correo de tu cuenta de Mural. Soporte verificará que la cuenta es tuya y revisará cualquier saldo o pago pendiente. Tu cuenta seguirá activa hasta que se complete la eliminación.</string>
+    <string name="account_deletion_draft_detail">Al abrir tu aplicación de correo se prepara un borrador. Envíalo para presentar la solicitud. No incluyas contraseñas, claves API ni archivos de conversaciones.</string>
+    <string name="account_deletion_email">Escribir correo</string>
+    <string name="account_deletion_copy_email">Copiar dirección de correo</string>
+    <string name="account_deletion_email_copied">Dirección copiada</string>
+    <string name="account_deletion_web">Ver los detalles en la web</string>
+    <string name="account_deletion_open_failed">No hemos podido abrir una aplicación para este enlace. Copia la dirección de arriba y envía la solicitud desde tu servicio de correo habitual.</string>
+    <string name="account_error_connection">No hemos podido conectar con Mural. Inténtalo de nuevo.</string>
+    <string name="account_error_expired">Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.</string>
+    <string name="account_error_response">No hemos podido cargar tu cuenta. Inténtalo de nuevo.</string>
+    <string name="account_error_storage">No hemos podido actualizar el acceso seguro en este dispositivo. Desbloquéalo e inténtalo de nuevo.</string>
+    <string name="account_error_google">El inicio de sesión con Google no ha terminado. Inténtalo de nuevo.</string>
+    <string name="account_error_billing">La eliminación automática no ha terminado porque hay una conversación activa, saldo o un pago pendiente de confirmación. Termina cualquier conversación e inténtalo de nuevo, o solicita la eliminación a soporte. Tu cuenta y tu saldo no han cambiado.</string>
+    <string name="account_error_apple">Esta cuenta está vinculada a Apple. Elimínala desde Mural en tu iPhone o solicita la eliminación a soporte.</string>
+    <string name="account_signed_out_locally">Has cerrado sesión en este dispositivo. No hemos podido conectar con Mural para cerrar tus otras sesiones.</string>
+    <string name="account_deleted">Tu cuenta se ha eliminado.</string>
+    <string name="account_same_account_required">Inicia sesión con la misma cuenta para terminar tu conversación anterior.</string>
+</resources>

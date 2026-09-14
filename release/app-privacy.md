@@ -6,7 +6,7 @@ Source reviewed on 12 September 2026. This describes the direct-to-OpenAI BYOK b
 
 | Data | Where it lives or goes | Source |
 | --- | --- | --- |
-| Conversations, vocabulary, evidence, language preferences and interests | Local SwiftData archive; selected text and learning context go to OpenAI for conversation and teaching | `App/Storage.swift`, `App/ConversationCoordinator.swift`, `Core/TeachingPolicy.swift` |
+| Conversations, vocabulary, evidence, language preferences and interests | Local SwiftData archive; selected text and learning context go to OpenAI for conversation and teaching | `App/Storage.swift`, `App/ConversationCoordinator.swift`, `apps/ios/Core/TeachingPolicy.swift` |
 | Microphone audio | Streamed to OpenAI over WebRTC during a live conversation; no raw-audio file written by Mural | `App/LiveTransport.swift` |
 | Meaning subtitles and lookup text | Selected text sent to OpenAI; translations cached in the local conversation | `App/APIClient.swift`, `App/ConversationCoordinator.swift` |
 | Topic search requests | Sent to OpenAI’s web-search tool; topic summaries and source URLs saved locally | `App/APIClient.swift`, `App/ConversationCoordinator.swift` |

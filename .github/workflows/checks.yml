@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: swift test
+      - run: swift test --package-path apps/ios
 
   server:
     runs-on: ubuntu-24.04
@@ -37,7 +37,7 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 10
     defaults:
       run:
-        working-directory: server
+        working-directory: services/api
     env:
       TEST_DATABASE_URL: postgresql://mural_test:local_ci_only@localhost:5432/mural_billing_test
     steps:
@@ -48,6 +48,7 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npm run check
       - run: npm run build
       - run: npm test

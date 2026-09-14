@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-13T22:42:43.414277+00:00",
+  "status": "Signed candidate prepared for internal Play testing; not uploaded by this audit.",
+  "artifact": {
+    "filename": "Mural-Android-release-2026-09-14.aab",
+    "location": "Hej/deliverables (outside the repository)",
+    "bytes": 33029850,
+    "sha256": "cb327af6edbecbf3b2212cdfc12d978c763a6517a5505bccddb35a5f82d50d20",
+    "unsignedSHA256": "3e4705465f224cb6f1a6534856800e84e9a17eb02db9d2d00b3968407009cb01"
+  },
+  "source": {
+    "baselineCommit": "334ad8931e260da74b8cf4b9efc749ff586dc3ba",
+    "dirtyAtBuild": true,
+    "description": "Built from an uncommitted working tree; baseline commit is not the complete source snapshot.",
+    "androidSourceFingerprintSHA256": "1ac32c68b3bfdcd585b08aabbfa43e6c3e5c692c32de171f226f5c721f44af5c",
+    "sourceManifest": "release/private/android-final-2026-09-14/build-snapshot.json",
+    "sourceUnchangedAtVerification": true,
+    "changedFilesSinceFullUISuite": [
+      "apps/android/app/src/main/java/chat/mural/core/AIValuePurchase.kt",
+      "apps/android/app/src/main/java/chat/mural/core/MinutePurchases.kt",
+      "apps/android/app/src/main/java/chat/mural/network/MinuteCommerceClient.kt",
+      "apps/android/app/src/test/java/chat/mural/network/MinuteCommerceClientTest.kt"
+    ]
+  },
+  "buildConfiguration": {
+    "package": "chat.mural.android",
+    "versionCode": 1,
+    "versionName": "0.1",
+    "buildType": "release",
+    "debuggable": false,
+    "minSdk": 26,
+    "targetSdk": 36,
+    "apiOrigin": "https://api.mural.chat",
+    "googleServerClientID": "1034240936303-v182map9ntca934qc10i2ql3366onue7.apps.googleusercontent.com",
+    "minutePurchasesEnabled": false,
+    "minutePurchaseEnvironment": "test",
+    "confirmedFrom": "BuildConfig DEX inside the bundletool-generated base-master APK"
+  },
+  "signature": {
+    "allPayloadSignaturesValid": true,
+    "payloadEntriesVerified": 607,
+    "certificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c",
+    "certificateSubject": "CN=Mural Upload, O=Hackmamba Inc., C=US",
+    "algorithm": "SHA256withRSA",
+    "keySizeBits": 3072,
+    "jarsignerVerified": true,
+    "trustWarnings": "The upload certificate is self-signed and has no trusted timestamp; every payload signature verifies against the approved certificate.",
+    "backup": "Owner-requested Documents backup verified by release operator; second copy is on the same Mac."
+  },
+  "verification": {
+    "jvm": {
+      "tests": 235,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "releaseLint": {
+      "errors": 0,
+      "warnings": 44
+    },
+    "releaseCheckerTests": {
+      "tests": 21,
+      "failures": 0
+    },
+    "fullIsolatedUI": {
+      "tests": 44,
+      "failures": 0,
+      "seconds": 81.144,
+      "evidence": "isolated-ui-2026-09-14.json",
+      "scope": "Full suite before the final catalog estimate-limit change; four source files changed afterward, with no UI layout changes."
+    },
+    "finalPurchaseUI": {
+      "tests": 5,
+      "failures": 0,
+      "seconds": 10.518,
+      "appSHA256": "9e7b7e687fee536837adf6b336aa586471e2a719fbd107fe2d1117b0b7d9a49d",
+      "testAPKSHA256": "d39c7d82df22b9847649b0e6711f953f178dd2e25cd889837e3ab51eab23e59a",
+      "includesEstimatedTimeAndAllFeesDisclosure": true,
+      "personalAppDataPreserved": true,
+      "deviceSettingsRestored": true
+    },
+    "releaseFiles": {
+      "evidence": "signed-release-files-2026-09-14.json",
+      "passed": true,
+      "storeAssets": 8,
+      "secretScanEntries": 610,
+      "knownSecretPatternFindings": 0,
+      "limitations": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+    },
+    "nativeRuntime": {
+      "evidence": "16kb-runtime-verified-2026-09-13.json",
+      "pageSize": 16384,
+      "tests": 2,
+      "scope": "Prior offline ARM64 library loading and WebRTC offer creation using identical native binaries.",
+      "libraries": [
+        {
+          "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+          "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+          "matchesVerified16KBRuntime": true
+        },
+        {
+          "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+          "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+          "matchesVerified16KBRuntime": true
+        }
+      ]
+    },
+    "splits": {
+      "sourceAABSHA256": "cb327af6edbecbf3b2212cdfc12d978c763a6517a5505bccddb35a5f82d50d20",
+      "deviceSpec": {
+        "supportedAbis": [
+          "arm64-v8a"
+        ],
+        "supportedLocales": [
+          "en",
+          "es"
+        ],
+        "screenDensity": 420,
+        "sdkVersion": 36
+      },
+      "tool": "bundletool 1.18.0",
+      "localSplitSigning": "Approved upload certificate; these are not Play-signed installs.",
+      "installed": false,
+      "apks": [
+        {
+          "apk": "splits/base-arm64_v8a.apk",
+          "bytes": 12333520,
+          "sha256": "ef72d714538c111853afa594eb26965cf8f37f666054c4f3974984899b2e42c1",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-en.apk",
+          "bytes": 86362,
+          "sha256": "53125f026969c960532645beb9c828721c4ec20bb5f8221b8faf3f034c0b253d",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-es.apk",
+          "bytes": 69978,
+          "sha256": "c836b9f0b535c83d107bab85c89c363001a41b9929b786d570b62c40735a9c67",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-master.apk",
+          "bytes": 26865798,
+          "sha256": "4d99786965801908df5077ff29407d630643aa37267d1295223d477d4ba480d9",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-xxhdpi.apk",
+          "bytes": 84832,
+          "sha256": "d76111f1ecd2a9288663d74b9595bd9a7a8da31935fa08f24976f5063d6ad391",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        }
+      ]
+    }
+  },
+  "remainingChecks": [
+    "Install this exact bundle through internal Play testing and verify Play-signed Google login.",
+    "Complete live guest-to-member transfer and account lifecycle checks on the released service configuration.",
+    "Test Android 8/API 26 and physical microphone, speaker, Bluetooth and interruptions.",
+    "Resolve applicable Play declarations, reviewer access, pre-launch findings and track rollout approval.",
+    "Keep paid checkout disabled until channel purchase/refund/recovery and live settlement gates pass."
+  ]
+}

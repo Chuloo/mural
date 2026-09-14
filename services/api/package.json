@@ -1,0 +1,32 @@
+{
+  "name": "mural-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/main.ts",
+    "build": "tsc",
+    "start": "node --env-file-if-exists=.env dist/src/main.js",
+    "migrate": "tsx --env-file=.env src/migrate.ts",
+    "minutes-admin": "tsx --env-file-if-exists=.env src/minutes-admin.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "5.12.4",
+    "jose": "6.2.12",
+    "pg": "8.23.0",
+    "stripe": "22.6.2",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2"
+  }
+}

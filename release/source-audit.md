@@ -22,7 +22,7 @@ Publish from the directory containing `Package.swift`, keeping the following rel
 
 | Include | Notes |
 | --- | --- |
-| `App/`, `Core/`, `Tests/`, `UITests/` | Source, fixtures, app assets, privacy manifest and third-party notices |
+| `App/`, `apps/ios/Core/`, `apps/ios/Tests/`, `apps/ios/UITests/` | Source, fixtures, app assets, privacy manifest and third-party notices |
 | `Package.swift` | Pure Swift core package |
 | `Mural.xcodeproj/project.pbxproj` | Generated project without personal signing values |
 | `Mural.xcodeproj/xcshareddata/xcschemes/` | Shared scheme |

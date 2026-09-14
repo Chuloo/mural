@@ -1,0 +1,65 @@
+{
+  "sourceBundleSHA256": "699dc931914a27d7264c88953e18fb3df0c06ed688a331f89d8bc65bc6f05812",
+  "signing": "Local Android debug certificate for test installation only. The source AAB remains unsigned. Not a production/Play signature.",
+  "deviceSpec": {
+    "supportedAbis": [
+      "arm64-v8a"
+    ],
+    "supportedLocales": [
+      "en-US"
+    ],
+    "screenDensity": 420,
+    "sdkVersion": 35
+  },
+  "apkSetSHA256": "7e7095e0407cd845c1e0b2e0025d207ee3e40551d121056b8e7b77e36eb6d0d4",
+  "splits": [
+    {
+      "name": "splits/base-arm64_v8a.apk",
+      "sha256": "627adde5dc2e3d7f9210c39d58d4ae5b7c7b4ed1b01a9a492b585619fecfb334",
+      "bytes": 12329424,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": [
+        {
+          "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+          "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+          "bytes": 10096
+        },
+        {
+          "path": "lib/arm64-v8a/libjingle_peerconnection_so.so",
+          "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+          "bytes": 12287312
+        }
+      ]
+    },
+    {
+      "name": "splits/base-en.apk",
+      "sha256": "5dcd935723770244be6ff210c545798a05525d6e73842b6972c1796240bdbb39",
+      "bytes": 82266,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": []
+    },
+    {
+      "name": "splits/base-master.apk",
+      "sha256": "bbb35dcd286b5d5c56d3348e424e7c4eb73d7d4956b6bf80de92cf1ea02476de",
+      "bytes": 26718256,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": []
+    },
+    {
+      "name": "splits/base-xxhdpi.apk",
+      "sha256": "dfc528a9767c20e23e92cfcc9c00c8f082025de6fcdc8608ed00de879a7212e4",
+      "bytes": 76640,
+      "zipalign16KB": true,
+      "signatureVerified": true,
+      "certificateSha256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+      "nativeLibraries": []
+    }
+  ],
+  "scope": "Historical unsigned candidate; account lifecycle fixes now require a fresh final build. No production signing or upload."
+}

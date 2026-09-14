@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-13T23:16:10.912133+00:00",
+  "source": {
+    "baselineCommit": "8721d2c1e453bae02ee295fa3696fa5e6fb5fcc1",
+    "dirtyAtBuild": true,
+    "description": "Built from an uncommitted working tree; baseline commit is not the complete source snapshot.",
+    "androidSourceFingerprintSHA256": "4927443f994cee3914fda27afe91f93fd41ce6c502efc8c345d449e5f6c93070",
+    "sourceManifest": "release/private/android-final-2026-09-14-v2/build-snapshot.json",
+    "sourceUnchangedAtPackagingVerification": true
+  },
+  "filename": "Mural-Android-preview-2026-09-14-v2.apk",
+  "bytes": 63458443,
+  "sha256": "52f5e9997dd565e39207f2d1662f264bfc0573e48c78d4f9e2279eafc280be86",
+  "manifest": {
+    "package": "chat.mural.android",
+    "versionCode": 2,
+    "versionName": "0.1",
+    "minSdk": 26,
+    "targetSdk": 36,
+    "debuggable": true,
+    "testOnly": false,
+    "allowBackup": false,
+    "usesCleartextTraffic": false
+  },
+  "buildType": "debug",
+  "apiOrigin": "https://api.mural.chat",
+  "minutePurchasesEnabled": false,
+  "minutePurchaseEnvironment": "test",
+  "signatureVerified": true,
+  "signatureScheme": "v2",
+  "signerCertificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+  "matchesExistingPersonalDebugIdentity": true,
+  "zipalign16KB": true,
+  "embeddedSecretScan": {
+    "entriesScanned": 605,
+    "patterns": [
+      "OpenAI secret key",
+      "Stripe secret or restricted key",
+      "Google OAuth client secret",
+      "GitHub token",
+      "private key material"
+    ],
+    "findings": 0,
+    "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+  },
+  "requiredNotices": {
+    "Mural-LICENSE.txt": true,
+    "Apache-2.0.txt": true,
+    "Nunito-OFL.txt": true,
+    "THIRD-PARTY-NOTICES.txt": true,
+    "WebRTC-SDK-LICENSE.txt": true,
+    "WebRTC-THIRD-PARTY-NOTICES.md": true
+  },
+  "nativeLibraries": {
+    "lib/arm64-v8a/libandroidx.graphics.path.so": {
+      "bytes": 10096,
+      "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6"
+    },
+    "lib/arm64-v8a/libjingle_peerconnection_so.so": {
+      "bytes": 12287312,
+      "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca"
+    }
+  },
+  "scope": "Installable personal test build, not a Play-signed release. No emulator installation or runtime testing performed by this packaging audit.",
+  "buildTests": {
+    "tests": 246,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}

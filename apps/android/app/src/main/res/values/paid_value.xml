@@ -1,0 +1,11 @@
+<resources>
+    <string name="paid_balance_estimate">About %1$s paid minutes</string>
+    <string name="paid_balance_small">Less than a paid minute remaining</string>
+    <string name="paid_balance_detail">Time is estimated. Voice and teaching deduct their actual AI cost from your balance.</string>
+    <string name="paid_balance_free_first">Your free minutes are used first.</string>
+    <string name="paid_pack_estimate">About %1$s minutes</string>
+    <string name="paid_ai_allocation">For AI usage</string>
+    <string name="paid_mural_fee">Mural fee (%1$s%%)</string>
+    <string name="paid_processing_fee">Estimated payment fee</string>
+    <string name="paid_processing_buffer">Payment cost buffer</string>
+</resources>

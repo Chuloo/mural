@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 1,
+  "validationScope": "store-files-and-native-layout",
+  "source": {
+    "commit": "8768c863890e5583d76daf3e3a3fcdda542b785f",
+    "dirty": true
+  },
+  "checks": {
+    "branding": {
+      "iosIconSource": "apps/ios/App/Assets.xcassets/AppIcon.appiconset/MuralIcon.png",
+      "androidIconSource": "apps/android/app/src/main/res/drawable-nodpi/mural_icon.png",
+      "identicalIconSHA256": "96503dcbfb81efbdd298e7a3d0132c4ed497b7f36ae632c5462a3039223e9fd1",
+      "androidAdaptiveIconSHA256": "1e6a55fd8fb581dd8f1e3a03768c5b6f394af49ddf65fa098992983abaeab795",
+      "androidForegroundSHA256": "75c993e3d9c9e9ace7ad029b726d8f3dcb28e71dbea8475b4a38a072715198ee",
+      "androidForegroundInset": "10%",
+      "designSources": {
+        "apps/ios/App/Design.swift": "ff2317f4f1e9c4d1562c008d18232277137d0a2a2c0298683b4e6ccfe54da706",
+        "apps/android/app/src/main/java/chat/mural/ui/Design.kt": "c3958902e974622f3583a68e085fa6b3fdab38a755a4782333c8fb51692877b4"
+      },
+      "visualReviewRequired": "Launcher masks and scale, in-app wordmark and store artwork must match the current iOS reference."
+    },
+    "metadata": {
+      "title": {
+        "characters": 24,
+        "maximum": 30,
+        "sha256": "2fea210c0697acb8dad89c73eae02794ee96b1ab9bc834790508dc3d6c086437"
+      },
+      "short-description": {
+        "characters": 71,
+        "maximum": 80,
+        "sha256": "6f23a7d0cb65f19211e56fc967eec5c9b74c47f3cb7aaef2f97397fbc120354d"
+      },
+      "full-description": {
+        "characters": 1749,
+        "maximum": 4000,
+        "sha256": "9eedd26303f585ed5c9b093999eb1a39f445c7effed1dedaed12475d08c3c6b5"
+      },
+      "release-notes": {
+        "characters": 320,
+        "maximum": 500,
+        "sha256": "f16a2f2a56806bfc832998ce59b69cb642ff7d3e2fafe209e15f14c81bf79d8d"
+      }
+    },
+    "assets": {
+      "assets/icon.png": {
+        "width": 512,
+        "height": 512,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparency": true,
+        "bytes": 62428,
+        "sha256": "be9791ab74bad75b6340c2ec41524d4ba32c9fd0cdf84d6d04d0f78846d34b21"
+      }
+    },
+    "aab": {
+      "sha256": "aeb94501a7dfe15a66796d6f983b46e017e5b2cced8f278944e5843abea8ec42",
+      "bytes": 32925845,
+      "abis": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86",
+        "x86_64"
+      ],
+      "nativeLibraries": {
+        "base/lib/arm64-v8a/libandroidx.graphics.path.so": {
+          "machine": 183,
+          "loadSegments": [
+            {
+              "offset": 0,
+              "virtualAddress": 0,
+              "memorySize": 7232,
+              "flags": 5,
+              "alignment": 16384
+            },
+            {
+              "offset": 7232,
+              "virtualAddress": 23616,
+              "memorySize": 912,
+              "flags": 6,
+              "alignment": 16384
+            },
+            {
+              "offset": 8144,
+              "virtualAddress": 40912,
+              "memorySize": 16,
+              "flags": 6,
+              "alignment": 16384
+            }
+          ],
+          "relroSegments": [
+            {
+              "virtualAddress": 23616,
+              "memorySize": 960,
+              "endAligned16KB": false
+            }
+          ],
+          "warnings": [
+            "GNU_RELRO end is not 16 KB aligned; no writable LOAD overlap found. Verify in a 16 KB runtime."
+          ],
+          "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+          "bytes": 10096
+        },
+        "base/lib/arm64-v8a/libjingle_peerconnection_so.so": {
+          "machine": 183,
+          "loadSegments": [
+            {
+              "offset": 0,
+              "virtualAddress": 0,
+              "memorySize": 12103864,
+              "flags": 5,
+              "alignment": 16384
+            },
+            {
+              "offset": 12103872,
+              "virtualAddress": 12120256,
+              "memorySize": 180032,
+              "flags": 6,
+              "alignment": 16384
+            },
+            {
+              "offset": 12281136,
+              "virtualAddress": 12313904,
+              "memorySize": 619864,
+              "flags": 6,
+              "alignment": 16384
+            }
+          ],
+          "relroSegments": [
+            {
+              "virtualAddress": 12120256,
+              "memorySize": 180032,
+              "endAligned16KB": false
+            }
+          ],
+          "warnings": [
+            "GNU_RELRO end is not 16 KB aligned; no writable LOAD overlap found. Verify in a 16 KB runtime."
+          ],
+          "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+          "bytes": 12287312
+        },
+        "base/lib/x86_64/libandroidx.graphics.path.so": {
+          "machine": 62,
+          "loadSegments": [
+            {
+              "offset": 0,
+              "virtualAddress": 0,
+              "memorySize": 7872,
+              "flags": 5,
+              "alignment": 16384
+            },
+            {
+              "offset": 7872,
+              "virtualAddress": 24256,
+              "memorySize": 936,
+              "flags": 6,
+              "alignment": 16384
+            },
+            {
+              "offset": 8808,
+              "virtualAddress": 41576,
+              "memorySize": 16,
+              "flags": 6,
+              "alignment": 16384
+            }
+          ],
+          "relroSegments": [
+            {
+              "virtualAddress": 24256,
+              "memorySize": 4416,
+              "endAligned16KB": false
+            }
+          ],
+          "warnings": [
+            "GNU_RELRO end is not 16 KB aligned; no writable LOAD overlap found. Verify in a 16 KB runtime."
+          ],
+          "sha256": "4e56c996f13670e70082658de7880c4020eabf4f25e43387f88ed78a713fc9f0",
+          "bytes": 10760
+        },
+        "base/lib/x86_64/libjingle_peerconnection_so.so": {
+          "machine": 62,
+          "loadSegments": [
+            {
+              "offset": 0,
+              "virtualAddress": 0,
+              "memorySize": 15901040,
+              "flags": 5,
+              "alignment": 16384
+            },
+            {
+              "offset": 15901040,
+              "virtualAddress": 15917424,
+              "memorySize": 261776,
+              "flags": 6,
+              "alignment": 16384
+            },
+            {
+              "offset": 16160176,
+              "virtualAddress": 16192944,
+              "memorySize": 639428,
+              "flags": 6,
+              "alignment": 16384
+            }
+          ],
+          "relroSegments": [
+            {
+              "virtualAddress": 15917424,
+              "memorySize": 261776,
+              "endAligned16KB": false
+            }
+          ],
+          "warnings": [
+            "GNU_RELRO end is not 16 KB aligned; no writable LOAD overlap found. Verify in a 16 KB runtime."
+          ],
+          "sha256": "0717afcc43da0c1aabd904f9ef0653efc8f3d37b5750f39a123697e7910b623a",
+          "bytes": 16166352
+        }
+      },
+      "embeddedSecretScan": {
+        "entriesScanned": 606,
+        "patterns": [
+          "OpenAI secret key",
+          "Stripe secret or restricted key",
+          "Google OAuth client secret",
+          "GitHub token",
+          "private key material"
+        ],
+        "findings": 0,
+        "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+      },
+      "jarSignatureEntries": []
+    },
+    "bundletool": {
+      "alignment": "PAGE_ALIGNMENT_16K",
+      "manifest": {
+        "packageName": "chat.mural.android",
+        "versionCode": 1,
+        "versionName": "0.1",
+        "minSdk": 26,
+        "targetSdk": 36,
+        "permissions": [
+          "android.permission.ACCESS_NETWORK_STATE",
+          "android.permission.INTERNET",
+          "android.permission.MODIFY_AUDIO_SETTINGS",
+          "android.permission.RECORD_AUDIO",
+          "android.permission.USE_BIOMETRIC",
+          "android.permission.USE_FINGERPRINT",
+          "chat.mural.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+          "com.android.vending.BILLING"
+        ],
+        "exportedComponents": [
+          {
+            "type": "activity",
+            "name": "chat.mural.MainActivity",
+            "permission": null
+          },
+          {
+            "type": "service",
+            "name": "com.google.android.gms.auth.api.signin.RevocationBoundService",
+            "permission": "com.google.android.gms.auth.api.signin.permission.REVOCATION_NOTIFICATION"
+          },
+          {
+            "type": "receiver",
+            "name": "androidx.profileinstaller.ProfileInstallReceiver",
+            "permission": "android.permission.DUMP"
+          }
+        ],
+        "debuggable": false,
+        "testOnly": false,
+        "allowBackup": false,
+        "usesCleartextTraffic": false
+      },
+      "bundletoolSHA256": null,
+      "cachedDependencies": [
+        {
+          "file": "bundletool-1.18.0.jar",
+          "sha256": "b07f346383bac7d5ddbba2794ddc770565a83ae691d80332264d42dd9bfb4507"
+        },
+        {
+          "file": "aapt2-proto-8.10.1-12782657.jar",
+          "sha256": "542852b381e0b6f7886e2de0baa3680ec60c6209c34e1cb90645a689b6122dd4"
+        },
+        {
+          "file": "protobuf-java-3.25.5.jar",
+          "sha256": "8540247fad9e06baefa8fb45eb313802d019f485f14300e0f9d6b556ed88e753"
+        },
+        {
+          "file": "protobuf-java-util-3.25.5.jar",
+          "sha256": "dacc58b2c3d2fa8d4bddc1acb881e78d6cf7c137dd78bc1d67f6aca732436a8d"
+        },
+        {
+          "file": "guava-33.3.1-jre.jar",
+          "sha256": "4bf0e2c5af8e4525c96e8fde17a4f7307f97f8478f11c4c8e35a0e3298ae4e90"
+        },
+        {
+          "file": "failureaccess-1.0.2.jar",
+          "sha256": "8a8f81cf9b359e3f6dfa691a1e776985c061ef2f223c9b2c80753e1b458e8064"
+        },
+        {
+          "file": "gson-2.11.0.jar",
+          "sha256": "57928d6e5a6edeb2abd3770a8f95ba44dce45f3b23b7a9dc2b309c581552a78b"
+        },
+        {
+          "file": "dagger-2.48.jar",
+          "sha256": "1fa226d2b4a02cc80950fa4d49a4a235cc8eced499b581fc358a55446a83f579"
+        },
+        {
+          "file": "javax.inject-1.jar",
+          "sha256": "91c77044a50c481636c32d916fd89c9118a72195390452c81065080f957de7ff"
+        },
+        {
+          "file": "slf4j-api-1.7.30.jar",
+          "sha256": "cdba07964d1bb40a0761485c6b1e8c2f8fd9eb1d19c53928ac0d7f9510105c57"
+        },
+        {
+          "file": "jose4j-0.9.5.jar",
+          "sha256": "808fb3166f3e67dad9811c331029ab1681242fd52b735bc3f33f281167fcc72e"
+        },
+        {
+          "file": "auto-value-annotations-1.6.2.jar",
+          "sha256": "b48b04ddba40e8ac33bf036f06fc43995fc5084bd94bdaace807ce27d3bea3fb"
+        }
+      ]
+    }
+  },
+  "notVerified": [
+    "upload signature and key custody",
+    "generated split APK alignment and install",
+    "16 KB runtime",
+    "physical microphone, speaker and Bluetooth",
+    "live accounts, trial and purchases",
+    "launcher mask/scale, in-app logo and Play artwork visual parity with iOS",
+    "store declarations and owner release approval",
+    "missing store assets: assets/feature-graphic.png, assets/en-US/01-greeting.png, assets/en-US/02-conversation.png, assets/en-US/03-themes.png, assets/en-US/04-words.png, assets/en-US/05-languages.png, assets/en-US/06-settings.png"
+  ],
+  "scope": "internal-byok-preview",
+  "passed": true
+}

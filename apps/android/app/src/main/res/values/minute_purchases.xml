@@ -1,0 +1,28 @@
+<resources>
+    <string name="minute_purchases_title">More time to talk</string>
+    <string name="minute_purchases_intro">Keep practicing, one conversation at a time.</string>
+    <plurals name="minute_purchases_pack_minutes">
+        <item quantity="one">%1$s minute</item>
+        <item quantity="other">%1$s minutes</item>
+    </plurals>
+    <string name="minute_purchases_pack_action">Add %1$s for %2$s</string>
+    <string name="minute_purchases_one_time">One-time purchase · No subscription</string>
+    <string name="minute_purchases_balance">%1$s minutes available</string>
+    <string name="minute_purchases_balance_small">Less than a minute available</string>
+    <string name="minute_purchases_balance_empty">No minutes available</string>
+    <string name="minute_purchases_sign_in">Sign in to add minutes</string>
+    <string name="minute_purchases_sign_in_detail">Your minutes stay with your account. Your conversations stay on this device.</string>
+    <string name="minute_purchases_unavailable">Minute packs aren’t available right now. Please check again later.</string>
+    <string name="minute_purchases_loading">Finding your minute packs…</string>
+    <string name="minute_purchases_check">Check purchases</string>
+    <string name="minute_purchases_checking">Checking your purchase…</string>
+    <string name="minute_purchases_pending">Your payment is pending. Your minutes will appear once it is complete.</string>
+    <string name="minute_purchases_opened">Finish your purchase in Google Play.</string>
+    <string name="minute_purchases_canceled">Purchase canceled. You can choose a pack whenever you’re ready.</string>
+    <string name="minute_purchases_price_changed">This pack’s price has changed. Review the updated price before choosing it again.</string>
+    <string name="minute_purchases_added">Your minutes are ready. Let’s keep talking.</string>
+    <string name="minute_purchases_reversed">A purchase was refunded or reversed. Your balance has been updated.</string>
+    <string name="minute_purchases_verification_failed">We couldn’t confirm a purchase. Check again, or sign in with the Mural account used to buy it.</string>
+    <string name="minute_purchases_sign_in_again">Sign in to confirm your purchases and see your minutes.</string>
+    <string name="minute_purchases_play_terms">Google Play shows the final total before you confirm.</string>
+</resources>

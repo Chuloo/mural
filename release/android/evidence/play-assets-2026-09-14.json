@@ -1,0 +1,260 @@
+{
+  "recordedAtUTC": "2026-09-13T22:19:33.926338+00:00",
+  "serial": "emulator-5554",
+  "originalDeviceSettings": {
+    "size": "Physical size: 1080x2424",
+    "density": "Physical density: 420",
+    "user": "0",
+    "demoAllowed": "0",
+    "fontScale": "1.0"
+  },
+  "uiTestAPK": {
+    "sha256": "a5d63f7c00c58fc62e0b8a8c9f101cd243e0d55f9677f1480ce2f01a82a33e8e"
+  },
+  "testAPK": {
+    "sha256": "d39c7d82df22b9847649b0e6711f953f178dd2e25cd889837e3ab51eab23e59a"
+  },
+  "fixture": {
+    "path": "apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt",
+    "sha256": "e36c82c3faf9751332729f1b4e49ed4f236b462d6ff446cd7ffb4b887ab4d849",
+    "syntheticConversationAndVocabulary": true,
+    "providerCalls": false,
+    "purchaseCalls": false
+  },
+  "sourceBaseline": "334ad8931e260da74b8cf4b9efc749ff586dc3ba",
+  "cleanSourceBuildClaimed": false,
+  "sourceSnapshotAfterBuild": [
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/core/Languages.kt",
+      "sha256": "38a04d6c9cfa7e0d9dc7e44e4e6f4f8f18555c047c0e71961ea76c928b2efacb"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/AccountSheet.kt",
+      "sha256": "698717baa3a2b55d92ef3806436c31f9d2aa665ea6b1c51896a744725fade494"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/CaptionLinks.kt",
+      "sha256": "bb5401671f231184b86dca7cb86a50553ddd24d709a4543d3fe7867328f86303"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/Design.kt",
+      "sha256": "c3958902e974622f3583a68e085fa6b3fdab38a755a4782333c8fb51692877b4"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/GuestMinutesSheet.kt",
+      "sha256": "15f8c4c301cb98a9620d1fb471e0ba67878946379d38acc70abbee5676a6d5a1"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/InlineMarkdown.kt",
+      "sha256": "b74c7579f6d4a3f61d4997ebd6c8a0b016a9f7177a43a35c12065dc81191d7a8"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/LibraryScreens.kt",
+      "sha256": "17bc47b543869cbebaf142fb25f51cfb61a838210fbf44f8f052fc1a7065aee4"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/MinutePurchaseSheet.kt",
+      "sha256": "7fa99f8aaae6af44cffb6cd40059e98dd4e86367194159b73622bd4c252c001b"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/MuralApp.kt",
+      "sha256": "b16eae1ad440e45ea27322270c85d04032d71a635991b97f40488e9c3e1ab91e"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/MuralIcons.kt",
+      "sha256": "08fe0fc63f621a8a10961e086e54071bd3bfd60f92197c798a2e86c744a4ca32"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/MuralSplash.kt",
+      "sha256": "e662584deb9db5d3a1619fe2c0d301b1f8d2e3395a781582d1b8a8a9ce65342a"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/NoticesDialog.kt",
+      "sha256": "475d00b12904a10f71be1ff615b871d4e3e28e10c37a4d4ee5c91718ca8b9582"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/Onboarding.kt",
+      "sha256": "134f53c1e5276d535aee8887b4cf860f79c77625196f43ee3ff5cf26e31820ea"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/PaidBalanceText.kt",
+      "sha256": "7371fa251b184632d16376f8e44ac71671fba5cae07be8ef675952c636962212"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/ReportConversationSheet.kt",
+      "sha256": "b2221aeeaf6ba4f0f6eeea288ea75c125ceaba1236b5ac0bf7c4831200c7ab85"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/ReportUtteranceAction.kt",
+      "sha256": "e327717316c778a6b53cc0fe3501bfbf72d09894cbadc9df77aa9d3e9111f01a"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/SettingsComponents.kt",
+      "sha256": "faa5d46dd690fa69424bb8394b0eed60b8611c8a538b63157f8c08593941f100"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/SettingsScreen.kt",
+      "sha256": "6415cb219a1f26ad789f8632c40c07e1a77b47e19fc074b797dba8b7e7083d5c"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/SoftControls.kt",
+      "sha256": "d9793a95ff9d2b068e1b1c8da19e42ef33b0dcb78b543b8d992c5053c376df53"
+    },
+    {
+      "path": "apps/android/app/src/main/java/chat/mural/ui/TalkScreen.kt",
+      "sha256": "511f78a41e8193b604db0f95dedd764b713b1d7907f22de6c048264e69a1c5be"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/accounts.xml",
+      "sha256": "3d22c9fae387943c1e10ed58bd4660bf09c8a5a293014d742733099156662b41"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/colors.xml",
+      "sha256": "1b95336fc5218d993e26f6968b0bbcb0afc10d606633cc31422826aec7c3a119"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/feedback.xml",
+      "sha256": "83b4b481feaccacc65b1e2c304942728a4bb1a15db30f454b92df23ae5e985c5"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/guest_minutes.xml",
+      "sha256": "133dba4856916e1d6c376f6f850641e83696d64d1a3a25081eea70ae1e611b51"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/hosted_conversations.xml",
+      "sha256": "3b28e251f428e40f18f061717215c4d1567d784810b80a04d7151c899b5f5441"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/minute_purchases.xml",
+      "sha256": "6d308ccaa1d82d506d51f48c7d5718f6bc3ec8502af018060ea1d994ec9bd166"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/paid_value.xml",
+      "sha256": "dcd7831e39909093307664b1874a6ee48a734353108e22f3fa145c09995a47b2"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/settings_parity.xml",
+      "sha256": "7cbbd6330e747035a15160642b3fcb79f68bf564c8d0bccb815d4fc6652de87b"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/strings.xml",
+      "sha256": "be69e702ca87a496d61d24af216d034b65c018d782a3d4b38a0e98bd83e1a480"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/styles.xml",
+      "sha256": "9bd29a61d096c42fbfa2a8e092c0663f88dd2df00e5ac28808ff555a026dbeec"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/accounts.xml",
+      "sha256": "dbe9a34a5002d071ca497829a5884c85f83a8623b148977ada9c34afe5c21366"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/feedback.xml",
+      "sha256": "367236514478ac2f4c67dd8acfbc243d7ac174fe6b2bd276cd7ff9599253a41d"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/guest_minutes.xml",
+      "sha256": "a5d9986c328bb8f64e4698e2a554a8e982666ac9957c3ea2254d2e3a3f7918d4"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/hosted_conversations.xml",
+      "sha256": "a3de8a9524da8f688f08b0f148aa061e924484a1becf5528089092a9b3c7090b"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/minute_purchases.xml",
+      "sha256": "510cd365c278e9b9251c29d29fbea658459c71329303a8945cef7e6793a115b7"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/paid_value.xml",
+      "sha256": "f64260b3f305b4bf9bdc06c09d3a16b715c348573e313a138b314851b9736f10"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/settings_parity.xml",
+      "sha256": "862284ed15f1b5a5f6c83548235a069031b49442ef930167879bbb034bea3cb1"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-es/strings.xml",
+      "sha256": "1ef767dd4130af5da19d58815b735df4af03963e4535896afb8c67f5f2db5027"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-v27/styles.xml",
+      "sha256": "9a0797ccf874a9bcb0fa1255a27854f5d1e1b92a69e5c1216319ae91eca2153f"
+    },
+    {
+      "path": "apps/android/app/src/main/res/values-v31/styles.xml",
+      "sha256": "67a3d1e50359d4fec6282f7a83396143c0458ccf6559b635886416918d24a5c1"
+    }
+  ],
+  "assets": [
+    {
+      "path": "assets/en-US/01-greeting.png",
+      "sha256": "8bd8c74b71f200ccb8c2cae265f575a8c3b2fb70afde24a0d62bc2783d350cc9",
+      "bytes": 145935
+    },
+    {
+      "path": "assets/en-US/02-conversation.png",
+      "sha256": "bb0bb91a272286e92d4ab21321bd83fbfffa1fdf7c1f7527c50819d43bd26113",
+      "bytes": 170726
+    },
+    {
+      "path": "assets/en-US/03-themes.png",
+      "sha256": "d4a3866ee2db311279bca0cc4ed079dec1df7882145c4293efd7622097e406c3",
+      "bytes": 127640
+    },
+    {
+      "path": "assets/en-US/04-words.png",
+      "sha256": "ca0936fcf4f67873871eb9e8d43d04ccd1a1e05a2a343faef8e9734d03c0fad7",
+      "bytes": 118975
+    },
+    {
+      "path": "assets/en-US/05-languages.png",
+      "sha256": "c22fad06bae017ea537aaedfad9e34665da125483f7194165f8b78202e2572f3",
+      "bytes": 503628
+    },
+    {
+      "path": "assets/en-US/06-settings.png",
+      "sha256": "dc273282169dfc738050f5dc7e4882499968929b57c104c96ac47a9e9e7bdb25",
+      "bytes": 135077
+    },
+    {
+      "path": "assets/feature-graphic.png",
+      "sha256": "09a531e4a19e9760d02d954f3ae229ebf58b7ddb69cb8af3981fde903c515576",
+      "bytes": 54314
+    }
+  ],
+  "restoredDeviceSettings": {
+    "size": "Physical size: 1080x2424",
+    "density": "Physical density: 420",
+    "user": "0",
+    "fontScale": "1.0",
+    "demoAllowed": "0"
+  },
+  "testLogSHA256": "c1ac3d0e199198362caaa695a48d611f592cb1796d4954627d837cad866627b3",
+  "tests": {
+    "passed": 4,
+    "failed": 0,
+    "scope": [
+      "English UI / Spanish learning core screens",
+      "Spanish compact caption visibility",
+      "Native feature graphic rendering",
+      "Double text size onboarding"
+    ]
+  },
+  "captureConfiguration": {
+    "width": 1080,
+    "height": 1920,
+    "densityDpi": 420,
+    "fontScale": 1.0,
+    "interfaceLocale": "en-US",
+    "learningLanguage": "es-ES",
+    "meaningLanguage": "English",
+    "systemClockDemo": "09:00"
+  },
+  "review": {
+    "allSevenImagesVisuallyInspected": true,
+    "laterOnboardingFixChangedOnly": "assets/en-US/05-languages.png",
+    "noCropOrStretchOrRetouch": true,
+    "finalPlaySignedCandidateComparisonPending": true
+  },
+  "sourceSnapshotScope": "UI source and localized resource snapshot after build; artifact identity is established by APK hashes, not a clean-commit reproduction claim."
+}
