@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common -->
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_close">Fechar</string>
+    <string name="common_save">Guardar</string>
+    <string name="common_delete">Eliminar</string>
+    <string name="common_privacy_policy">Política de privacidade</string>
+    <string name="common_terms_of_use">Termos de utilização</string>
+    <string name="common_contact_support">Contactar o apoio</string>
+    <string name="common_operation_failed">Não foi possível concluir a operação.</string>
+
+    <!-- Errors -->
+    <string name="error_dialog_title">Uma pequena interrupção</string>
+    <string name="error_go_to_settings">Ir para as Definições</string>
+    <string name="error_local_history_unavailable">Não foi possível abrir o histórico local. Não será substituído. Mantenha os dados da aplicação e verifique o ficheiro antes de continuar.</string>
+    <string name="error_save_progress_failed">Não foi possível guardar o progresso. Exporte uma cópia de segurança antes de fechar a aplicação.</string>
+    <string name="error_resolve_local_history_first">Resolva primeiro o erro do histórico local.</string>
+    <string name="error_accept_ai_consent">Aceite a utilização da OpenAI nas Definições antes de começar.</string>
+    <string name="error_missing_key">Adicione a sua chave OpenAI nas Definições para começar.</string>
+    <string name="error_key_invalid">Introduza uma chave API da OpenAI válida.</string>
+    <string name="error_key_save">Não foi possível guardar a chave em segurança neste dispositivo.</string>
+    <string name="error_key_save_failed">Não foi possível guardar a chave.</string>
+    <string name="error_key_remove">Não foi possível remover a chave. Desbloqueie este dispositivo e tente novamente.</string>
+    <string name="error_key_delete_failed">Não foi possível remover a chave.</string>
+    <string name="error_help_failed">Não foi possível preparar a sugestão.</string>
+    <string name="error_voice_connect_failed">O Mural não conseguiu ligar a conversa por voz.</string>
+    <string name="error_send_message_failed">Não foi possível enviar a mensagem.</string>
+    <string name="error_lookup_word_failed">Não foi possível consultar a palavra.</string>
+    <string name="error_find_topic_failed">Não foi possível encontrar o tema.</string>
+    <string name="error_topic_unsourced">A pesquisa não devolveu fontes verificáveis. Tente um tema mais específico.</string>
+    <string name="error_import_failed">A importação falhou. Verifique se o ficheiro é uma cópia de segurança do Mural, corresponde aos idiomas suportados e tem menos de 30 MB.</string>
+    <string name="error_incomplete_response">A OpenAI devolveu uma resposta incompleta. Tente novamente.</string>
+    <string name="error_request_refused">O Mural não conseguiu concluir esse pedido. Tente um tema diferente.</string>
+    <string name="error_http_401">A sua chave OpenAI não foi aceite. Verifique-a nas Definições.</string>
+    <string name="error_http_403_404">Esta chave API pode não ter acesso ao modelo pedido. Verifique o seu projeto OpenAI.</string>
+    <string name="error_http_429">O limite de utilização ou de taxa da OpenAI foi atingido. Verifique a faturação e os limites do seu projeto.</string>
+    <string name="error_http_generic">A OpenAI não conseguiu concluir o pedido (HTTP %1$d). Tente novamente.</string>
+    <string name="error_backup_too_large">A cópia de segurança excede o limite de 30 MB.</string>
+    <string name="error_file_open_failed">Não foi possível abrir o ficheiro selecionado.</string>
+    <string name="error_transport_microphone">Autorize o acesso ao microfone nas Definições do Android para iniciar uma conversa.</string>
+    <string name="error_transport_connection">Não foi possível estabelecer a ligação de voz. Verifique a sua ligação e tente novamente.</string>
+    <string name="error_transport_timeout">A ligação de voz demorou demasiado tempo. Tente novamente.</string>
+    <string name="error_transport_audio_focus">O Mural não conseguiu utilizar o áudio porque outra aplicação tem o controlo do mesmo. Tente novamente.</string>
+    <string name="error_transport_network_lost">A ligação de rede foi perdida. Toque para iniciar uma nova conversa.</string>
+    <string name="error_transport_channel_closed">A ligação de voz terminou inesperadamente. A sua conversa foi guardada.</string>
+    <string name="error_transport_invalid_event">A ligação de voz recebeu um evento inválido. A sua conversa foi guardada.</string>
+    <string name="error_transport_audio_interrupted">O áudio foi interrompido. A sua conversa foi guardada.</string>
+    <string name="error_transport_audio_stopped">O áudio de voz parou inesperadamente. A sua conversa foi guardada.</string>
+
+    <!-- Notices -->
+    <string name="notice_invalid_voice_update">Foi recebida uma atualização de voz inválida.</string>
+    <string name="notice_key_saved">Guardada em segurança. Inicie uma conversa para ligar.</string>
+    <string name="notice_help_simpler">O Mural vai simplificar isso um pouco.</string>
+    <string name="notice_update_send_failed">Não foi possível enviar uma atualização da conversa. Pode continuar a falar.</string>
+    <string name="notice_voice_update_rejected">Uma atualização de voz foi rejeitada. Se o Mural deixar de responder, termine esta conversa e comece de novo.</string>
+    <string name="notice_time_limit_reached">Atingiu o limite de tempo da conversa.</string>
+    <string name="notice_ended_inactivity">O Mural terminou esta sessão silenciosa para evitar um consumo desnecessário.</string>
+    <string name="notice_topic_ready">Tema pronto. Toque em Falar ou comece a escrever para começar.</string>
+    <string name="notice_backup_imported">A sua cópia de segurança foi importada.</string>
+    <string name="notice_microphone_blocked">O acesso ao microfone está bloqueado para o Mural. Pode ativá-lo nas definições do telefone ou continuar a escrever.</string>
+    <string name="notice_microphone_permission_needed">O Mural precisa de autorização para ouvir a sua voz. Também pode escrever em vez disso.</string>
+
+    <!-- Talk screen -->
+    <string name="talk_tab_title">Falar</string>
+    <string name="talk_meaning_loading">A encontrar o significado…</string>
+    <string name="talk_meaning_failed">Não conseguimos obter o significado.</string>
+    <string name="talk_retry_meaning_button">Tentar significado novamente</string>
+    <string name="talk_checking">A verificar isso por si…</string>
+    <string name="talk_meaning_label">Significado</string>
+    <string name="talk_status_written">Conversa escrita</string>
+    <string name="talk_mic_start_desc">Iniciar conversa</string>
+    <string name="talk_mic_unmute_desc">Reativar som do microfone</string>
+    <string name="talk_mic_mute_desc">Silenciar microfone</string>
+    <string name="talk_end_label">Terminar</string>
+    <string name="talk_transcript_label">Transcrição</string>
+    <string name="talk_type_button">Escrever em vez disso</string>
+    <string name="talk_help_button">Uma pequena ajuda</string>
+    <string name="talk_lookup_button">Consultar uma palavra</string>
+    <string name="talk_open_phone_settings">Abrir definições do telefone</string>
+    <string name="talk_new_conversation_button">Nova conversa</string>
+    <string name="talk_typed_reply_title">Diga-o à sua maneira.</string>
+    <string name="talk_typed_reply_subtitle">Pode escrever em %1$s ou noutro idioma.</string>
+    <string name="talk_typed_reply_field_label">A sua resposta</string>
+    <string name="talk_typed_reply_send_button">Enviar resposta</string>
+    <string name="talk_lookup_dialog_title">Um pequeno significado</string>
+    <string name="talk_lookup_field_label">Palavra ou expressão</string>
+    <string name="talk_lookup_button_action">Consultar</string>
+    <string name="talk_status_connecting">A pôr-se à vontade…</string>
+    <string name="talk_status_muted">Microfone silenciado</string>
+    <string name="talk_status_listening">Estou a ouvir</string>
+    <string name="talk_status_closing">A guardar a nossa conversa…</string>
+    <string name="talk_status_ended">Até à próxima</string>
+    <string name="talk_status_failed">Vamos tentar outra vez</string>
+    <string name="talk_status_idle">Pronto quando estiver</string>
+    <string name="talk_orb_listening_desc">O Mural está a ouvir</string>
+    <string name="talk_orb_idle_desc">Esfera do Mural</string>
+
+    <!-- Topics screen -->
+    <string name="topics_tab_title">Temas</string>
+    <string name="topics_eyebrow">Um lugar para começar</string>
+    <string name="topics_title">Em que está\na pensar?</string>
+    <string name="topics_subtitle">O mesmo amigo. Um novo lugar.</string>
+    <string name="topics_just_talk">Simplesmente falar</string>
+    <string name="topics_search_placeholder">Encontrar uma conversa</string>
+    <string name="topics_category_all">Todos</string>
+    <string name="topics_category_everyday">Dia a dia</string>
+    <string name="topics_category_connection">Ligação</string>
+    <string name="topics_category_local_life">Vida local</string>
+    <string name="topics_category_interests">Interesses</string>
+    <string name="topics_no_results">Não encontrámos uma conversa assim.</string>
+    <string name="topics_current_dialog_eyebrow">O mundo hoje</string>
+    <string name="topics_current_dialog_title">Uma conversa nova.</string>
+    <string name="topics_current_dialog_subtitle">Sobre o que gostaria de falar?</string>
+    <string name="topics_find_button">Encontrar um tema</string>
+    <string name="topics_finding_button">A encontrar algo interessante…</string>
+    <string name="topics_sources_heading">Fontes</string>
+    <string name="topics_talk_about_button">Falar sobre isto</string>
+    <string name="topics_sources_note">As fontes ficam associadas ao tema.</string>
+    <string name="topics_current_theme_subtitle">Do mundo hoje</string>
+    <string name="topics_from_conversation">Da nossa conversa</string>
+
+    <!-- Words screen -->
+    <string name="words_tab_title">Palavras</string>
+    <string name="words_eyebrow">Pouco a pouco · %1$s</string>
+    <string name="words_title">As suas palavras.</string>
+    <string name="words_subtitle">Palavras familiares, prontas para outra conversa.</string>
+    <string name="words_search_placeholder">Encontrar uma palavra</string>
+    <string name="words_empty_title_blank">Vão crescer a partir daqui.</string>
+    <string name="words_empty_title_search">Ainda sem palavras correspondentes.</string>
+    <string name="words_empty_subtitle_blank">À medida que falamos, palavras e expressões úteis encontram aqui o seu lugar. A sua força cresce quando as recorda ao longo do tempo.</string>
+    <string name="words_empty_subtitle_search">Tente outra palavra ou significado.</string>
+    <string name="words_recall_note">As barras estimam a recordação falada, não o domínio permanente.</string>
+    <string name="words_capabilities_title">A encontrar a sua voz</string>
+    <string name="words_capabilities_note">Observado ao longo das conversas. São provisórios, não certificados formais de nível.</string>
+    <string name="words_last_seen">Visto pela última vez %1$s</string>
+    <string name="words_remove_button">Remover das minhas palavras</string>
+    <string name="words_done_button">Concluído</string>
+    <string name="words_recall_new">Nova</string>
+    <string name="words_recall_fragile">Frágil</string>
+    <string name="words_recall_growing">Em crescimento</string>
+    <string name="words_recall_steady">Estável</string>
+    <string name="words_explanation_supported">Ouvida ou usada com apoio. Tente usá-la por suas próprias palavras.</string>
+    <string name="words_explanation_recalled_once">Usada de forma independente. Vamos trazê-la de volta em breve.</string>
+    <string name="words_explanation_recalled_days">Recordada em dias diferentes. Ainda vale a pena rever.</string>
+    <string name="words_explanation_steady">Recordada ao longo de dias e contextos. A força pode diminuir com o tempo.</string>
+    <string name="words_recall_bars_desc">%1$d de 3 barras de recordação</string>
+    <string name="words_example_quote">«%1$s»</string>
+    <plurals name="words_independent_uses">
+        <item quantity="one">%1$d utilização independente</item>
+        <item quantity="other">%1$d utilizações independentes</item>
+    </plurals>
+
+    <!-- Settings screen -->
+    <string name="settings_tab_title">Definições</string>
+    <string name="settings_eyebrow">O seu espaço</string>
+    <string name="settings_title">Definições</string>
+    <string name="settings_subtitle">Torne o Mural confortável para si.</string>
+    <string name="settings_section_conversation">Conversa</string>
+    <string name="settings_learning_language">Idioma de aprendizagem</string>
+    <string name="settings_conversation_limit">Limite de conversa</string>
+    <string name="settings_minutes_value">%1$d min</string>
+    <string name="settings_meaning_language">Idioma de significado</string>
+    <string name="settings_interests_label">Algumas coisas de que gosta</string>
+    <string name="settings_interests_support">Ajuda a sugerir conversas que lhe interessam.</string>
+    <string name="settings_section_openai_account">Conta OpenAI</string>
+    <string name="settings_key_saved_notice">A sua chave está guardada em segurança neste dispositivo.</string>
+    <string name="settings_key_missing_notice">Adicione uma chave para falar, consultar significados e verificar temas atuais.</string>
+    <string name="settings_save_key">Guardar chave</string>
+    <string name="settings_replace_key">Guardar chave de substituição</string>
+    <string name="settings_remove_key">Remover chave</string>
+    <string name="settings_section_usage">Utilização</string>
+    <string name="settings_voice_time_label">Tempo de voz registado</string>
+    <string name="settings_voice_estimate_label">Estimativa de voz</string>
+    <string name="settings_search_calls_label">Pesquisas registadas</string>
+    <string name="settings_usage_billing_link">Utilização e faturação da OpenAI</string>
+    <string name="settings_usage_footer">A estimativa de voz utiliza $0,05/min a partir de 11 de setembro de 2026. Tradução, ensino e pesquisa têm custo adicional. Pedidos interrompidos podem ser faturados sem um registo de utilização aqui. O seu painel da OpenAI é a referência oficial. O limite de tempo é local, não é um limite de faturação.</string>
+    <string name="settings_section_ai_permission">Permissão de IA</string>
+    <string name="settings_ai_consent_accepted">Aceite para esta versão</string>
+    <string name="settings_ai_consent_not_accepted">Não aceite</string>
+    <string name="settings_ai_permission_summary">Com autorização, o Mural envia áudio e o texto que escolher para a OpenAI. Pode usar o seu histórico e palavras sem a conceder.</string>
+    <string name="settings_revoke_consent_button">Retirar permissão</string>
+    <string name="settings_review_consent_button">Rever e aceitar</string>
+    <string name="settings_section_your_data">As suas palavras pertencem-lhe</string>
+    <string name="settings_export_backup">Exportar cópia de segurança de aprendizagem</string>
+    <string name="settings_import_backup">Importar cópia de segurança de aprendizagem</string>
+    <string name="settings_backup_footer">As cópias de segurança incluem transcrições e evidências de aprendizagem, nunca a sua chave API. A importação adiciona conversas com novos IDs. As conversas existentes permanecem inalteradas. Não existe sincronização na nuvem.</string>
+    <string name="settings_delete_all_data">Eliminar todas as conversas e aprendizagem</string>
+    <string name="settings_section_help_privacy">Ajuda e privacidade</string>
+    <string name="settings_openai_data_controls">Controlos de dados da OpenAI</string>
+    <string name="settings_open_source_notices">Avisos de código aberto</string>
+    <string name="settings_data_use_footer">O áudio e o texto selecionado são enviados para a OpenAI enquanto pratica. Os pedidos desativam o armazenamento do fornecedor quando suportado; pode continuar a aplicar-se retenção para monitorização de abusos. O Mural não guarda áudio em bruto.</string>
+    <string name="settings_app_version_footer">Mural %1$s · Android</string>
+    <string name="settings_corrections_label">Correções</string>
+    <string name="settings_corrections_value">Com delicadeza, à medida que falamos</string>
+    <string name="settings_open_api_keys">Abrir chaves API da OpenAI</string>
+    <string name="settings_models_footer">Voz: GPT-Live-1 · Professor: GPT-5.6 Luna</string>
+    <string name="settings_delete_key_confirm_title">Eliminar a chave guardada?</string>
+    <string name="settings_delete_key_confirm_message">Vai precisar de outra chave para voltar a usar as funcionalidades de IA.</string>
+    <string name="settings_delete_all_confirm_title">Eliminar todos os dados de aprendizagem neste dispositivo?</string>
+    <string name="settings_delete_all_confirm_message">Isto remove conversas, vocabulário e progresso. Exporte primeiro uma cópia de segurança se quiser mantê-los. A sua chave API e preferências permanecem.</string>
+    <string name="settings_delete_all_confirm_button">Eliminar todos os dados de aprendizagem</string>
+    <string name="settings_revoke_consent_confirm_title">Retirar a permissão de IA?</string>
+    <string name="settings_revoke_consent_confirm_message">As conversas, pesquisas e significados online serão desativados. O seu histórico local continua disponível.</string>
+    <string name="settings_key_dialog_title">Chave API da OpenAI</string>
+    <string name="settings_key_dialog_note">Armazenada de forma encriptada pelo Android e nunca incluída em cópias de segurança.</string>
+    <string name="settings_key_dialog_field_label">Nova chave</string>
+    <string name="settings_backup_exported_toast">Cópia de segurança exportada</string>
+    <string name="settings_backup_imported_toast">Cópia de segurança importada</string>
+
+    <!-- History -->
+    <string name="history_section_title">Conversas anteriores</string>
+    <string name="history_empty">As suas conversas vão aparecer aqui.</string>
+    <string name="history_delete_session_confirm_title">Eliminar esta conversa e as suas evidências de aprendizagem?</string>
+    <string name="history_speaker_you">TU</string>
+    <string name="history_speaker_mural">MURAL</string>
+    <string name="history_edit_passage_button">Editar</string>
+    <string name="history_saved_sources">Fontes guardadas</string>
+    <string name="history_correction_dialog_title">O que disse</string>
+    <plurals name="history_passages_count">
+        <item quantity="one">%1$d turno</item>
+        <item quantity="other">%1$d turnos</item>
+    </plurals>
+
+    <!-- Onboarding -->
+    <string name="onboarding_back">Voltar</string>
+    <string name="onboarding_language_title">Que idioma\ngostaria de falar?</string>
+    <string name="onboarding_meaning_title">Uma pequena ajuda,\nno seu idioma.</string>
+    <string name="onboarding_meaning_subtitle">O Mural fala %1$s. Escolha o idioma que lê com mais facilidade para os significados.</string>
+    <string name="onboarding_continue_button">Continuar</string>
+    <string name="onboarding_choose_continue_button">Escolher e continuar</string>
+    <string name="onboarding_pace_note_step0">Vamos encontrar o seu ritmo através da conversa.</string>
+    <string name="onboarding_pace_note_step1">Pode alterar ambos os idiomas nas Definições.</string>
+
+    <!-- AI consent -->
+    <string name="consent_title">Antes de falarmos.</string>
+    <string name="consent_ai_summary">Com a sua autorização, o Mural envia áudio e texto selecionado para a OpenAI para fornecer conversas e significados. Aplicam-se as regras de retenção do fornecedor.</string>
+    <string name="consent_local_storage_note">O seu registo de aprendizagem é guardado neste dispositivo. O Mural não guarda áudio em bruto. Pode continuar a consultar as suas palavras e conversas guardadas sem concordar.</string>
+    <string name="consent_privacy_policy_link">Política de privacidade</string>
+    <string name="consent_agree_button">Concordar e continuar</string>
+    <string name="consent_decline_button">Agora não</string>
+    <string name="error_guest_secure_storage_unavailable">O Mural não conseguiu restaurar os detalhes do seu teste guardado. O seu histórico de aprendizagem continua disponível. Reinicie a aplicação para tentar novamente.</string>
+    <string name="error_sign_in_finishing_startup">O Mural ainda está a guardar a sua conversa. Tente iniciar sessão novamente dentro de momentos.</string>
+</resources>

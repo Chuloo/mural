@@ -49,7 +49,7 @@ class CoreTest {
         assertEquals(2,merged.sessions.size)
     }
     @Test fun languageRegistryAndThemesStayStable() {
-        assertEquals(listOf("nb","es","en","fr","de","it","pt","zh"),LanguageRegistry.all.map { it.id })
+        assertEquals(listOf("nb","es","en","fr","de","it","pt","pt-pt","zh"),LanguageRegistry.all.map { it.id })
         assertEquals(24,Themes.shared.map { it.id }.toSet().size)
         assertEquals("Salut !",LanguageRegistry.get("fr")!!.greeting)
         assertEquals("Norwegian",LanguageRegistry.get("nb")!!.name)
