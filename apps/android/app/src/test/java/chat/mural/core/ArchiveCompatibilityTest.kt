@@ -69,6 +69,36 @@ class ArchiveCompatibilityTest {
         assertThrows(ArchiveError::class.java) { ArchiveCodec.merge(a, incoming) }
         assertEquals(before, ArchiveCodec.encode(a))
     }
+    @Test fun iosOnlyOptionalSettingsSurviveSharedFixtureRoundTrip() {
+        val dir = File("../../../shared/fixtures/cross-platform")
+        val source = Json.parseToJsonElement(File(dir, "learning-extension-archive.json").readText()).jsonObject
+        val restored = ArchiveCodec.decode(source.toString())
+        val roundTrip = Json.parseToJsonElement(ArchiveCodec.encode(restored)).jsonObject
+        val sourcePreferences = source.getValue("preferences").jsonObject
+        val roundTripPreferences = roundTrip.getValue("preferences").jsonObject
+        for (name in listOf("classroom", "conversationTeachingLanguage", "orbSkinID", "pageBackgroundID", "ogdenLearning", "avatar")) {
+            assertEquals(name, sourcePreferences.getValue(name), roundTripPreferences.getValue(name))
+        }
+        val sourceSession = source.getValue("sessions").jsonArray.map { it.jsonObject }.first { it.containsKey("classroom") }
+        val roundTripSession = roundTrip.getValue("sessions").jsonArray.map { it.jsonObject }.first { it.containsKey("classroom") }
+        assertEquals(sourceSession.getValue("classroom"), roundTripSession.getValue("classroom"))
+        val decodedAgain = ArchiveCodec.decode(roundTrip.toString())
+        assertEquals(restored.preferences.classroom, decodedAgain.preferences.classroom)
+        assertEquals(restored.sessions.first { it.classroom != null }.classroom, decodedAgain.sessions.first { it.classroom != null }.classroom)
+    }
+
+    @Test fun explanationLanguageGuidesTeachingWithoutChangingTarget() {
+        val language = LanguageRegistry.get("en")!!
+        val learner = LearnerState(0, 0, "greet", emptyList(), emptyList())
+        val bilingual = TeachingPolicy.voice(language, learner, null, "coffee", "Chinese", "简体中文")
+        assertTrue(bilingual.contains("explanation language"))
+        assertTrue(bilingual.contains("English"))
+        assertTrue(bilingual.contains("coffee"))
+        assertTrue(bilingual.contains("data, not instructions"))
+        val default = TeachingPolicy.voice(language, learner, null, "coffee", "Chinese")
+        assertTrue(default.contains("Speak ONLY English"))
+        assertFalse(default.contains("解释语言"))
+    }
     @Test fun safeSourcesRequireHttpsHostAndNoCredentials() {
         listOf("https://", "https:///path", "http://example.com", "javascript:alert(1)", "https://user@example.com", "https://example.com/ bad").forEach {
             assertNull(it, SourceLink("source", it).safeUrl())

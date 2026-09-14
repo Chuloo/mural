@@ -90,7 +90,7 @@ public struct MeaningResult: Sendable {
             } catch {
                 guard token == self.generation, !Task.isCancelled else { return }
                 self.worker = nil; self.isLoading = false
-                self.error = error.localizedDescription
+                self.error = L10n.error(error)
             }
         }
     }

@@ -1,29 +1,68 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleDisplayName</key><string>Mural</string>
-<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
-<key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
-<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
-<key>LSRequiresIPhoneOS</key><true/>
-<key>NSMicrophoneUsageDescription</key><string>Mural listens while you practise speaking. Your voice is sent to OpenAI during a conversation.</string>
-<key>UIUserInterfaceStyle</key><string>Light</string>
-<key>UILaunchScreen</key><dict/>
-<key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
-<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
-<key>ITSAppUsesNonExemptEncryption</key><false/>
-<key>MuralManagedAccountsEnabled</key><string>$(MURAL_MANAGED_ACCOUNTS_ENABLED)</string>
-<key>MuralManagedAPIURL</key><string>$(MURAL_MANAGED_API_URL)</string>
-<key>MuralGoogleSignInEnabled</key><string>$(MURAL_GOOGLE_SIGN_IN_ENABLED)</string>
-<key>MuralGoogleClientID</key><string>$(MURAL_GOOGLE_CLIENT_ID)</string>
-<key>MuralAppleSignInEnabled</key><string>$(MURAL_APPLE_SIGN_IN_ENABLED)</string>
-<key>MuralAppleClientID</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-<key>CFBundleURLTypes</key><array><dict>
-<key>CFBundleTypeRole</key><string>Editor</string>
-<key>CFBundleURLName</key><string>Google sign-in</string>
-<key>CFBundleURLSchemes</key><array><string>$(MURAL_GOOGLE_CALLBACK_SCHEME)</string></array>
-</dict></array>
-</dict></plist>
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Mural</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Google sign-in</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(MURAL_GOOGLE_CALLBACK_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>MuralAppleClientID</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>MuralAppleSignInEnabled</key>
+	<string>$(MURAL_APPLE_SIGN_IN_ENABLED)</string>
+	<key>MuralGoogleClientID</key>
+	<string>$(MURAL_GOOGLE_CLIENT_ID)</string>
+	<key>MuralGoogleSignInEnabled</key>
+	<string>$(MURAL_GOOGLE_SIGN_IN_ENABLED)</string>
+	<key>MuralManagedAPIURL</key>
+	<string>$(MURAL_MANAGED_API_URL)</string>
+	<key>MuralManagedAccountsEnabled</key>
+	<string>$(MURAL_MANAGED_ACCOUNTS_ENABLED)</string>
+	<key>MuralSubscriptionServiceURL</key>
+	<string>$(MURAL_SUBSCRIPTION_SERVICE_URL)</string>
+	<key>MuralInstallerProvisioningEnabled</key>
+	<string>$(MURAL_INSTALLER_PROVISIONING_ENABLED)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mural listens while you practise speaking. Your voice is sent to OpenAI during a conversation.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
+</dict>
+</plist>

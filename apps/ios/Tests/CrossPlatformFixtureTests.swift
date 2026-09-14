@@ -19,6 +19,21 @@ final class CrossPlatformFixtureTests: XCTestCase {
         XCTAssertEqual(try Archive.decode(reencoded).sessions.map { $0.passages.map(\.text) }, archive.sessions.map { $0.passages.map(\.text) })
     }
 
+    func testLearningExtensionFixtureValidatesAndKeepsOptionalState() throws {
+        let data = try Data(contentsOf: directory.appendingPathComponent("learning-extension-archive.json"))
+        let archive = try Archive.decode(data)
+        let encoded = try archive.encoded()
+        let restored = try Archive.decode(encoded)
+        XCTAssertEqual(try fieldPaths(data), try fieldPaths(encoded))
+        XCTAssertEqual(restored.preferences.classroom, archive.preferences.classroom)
+        XCTAssertEqual(restored.sessions.first?.classroom, archive.sessions.first?.classroom)
+        XCTAssertEqual(restored.preferences.ogdenLearning, archive.preferences.ogdenLearning)
+        XCTAssertEqual(restored.preferences.avatar, archive.preferences.avatar)
+        XCTAssertEqual(restored.preferences.orbSkinID, "conceptNebula")
+        XCTAssertEqual(restored.preferences.pageBackgroundID, "mint")
+        XCTAssertEqual(restored.preferences.conversationTeachingLanguage, "zh-Hans")
+    }
+
     func testTranscriptPassagesMatchTheSharedFixture() throws {
         let archive = try Archive.decode(source())
         let passages = try XCTUnwrap(expected()["passages"] as? [String: [[String: Any]]])

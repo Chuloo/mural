@@ -8,10 +8,10 @@ struct PinyinHelp: View {
 
     var body: some View {
         if let reading = MandarinPinyin.reading(text) {
-            VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Button { expanded.toggle() } label: {
-                    Label(expanded ? "Hide pinyin" : "Show pinyin", systemImage: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
+                    Label(LocalizedStringKey(expanded ? "Hide pinyin" : "Show pinyin"), systemImage: expanded ? "chevron.up" : "chevron.down")
+                        .font(.subheadline).frame(minHeight: 44)
                 }.buttonStyle(.plain).accessibilityIdentifier("pinyin-toggle")
                 if expanded {
                     Text(reading).font(.callout).textSelection(.enabled)
