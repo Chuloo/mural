@@ -39,10 +39,12 @@ public enum TeachingPolicy {
     }
     public static func shouldRedirectSpeech(language: LanguageModule, detectedLanguageID: String, confidence: Double) -> Bool {
         let detected = detectedLanguageID.replacingOccurrences(of: "_", with: "-").lowercased()
-        // NaturalLanguage reports Chinese script IDs (zh-Hans / zh-Hant).
-        // These describe the transcript's script, not a different spoken language.
+        // Compare primary language subtags only, ignoring region/script suffixes on either
+        // side. NaturalLanguage reports Chinese script IDs (zh-Hans / zh-Hant), which describe
+        // the transcript's script rather than a different spoken language; a module whose own
+        // ID carries a region, such as Portugal's pt-pt, must still match a bare "pt" detection.
         let target = language.id.lowercased()
-        let matchesTarget = detected == target || detected.hasPrefix(target + "-")
+        let matchesTarget = detected.split(separator: "-").first == target.split(separator: "-").first
         return confidence.isFinite && confidence > 0.88 && confidence <= 1 &&
             !detected.isEmpty && detected != "und" && !matchesTarget
     }

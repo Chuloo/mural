@@ -24,7 +24,7 @@ final class AdditionalLanguageTests: XCTestCase {
     }
 
     func testRegistrationPreservesOldIDsAndSetsRequestedVarieties() {
-        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh"])
+        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "pt-pt", "zh"])
         for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！")] {
             XCTAssertEqual(LanguageRegistry.module(for: id)?.locale, locale)
             XCTAssertEqual(LanguageRegistry.module(for: id)?.greeting, greeting)
@@ -57,7 +57,7 @@ final class AdditionalLanguageTests: XCTestCase {
         }
     }
 
-    func testAllEightLanguagesRoundTripWithIsolatedProgressAndHiddenWords() throws {
+    func testAllLanguagesRoundTripWithIsolatedProgressAndHiddenWords() throws {
         var archive = Archive()
         archive.sessions = LanguageRegistry.all.flatMap { [session($0.id), session($0.id, day: 2)] }
         archive.preferences.meaningLanguage = "Chinese (Simplified)"
@@ -79,7 +79,7 @@ final class AdditionalLanguageTests: XCTestCase {
                 let hidden = LearningEngine.project(restored.sessions, languageID: language.id, hiddenWords: restored.preferences.hiddenWords)
                 XCTAssertEqual(hidden.words.count, language.id == "pt" ? 0 : 1)
             }
-            XCTAssertEqual(keys.count, 8)
+            XCTAssertEqual(keys.count, LanguageRegistry.all.count)
         }
     }
 
