@@ -15,7 +15,7 @@ Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. L
 
 ## Android
 
-A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same eight language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and uses your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
+A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same nine language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and uses your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
 
 See the [Android installation/build guide](docs/run-on-android.md) and [Android verification record](verification/android-validation.md). Build a personal-install APK with Java 17 and Android SDK 36:
 

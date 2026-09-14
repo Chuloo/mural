@@ -141,6 +141,13 @@ final class MuralUITests: XCTestCase {
         choice.tap()
         XCTAssertTrue(choice.isSelected)
         XCTAssertEqual(choice.label, "Tagalog (Filipino) · Philippines")
+        let viewport = app.scrollViews.firstMatch.frame
+        let continueButton = app.buttons["onboarding-continue"]
+        XCTAssertGreaterThan(choice.frame.height, 0)
+        XCTAssertTrue(viewport.contains(choice.frame), "The entire Tagalog card must fit inside the visible scroll area")
+        XCTAssertTrue(app.frame.contains(continueButton.frame), "Continue must fit inside the screen")
+        XCTAssertLessThan(choice.frame.maxY, continueButton.frame.minY)
+        XCTAssertTrue(continueButton.isHittable)
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Tagalog onboarding - largest accessibility text"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["onboarding-continue"].tap()
@@ -207,6 +214,20 @@ final class MuralUITests: XCTestCase {
 
     func testTagalogSelectionPersistsAcrossNormalRelaunch() {
         let app = XCUIApplication()
+        addTeardownBlock {
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+            app.buttons["Settings"].tap()
+            app.buttons["learning-language-picker"].tap()
+            app.buttons["Norwegian · Bokmål"].tap()
+            app.buttons["Done"].tap()
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+            XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
+            app.terminate()
+        }
         app.launch()
         if app.buttons["onboarding-continue"].waitForExistence(timeout: 5) {
             let choice = app.buttons["onboarding-language-tl"]

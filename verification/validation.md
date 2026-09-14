@@ -212,3 +212,9 @@ Checks on the integrated tree:
 - **25 native iOS UI tests passed with zero failures** on the iPhone 17 / iOS 26.5 simulator, including the complete Tagalog and existing-language flows. The Debug build and tests used the relocated project. Result: `.build/Tagalog-Merge-UI.xcresult`.
 
 No physical-device or live-provider check was performed. The original pending Tagalog pronunciation, recognition, correction and proficient-speaker review remains pending on both platforms. Android verification here covers JVM behavior, lint and compilation; it is not an Android emulator or device conversation check.
+
+### CodeRabbit review follow-up
+
+The normal-relaunch UI test now restores Norwegian in an XCTest teardown block and verifies that restoration across a further normal launch. The maximum-accessibility test explicitly checks containment of the complete Tagalog card in the scroll viewport, containment of Continue in the screen and separation between them. The main README's remaining eight-language reference was corrected to nine.
+
+Both affected UI tests ran twice: **four executions passed with zero failures** in `.build/Tagalog-Review-Fixes.xcresult` on the same iPhone 17 / iOS 26.5 simulator. Visual inspection of a fresh accessibility attachment confirmed the Tagalog text and Continue button are untruncated; the preceding list row is intentionally partly outside the viewport. Production app behavior was unchanged, so the earlier core, API, Android and full UI suite results remain recorded above. The generic 80% docstring-coverage warning was not treated as a repository requirement or a reason to add boilerplate documentation to self-describing test functions.

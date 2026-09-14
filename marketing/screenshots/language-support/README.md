@@ -22,4 +22,6 @@ Three unedited captures from the Tagalog feature on 13 September 2026, using a d
 | `tagalog-onboarding.png` | Selected Tagalog (Filipino) option with Philippines variety |
 | `tagalog-accessibility.png` | The full selection label and Continue button at the largest accessibility text size |
 
+The accessibility capture is scrolled to Tagalog; preceding rows may be partially outside the viewport. The Tagalog regression explicitly checks that the entire selected card fits within the visible scroll area, that Continue fits within the screen, and that the card does not overlap the button. A fresh capture from the 14 September review-fix run was also visually checked for readable, untruncated Tagalog text.
+
 The onboarding captures are attachments from the passing 25-test suite in `.build/Tagalog-UI.xcresult`. The Talk capture uses `--preview --ended-conversation --preview-language=tl -UIPreferredContentSizeCategoryName UICTContentSizeCategoryL`, captured after two seconds with `simctl io screenshot`. These are synthetic interface fixtures, with no live provider call or generated speech. Physical-device and proficient-speaker review remain pending.
