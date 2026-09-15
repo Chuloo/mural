@@ -286,4 +286,18 @@ class HostedAPIClientTest {
         assertEquals(1 + cases.size, server.requestCount)
     }
 
+    @Test fun failedStartCarriesOnlySafeErrorReferenceAndNeverRetries() = runBlocking {
+        for ((index, reference) in listOf("0123abcdef45", "person@example.com", "0123ABCDEF45").withIndex()) {
+            server.enqueue(MockResponse().setResponseCode(401).setHeader("X-Mural-Error-Reference", reference)
+                .setBody("""{"error":{"code":"sign_in_required"}}"""))
+            try { api.createLiveSession(create); fail("expected rejected start") }
+            catch (error: HostedFailure.Http) {
+                assertEquals(401, error.status)
+                assertEquals("sign_in_required", error.code)
+                assertEquals(if (index == 0) reference else null, error.reference)
+            }
+            assertEquals(index + 1, server.requestCount)
+        }
+    }
+
 }

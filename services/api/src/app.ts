@@ -19,8 +19,10 @@ import type { AIValuePurchases, PurchaseFulfillmentRouter } from './ai-value-pur
 import type { StripeMinuteProvider } from './stripe-minute-provider.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
 import { HOSTED_HELPER_BODY_LIMIT, type HostedHelpers } from './hosted-helpers.js';
+import { startupDiagnostic, type StartupDiagnostic } from './startup-diagnostics.js';
 
 export interface Services { db: Database; auth: AuthConfig; payments?: SandboxPayments; attestor?: TrialAttestor; minuteAttestor?: MinuteAttestor; guestMinuteAttestor?: GuestMinuteAttestor; appleRevoker?: AppleRevoker; hosted?: HostedVoice; accessRequests?: AccessRequests; aiReports?: AIReports;
+  onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
   minuteCommerce?: { purchases: MinutePurchases; aiPurchases?: AIValuePurchases; fulfillment?: PurchaseFulfillmentRouter;
     stripe?: StripeMinuteProvider; play?: PlayMinuteProvider };
@@ -105,13 +107,17 @@ export function createApp(services: Services) {
     }
     if (++slot.count > 120) throw new ServiceError('rate_limit', 429);
   });
-  app.setErrorHandler((error, _request, reply) => {
-    if (error && typeof error === 'object' && 'code' in error && 'message' in error && error.code === 'P0001' &&
-        error.message === 'minute_purchase_reconciliation_required')
-      return reply.code(409).send({ error: { code: 'minute_purchase_reconciliation_required' } });
+  app.setErrorHandler((error, request, reply) => {
+    const purchaseReconciliation = error && typeof error === 'object' && 'code' in error && 'message' in error && error.code === 'P0001' &&
+        error.message === 'minute_purchase_reconciliation_required';
     const candidate = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : null;
-    const status = error instanceof ServiceError ? error.status : typeof candidate === 'number' && candidate >= 400 && candidate < 500 ? candidate : 500;
-    const code = error instanceof ServiceError ? error.code : status < 500 ? 'invalid_request' : 'service_unavailable';
+    const status = purchaseReconciliation ? 409 : error instanceof ServiceError ? error.status : typeof candidate === 'number' && candidate >= 400 && candidate < 500 ? candidate : 500;
+    const code = purchaseReconciliation ? 'minute_purchase_reconciliation_required' : error instanceof ServiceError ? error.code : status < 500 ? 'invalid_request' : 'service_unavailable';
+    const diagnostic = startupDiagnostic(request.method, request.routeOptions.url, request.id, status, code, error);
+    if (diagnostic) {
+      reply.header('X-Mural-Error-Reference', diagnostic.reference);
+      try { void Promise.resolve(services.onStartupDiagnostic?.(diagnostic)).catch(() => {}); } catch { /* Diagnostics cannot change a request's outcome. */ }
+    }
     if (error instanceof HelperSessionLimitError) {
       if (error.retryable) reply.header('Retry-After', String(Math.ceil(error.retryAfterMilliseconds! / 1000)));
       return reply.code(status).send({ error: { code, retryable: error.retryable,

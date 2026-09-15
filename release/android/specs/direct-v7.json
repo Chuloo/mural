@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "hosted-guest-preview",
+  "scope": "hosted-minute-release",
   "packageName": "chat.mural.android",
   "versionCode": 7,
   "versionName": "0.1",

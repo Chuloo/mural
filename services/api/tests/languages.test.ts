@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { readFile, readdir } from 'node:fs/promises';
 import { OpenAILiveProvider, supportsLanguage } from '../src/live-provider.js';
 
 test('all native locales reach the provider with the intended regional speech target', async () => {
@@ -17,7 +18,7 @@ test('all native locales reach the provider with the intended regional speech ta
     const address = server.address() as { port: number };
     const provider = new OpenAILiveProvider('test-no-real-provider-key', { testOrigin: `http://127.0.0.1:${address.port}` });
     for (const [locale, target] of [
-      ['nb-NO', 'Norwegian Bokmål'], ['es-ES', 'Spanish from Spain'], ['en-US', 'English'], ['fr-FR', 'French from France'],
+      ['nb-NO', 'Norwegian Bokmål'], ['es-ES', 'Spanish from Spain'], ['en', 'English'], ['en-US', 'English'], ['fr-FR', 'French from France'],
       ['de-DE', 'Standard German as spoken in Germany'], ['it-IT', 'Italian as spoken in Italy'],
       ['pt-BR', 'Brazilian Portuguese'], ['zh-CN', 'Standard Mandarin with Simplified Chinese writing'],
       ['tl-PH', 'Tagalog as spoken in the Philippines']
@@ -31,8 +32,22 @@ test('all native locales reach the provider with the intended regional speech ta
       assert.equal(supportsLanguage(unsupported), false);
       await assert.rejects(provider.create('v=0', unsupported), { code: 'invalid_language' });
     }
-    assert.equal(requests.length, 9);
+    assert.equal(requests.length, 10);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
+});
+
+// Read the shipped registries so a duplicated server-side locale list cannot hide drift.
+test('hosted admission accepts every locale shipped by Android and iOS', async () => {
+  const android = await readFile(new URL('../../../apps/android/app/src/main/java/chat/mural/core/Languages.kt', import.meta.url), 'utf8');
+  const androidLocales = [...android.matchAll(/locale = "([^"\n]+)"/g)].map(match => match[1]!).sort();
+  const directory = new URL('../../../apps/ios/Core/Languages/', import.meta.url);
+  const swift = await Promise.all((await readdir(directory)).filter(name => name.endsWith('.swift'))
+    .map(name => readFile(new URL(name, directory), 'utf8')));
+  const iosLocales = swift.flatMap(source => [...source.matchAll(/locale: "([^"\n]+)"/g)].map(match => match[1]!)).sort();
+  assert.ok(androidLocales.length >= 8);
+  assert.deepEqual(androidLocales, iosLocales);
+  for (const locale of androidLocales) assert.equal(supportsLanguage(locale), true, `Native locale rejected: ${locale}`);
+  assert.equal(supportsLanguage('en-US'), true, 'Preserve existing client compatibility');
 });

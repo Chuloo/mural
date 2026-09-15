@@ -238,3 +238,12 @@ Added five Android Tagalog regression tests covering exact caption text and look
 - **320 Android JVM tests passed, zero failures, errors or skips**, including all five added cases; Debug lint passed.
 - **53 repository-tool tests passed**; generated-content and cross-platform checks passed.
 - No production application or API code changed in this follow-up. Swift/UI/API suites were not rerun. These fixture tests validate storage and text handling, not generated linguistic judgments. Real-device/provider and proficient-speaker review remain pending.
+
+### Integration of the International English startup fix
+
+Merged upstream `3a12147` (PR #28). Resolved the append conflict in `services/api/tests/hosted.test.ts` by retaining both complete English and Tagalog integration cases. The provider test now expects ten requests: nine native locales plus the existing `en-US` compatibility alias. The upstream registry-to-API admission check is retained unchanged and includes Tagalog automatically.
+
+- **357 API tests passed with zero failures or skips**, including both funded language flows and actual native-registry admission. TypeScript check/build passed; the isolated PostgreSQL test database was stopped afterward.
+- **324 Android JVM tests passed with zero failures, errors or skips**; Debug assembly and lint passed.
+- **53 repository-tool tests passed**; generated-content and cross-platform checks passed.
+- No iOS source changed. Swift/UI and physical-device/provider checks were not rerun; the previously documented linguistic review remains pending.

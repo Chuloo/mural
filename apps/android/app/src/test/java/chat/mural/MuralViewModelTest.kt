@@ -1,5 +1,7 @@
 package chat.mural
 
+import chat.mural.core.AccountFailure
+import chat.mural.network.HostedFailure
 import chat.mural.core.Archive
 import chat.mural.core.ArchiveCodec
 import chat.mural.core.Fragment
@@ -77,4 +79,25 @@ class MuralViewModelTest {
         assertFalse(errorNeedsKeySetup(APIClient.APIException.Refused))
         assertFalse(errorNeedsKeySetup(CredentialStore.CredentialException.Invalid))
     }
+    @Test fun hostedSignInFailuresRecoverThroughAccountAndNeverPersonalKeySetup() {
+        for (error in listOf(HostedFailure.SignInRequired, HostedFailure.Http(401, "sign_in_required"),
+            HostedFailure.Http(403, "sign_in_to_continue"), AccountFailure.Http(401, "sign_in_required"))) {
+            assertEquals(R.string.hosted_sign_in_again, errorMessageRes(error))
+            assertTrue(needsAccountRecovery(error))
+            assertFalse(errorNeedsKeySetup(error))
+        }
+        assertFalse(needsAccountRecovery(HostedFailure.Http(503, "internal")))
+        assertEquals(R.string.hosted_rate_limit, errorMessageRes(HostedFailure.Http(429, "rate_limit")))
+        assertEquals(R.string.hosted_start_rejected, errorMessageRes(HostedFailure.Http(502, "provider_create_rejected")))
+    }
+
+    @Test fun onlySafeOpaqueReferencesReachTheErrorMessage() {
+        assertEquals("0123abcdef45", requestErrorReference(HostedFailure.Http(500, "internal", reference = "0123abcdef45")))
+        assertEquals("0123abcdef45", requestErrorReference(AccountFailure.Http(500, "internal", "0123abcdef45")))
+        for (value in listOf("person@example.com", "0123ABCDEF45", "0123abcdef45\n", "", "123")) {
+            assertEquals(null, requestErrorReference(HostedFailure.Http(500, "internal", reference = value)))
+            assertEquals(null, requestErrorReference(AccountFailure.Http(500, "internal", value)))
+        }
+    }
+
 }

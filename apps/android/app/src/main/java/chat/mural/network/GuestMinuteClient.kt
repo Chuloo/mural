@@ -90,7 +90,7 @@ class GuestMinuteClient internal constructor(private val origin: HttpUrl, transp
                             if (!it.isSuccessful) {
                                 val code = ((parsed?.get("error") as? JsonObject)?.get("code") as? JsonPrimitive)?.contentOrNull
                                     ?.takeIf { value -> value.length <= 80 && Regex("[a-z_]+").matches(value) }
-                                throw AccountFailure.Http(it.code, code)
+                                throw AccountFailure.Http(it.code, code, safeRequestErrorReference(it.header("X-Mural-Error-Reference")))
                             }
                             parsed ?: throw AccountFailure.InvalidResponse
                         }

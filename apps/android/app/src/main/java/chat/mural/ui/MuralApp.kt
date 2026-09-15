@@ -240,6 +240,10 @@ fun MuralApp(
                     confirmButton = { MuralTextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } },
                     dismissButton = if (vm.errorNeedsKeySetup) ({
                         MuralTextButton(onClick = { vm.dismissError(); showSettings = true }) { Text(stringResource(R.string.error_go_to_settings)) }
+                    }) else if (vm.errorNeedsAccountSignIn && account?.configuration != null) ({
+                        MuralTextButton(onClick = { vm.dismissError(); account.refresh(); showAccount = true }) {
+                            Text(stringResource(R.string.account_title))
+                        }
                     }) else null,
                 )
             }

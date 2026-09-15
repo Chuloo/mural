@@ -34,7 +34,7 @@ python3 scripts/check_android_release.py \
 
 For a local unsigned inspection candidate, add `--require-unsigned`. If only Gradle’s cached bundletool library is available, use `--bundletool-classpath-file /absolute/path/classpath.json` instead of `--bundletool-jar`. This file must contain a JSON array of trusted local JAR paths for bundletool and its dependencies. The evidence records each dependency hash; no download or Gradle change is required.
 
-The default specification is the current v6 candidate. To recheck the archived v4 Play bundle, select its historical spec explicitly:
+The default specification is the current v7 candidate. To recheck the archived v4 Play bundle, select its historical spec explicitly:
 
 ```sh
 python3 scripts/check_android_release.py \
@@ -45,7 +45,7 @@ python3 scripts/check_android_release.py \
   --output /absolute/path/candidate-evidence/v4-recheck.json
 ```
 
-For a configured v6 direct-distribution bundle, use `--spec release/android/specs/direct-v6.json`. The historical v5 direct spec remains at `release/android/specs/direct-v5.json`. `--spec` paths are relative to the working directory. `--release-dir` still sets the root for metadata and assets; selecting a spec does not move that root. With no `--spec`, the checker reads `release-spec.json` in that root. A missing or invalid explicit spec fails, and a bundle whose version differs from the selected spec fails. Keep the default version aligned with the current build rather than changing it to make an older bundle pass.
+For a configured v7 direct-distribution bundle, use `--spec release/android/specs/direct-v7.json`. Historical direct specs remain at `release/android/specs/direct-v6.json` and `release/android/specs/direct-v5.json`. `--spec` paths are relative to the working directory. `--release-dir` still sets the root for metadata and assets; selecting a spec does not move that root. With no `--spec`, the checker reads `release-spec.json` in that root. A missing or invalid explicit spec fails, and a bundle whose version differs from the selected spec fails. Keep the default version aligned with the current build rather than changing it to make an older bundle pass.
 
 The report records the selected spec filename, hash and candidate identity. Historical rechecks use the currently available shared listing/assets and branding source; compare their hashes with the original [v4 evidence](evidence/signed-release-files-2026-09-14-v4.json) and preserve that original report. A spec's scope labels the intended release; it does not verify purchase flags, payment behavior or Play approval. [Candidate scopes](candidate-scopes.md) identifies which copy and evidence belong to each version.
 

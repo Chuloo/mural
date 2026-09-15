@@ -19,6 +19,13 @@ import kotlinx.serialization.json.*
 /** Maps a network/credential failure reason to its user-facing string resource, or 0 if unmapped. */
 @StringRes
 internal fun errorMessageRes(e: Throwable): Int = when (e) {
+    is HostedFailure -> hostedErrorMessageRes(e)
+    is AccountFailure.Http -> when (e.status) {
+        401 -> R.string.hosted_sign_in_again
+        429 -> R.string.hosted_rate_limit
+        else -> R.string.hosted_request_failed
+    }
+    AccountFailure.Unavailable -> R.string.account_error_connection
     is APIClient.APIException.MissingKey -> R.string.error_missing_key
     is APIClient.APIException.Refused -> R.string.error_request_refused
     is APIClient.APIException.InvalidResponse, is APIClient.APIException.Incomplete -> R.string.error_incomplete_response
@@ -33,6 +40,36 @@ internal fun errorMessageRes(e: Throwable): Int = when (e) {
     is CredentialStore.CredentialException.Remove -> R.string.error_key_remove
     else -> 0
 }
+
+@StringRes
+internal fun hostedErrorMessageRes(failure: HostedFailure): Int = when (failure) {
+    HostedFailure.SignInRequired -> R.string.hosted_sign_in_again
+    HostedFailure.Unconfirmed -> R.string.hosted_unconfirmed
+    HostedFailure.Unavailable -> R.string.hosted_unavailable
+    is HostedFailure.Http -> when {
+        needsAccountRecovery(failure) -> R.string.hosted_sign_in_again
+        failure.code in setOf("insufficient_minutes", "insufficient_credit") -> R.string.hosted_no_minutes
+        failure.code in setOf("helper_budget_exhausted", "helper_session_limit") -> R.string.hosted_extra_help_limit
+        failure.code == "helper_session_window_closed" -> R.string.hosted_window_closed
+        failure.code in setOf("helper_request_already_attempted", "helper_response_uncertain", "live_request_already_created", "provider_session_unconfirmed") -> R.string.hosted_unconfirmed
+        failure.code == "live_session_unresolved" -> R.string.hosted_checking_previous
+        failure.code == "provider_create_rejected" -> R.string.hosted_start_rejected
+        failure.status == 429 -> R.string.hosted_rate_limit
+        failure.code in setOf("hosted_voice_not_ready", "hosted_helpers_not_ready") -> R.string.hosted_unavailable
+        else -> R.string.hosted_request_failed
+    }
+    else -> R.string.hosted_request_failed
+}
+
+internal fun needsAccountRecovery(error: Throwable): Boolean = error == HostedFailure.SignInRequired ||
+    (error is HostedFailure.Http && (error.status == 401 || error.code == "sign_in_to_continue")) ||
+    (error is AccountFailure.Http && error.status == 401)
+
+internal fun requestErrorReference(error: Throwable): String? = safeRequestErrorReference(when (error) {
+    is HostedFailure.Http -> error.reference
+    is AccountFailure.Http -> error.reference
+    else -> null
+})
 
 /** Whether the failure means the learner needs to add or fix their OpenAI key in Settings. */
 internal fun errorNeedsKeySetup(e: Throwable): Boolean =
@@ -56,6 +93,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var state by mutableStateOf("idle"); private set
     var error by mutableStateOf<String?>(null); private set
     var errorNeedsKeySetup by mutableStateOf(false); private set
+    var errorNeedsAccountSignIn by mutableStateOf(false); private set
     var notice by mutableStateOf<String?>(null); private set
     var meaning by mutableStateOf(""); private set
     var translating by mutableStateOf(false); private set
@@ -288,19 +326,20 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private fun resolveMessage(e: Throwable, @StringRes fallback: Int): String {
         val app = getApplication<Application>()
         val res = errorMessageRes(e)
-        return when {
+        val message = when {
             res == R.string.error_http_generic && e is APIClient.APIException.Http -> app.getString(res, e.status)
-            e is HostedFailure -> hostedMessage(e)
             res != 0 -> app.getString(res)
             e is LiveTransport.TransportException -> e.message ?: app.getString(fallback)
             else -> app.getString(fallback)
         }
+        return requestErrorReference(e)?.let { message + "\n\n" + app.getString(R.string.hosted_error_reference, it) } ?: message
     }
     private fun presentError(message: String, needsKeySetup: Boolean = false) {
-        error = message; errorNeedsKeySetup = needsKeySetup
+        error = message; errorNeedsKeySetup = needsKeySetup; errorNeedsAccountSignIn = false
     }
     private fun presentError(e: Throwable, @StringRes fallback: Int) {
         presentError(resolveMessage(e, fallback), errorNeedsKeySetup(e))
+        errorNeedsAccountSignIn = needsAccountRecovery(e)
     }
     private fun cloudReady(): Boolean {
         if (!storageReady) { presentError(getApplication<Application>().getString(R.string.error_resolve_local_history_first)); return false }
@@ -441,22 +480,6 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         if (snapshot.id in hostedSessionIDs) ConversationHistory.helperContext(snapshot, passage)
         else TeachingPolicy.context(snapshot, passage)
 
-    private fun hostedMessage(failure: HostedFailure): String = when (failure) {
-        HostedFailure.SignInRequired -> getApplication<Application>().getString(R.string.hosted_sign_in)
-        HostedFailure.Unconfirmed -> getApplication<Application>().getString(R.string.hosted_unconfirmed)
-        HostedFailure.Unavailable -> getApplication<Application>().getString(R.string.hosted_unavailable)
-        is HostedFailure.Http -> when (failure.code) {
-            "insufficient_minutes", "insufficient_credit" -> getApplication<Application>().getString(R.string.hosted_no_minutes)
-            "helper_budget_exhausted", "helper_session_limit" -> getApplication<Application>().getString(R.string.hosted_extra_help_limit)
-            "helper_session_window_closed" -> getApplication<Application>().getString(R.string.hosted_window_closed)
-            "helper_request_already_attempted", "helper_response_uncertain", "live_request_already_created", "provider_session_unconfirmed" ->
-                getApplication<Application>().getString(R.string.hosted_unconfirmed)
-            "live_session_unresolved" -> getApplication<Application>().getString(R.string.hosted_checking_previous)
-            else -> getApplication<Application>().getString(R.string.hosted_request_failed)
-        }
-        else -> getApplication<Application>().getString(R.string.hosted_request_failed)
-    }
-
     /** Renewing a member token must not turn a retained guest transfer back into an OAuth gate. */
     suspend fun settleRenewedMember(): Boolean {
         val pending = pendingHostedOwnerID ?: return true
@@ -548,7 +571,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         catch (_: Exception) { false }
     }
 
-    fun dismissError() { error = null; errorNeedsKeySetup = false }
+    fun dismissError() { error = null; errorNeedsKeySetup = false; errorNeedsAccountSignIn = false }
     fun clearLookup() {
         lookupGeneration++
         lookupJob?.cancel()
@@ -623,7 +646,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun newSession(voice: Boolean, id: String = UUID.randomUUID().toString()) {
         generation++; resetJob?.cancel(); assessmentJob?.cancel(); actionJob?.cancel(); clearLookup(); working = false; meanings.reset()
-        error = null; errorNeedsKeySetup = false; notice = null; isMuted = false
+        dismissError(); notice = null; isMuted = false
         voiceSession = voice; lastActivity = nowSeconds()
         val record = SessionRecord(id = id, languageID = language.id, themeID = selectedTheme?.id, title = selectedTheme?.title ?: language.defaultTitle)
         topicResult?.takeIf { it.languageID == language.id && selectedTheme?.id == "current" }?.let { record.topics += it }
@@ -717,7 +740,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         resetJob = viewModelScope.launch { delay(15000); if (state == "ended") resetConversation() }
     }
     private fun fail(message: String, needsKeySetup: Boolean = false) { finish(false); resetJob?.cancel(); state = "failed"; presentError(message, needsKeySetup) }
-    private fun fail(e: Throwable, @StringRes fallback: Int) { fail(resolveMessage(e, fallback), errorNeedsKeySetup(e)) }
+    private fun fail(e: Throwable, @StringRes fallback: Int) {
+        fail(resolveMessage(e, fallback), errorNeedsKeySetup(e))
+        errorNeedsAccountSignIn = needsAccountRecovery(e)
+    }
     fun resetConversation() {
         if (isRunning) return
         generation++; resetJob?.cancel(); actionJob?.cancel(); clearLookup(); assessmentJob?.cancel(); languageCheckJob?.cancel(); meanings.reset()

@@ -631,3 +631,19 @@ integration('Tagalog locale creates and settles voice while aliases cannot reser
     } finally { await f.cleanup(); }
   }
 });
+
+integration('signed-in International English uses free minutes and settles the conversation', async () => {
+  const f = await fixture(2_000_000_000n, 600_000, 50_000_000n, true);
+  try {
+    f.closeReplies = true; f.seconds = 24;
+    const cashBefore = await f.wallet();
+    const live = await f.controller.create(f.account, 'member-english-free', 'v=0', 'en');
+    assert.equal(live.fundingMode, 'minutes');
+    assert.equal(f.creates, 1);
+    assert.deepEqual(await f.minutes(), { balance_ms: '600000', reserved_ms: '600000' });
+    await f.controller.close(f.account, live.sessionID);
+    await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
+    assert.deepEqual(await f.minutes(), { balance_ms: '576000', reserved_ms: '0' });
+    assert.deepEqual(await f.wallet(), cashBefore);
+  } finally { await f.cleanup(); }
+});

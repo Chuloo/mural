@@ -92,8 +92,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          ram-size: 4096M
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
+          # Use Mesa software rendering on the headless runner.
+          emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu lavapipe
           working-directory: apps/android
           script: |
             mkdir -p build/device-diagnostics
@@ -106,6 +108,13 @@ jobs:
           mkdir -p apps/android/build/device-diagnostics
           free -h > apps/android/build/device-diagnostics/memory.txt
           sudo dmesg --ctime > apps/android/build/device-diagnostics/kernel.txt
+          sudo journalctl -u systemd-oomd --no-pager > apps/android/build/device-diagnostics/oomd.txt
+          df -h > apps/android/build/device-diagnostics/disk.txt
+          for report in /tmp/android-runner/emu-crash-*.db; do
+            if [ -e "$report" ]; then
+              cp -a "$report" apps/android/build/device-diagnostics/
+            fi
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

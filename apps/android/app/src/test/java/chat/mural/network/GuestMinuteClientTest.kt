@@ -109,4 +109,15 @@ class GuestMinuteClientTest {
             catch (_: AccountFailure.InvalidResponse) { }
         }
     }
+    @Test fun rejectedBalancePreservesSafeReferenceWithoutRetrying() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(401).setHeader("X-Mural-Error-Reference", "0123abcdef45")
+            .setBody("""{"error":{"code":"sign_in_required"}}"""))
+        try { api.balance(guest); fail("expected sign-in rejection") }
+        catch (error: AccountFailure.Http) {
+            assertEquals(401, error.status)
+            assertEquals("0123abcdef45", error.reference)
+        }
+        assertEquals(1, server.requestCount)
+    }
+
 }

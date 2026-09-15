@@ -38,7 +38,7 @@ sealed class HostedFailure : Exception() {
     data object Unavailable : HostedFailure()
     data object Unconfirmed : HostedFailure()
     class Http(val status: Int, val code: String?, val retryable: Boolean? = null,
-        val retryAfterMilliseconds: Long? = null) : HostedFailure()
+        val retryAfterMilliseconds: Long? = null, val reference: String? = null) : HostedFailure()
 }
 
 data class HostedSessionStatus(val sessionID: String, val state: String, val deadlineMilliseconds: Long,
@@ -226,7 +226,8 @@ class HostedAPIClient internal constructor(
                                 val retryable = (error?.get("retryable") as? JsonPrimitive)?.takeUnless { value -> value.isString }?.booleanOrNull
                                 val wait = (error?.get("retryAfterMilliseconds") as? JsonPrimitive)?.takeUnless { value -> value.isString }
                                     ?.longOrNull?.takeIf { value -> value in 1000..60_000 }
-                                throw HostedFailure.Http(it.code, code, retryable, wait)
+                                throw HostedFailure.Http(it.code, code, retryable, wait,
+                                    safeRequestErrorReference(it.header("X-Mural-Error-Reference")))
                             }
                             transform(json.parseToJsonElement(readBounded(it)).jsonObject)
                         }
@@ -305,6 +306,7 @@ class HostedAPIClient internal constructor(
         private const val BILLING_BASIS = "connected-conversation-time"
         private val UUID_PATTERN = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", RegexOption.IGNORE_CASE)
         private val SAFE_ERROR_CODES = setOf("sign_in_required", "hosted_voice_not_ready", "hosted_helpers_not_ready",
+            "sign_in_to_continue", "provider_create_rejected", "rate_limit", "service_unavailable",
             "insufficient_minutes", "insufficient_credit", "hosted_funding_cap_reached", "live_request_already_created",
             "live_session_unresolved", "live_session_not_found", "provider_session_unconfirmed", "provider_connection_lost",
             "helper_request_already_attempted", "helper_response_uncertain", "helper_session_limit", "helper_concurrency_limit",

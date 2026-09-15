@@ -10,5 +10,9 @@
     <string name="hosted_extra_help_limit">Esta conversación ha alcanzado el límite de explicaciones adicionales.</string>
     <string name="hosted_window_closed">Inicia una nueva conversación para recibir más ayuda. Los significados guardados siguen disponibles.</string>
     <string name="hosted_request_failed">Mural no ha podido completar esta solicitud. Vuelve a intentarlo más tarde.</string>
+    <string name="hosted_sign_in_again">Vuelve a iniciar sesión para continuar con tus minutos de Mural.</string>
+    <string name="hosted_rate_limit">Mural ha recibido demasiadas solicitudes. Espera un minuto y vuelve a intentarlo.</string>
+    <string name="hosted_start_rejected">El servicio de voz no ha podido iniciar esta conversación. Vuelve a intentarlo en unos instantes.</string>
+    <string name="hosted_error_reference">Referencia del error: %1$s</string>
     <string name="hosted_minimum_charge_disclosure">Mínimo de 15 segundos por conversación. Las conversaciones más largas consumen el tiempo de conexión. Nunca se cobra más que tu saldo restante.</string>
 </resources>

@@ -87,5 +87,5 @@ sealed class AccountFailure : Exception() {
     data object InvalidResponse : AccountFailure()
     data object SecureStorage : AccountFailure()
     data object Google : AccountFailure()
-    class Http(val status: Int, val code: String?) : AccountFailure()
+    class Http(val status: Int, val code: String?, val reference: String? = null) : AccountFailure()
 }
