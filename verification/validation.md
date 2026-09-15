@@ -228,3 +228,13 @@ Merged upstream `main` at `926fd95` into the Tagalog branch. The Android README 
 - **315 Android JVM tests passed with zero failures, errors or skips**. Android Debug APK assembly and lint passed.
 - **53 repository-tool tests passed**. Generated-content and cross-platform consistency checks passed, and the PR diff against upstream passed whitespace validation.
 - **Swift core build passed** using the installed Command Line Tools. The Swift test rerun could not compile because those tools do not include XCTest; the selected Xcode installation now requires license acceptance. The earlier successful Swift/UI results remain historical, not a new test pass. No iOS application source changed in this merge; upstream added a shared redirect-fixture test. Native UI and physical-device/provider checks were not rerun.
+
+### Review of other language PRs
+
+Reviewed Afrikaans (#21), European Portuguese (#27), multilingual classrooms (#26), the Mandarin/four-language contributions (#4/#15), Android parity (#23) and the related English startup fix (#28). [Decisions and source links](../docs/tagalog.md#lessons-from-other-language-contributions) distinguish inherited improvements from separate product changes.
+
+Added five Android Tagalog regression tests covering exact caption text and lookup links, aspect versus voice/focus vocabulary through archive export/import, homographs and language-scoped hidden words, rejection of foreign/display-alias evidence, and subtitle/typed support that cannot count as unaided recall. Corrected the Android store description to include Tagalog.
+
+- **320 Android JVM tests passed, zero failures, errors or skips**, including all five added cases; Debug lint passed.
+- **53 repository-tool tests passed**; generated-content and cross-platform checks passed.
+- No production application or API code changed in this follow-up. Swift/UI/API suites were not rerun. These fixture tests validate storage and text handling, not generated linguistic judgments. Real-device/provider and proficient-speaker review remain pending.
