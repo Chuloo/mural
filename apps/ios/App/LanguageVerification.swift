@@ -15,6 +15,10 @@ extension AudioVerification {
             var connected = false
             var receivedGreeting = false
             var targetLanguageDetected = false
+            var languageDetectionReliable: Bool
+            var detectedLanguageID: String?
+            var detectedLanguageConfidence: Double?
+            var languageQualityReview = "pending"
             var typedReplies = 0
             var translated = false
             var lookupReturned = false
@@ -28,20 +32,21 @@ extension AudioVerification {
             var peakAudioLevel = 0.0
             var outputPorts: Set<String> = []
             var failure: String?
-            var passed: Bool {
-                connected && receivedGreeting && targetLanguageDetected && typedReplies == 2 && translated &&
+            var flowPassed: Bool {
+                connected && receivedGreeting && typedReplies == 2 && translated &&
                 lookupReturned && (languageID != "zh" || pinyinAvailable) && supportedEvidenceOnly &&
                 archiveRoundTrip && switchedAwayAndBack && cachedMeaningAfterEnd && closed && audioReleased &&
                 peakAudioLevel > 0.001 && outputPorts.contains(AVAudioSession.Port.builtInSpeaker.rawValue) && failure == nil
             }
+            var passed: Bool { flowPassed && languageDetectionReliable && targetLanguageDetected }
         }
         let id = coordinator.language.id
-        var report = Report(languageID: id)
+        var report = Report(languageID: id, languageDetectionReliable: TeachingPolicy.supportsSpeechLanguageDetection(language: coordinator.language))
         let destination = URL.documentsDirectory.appendingPathComponent("language-verification-\(id).json")
         func write() {
             // Encode computed pass status explicitly alongside the report.
-            struct Output: Encodable { let passed: Bool; let report: Report }
-            if let data = try? JSONEncoder().encode(Output(passed: report.passed, report: report)) {
+            struct Output: Encodable { let passed: Bool; let flowPassed: Bool; let report: Report }
+            if let data = try? JSONEncoder().encode(Output(passed: report.passed, flowPassed: report.flowPassed, report: report)) {
                 try? data.write(to: destination, options: .atomic)
             }
         }
@@ -84,7 +89,8 @@ extension AudioVerification {
                 "de": "Wenn du ein Café eröffnen würdest, wie würdest du regionale Zutaten und bezahlbare Preise miteinander vereinbaren?",
                 "it": "Se aprissi un bar, come riusciresti a usare ingredienti locali mantenendo prezzi accessibili?",
                 "pt": "Se você abrisse uma cafeteria, como conciliaria ingredientes locais com preços acessíveis?",
-                "zh": "如果你开一家咖啡馆，你会怎样在使用本地食材和保持价格合理之间取得平衡？"
+                "zh": "如果你开一家咖啡馆，你会怎样在使用本地食材和保持价格合理之间取得平衡？",
+                "tl": "Kung magbubukas ka ng kapihan, paano mo mapapanatiling abot-kaya ang mga presyo habang gumagamit ng mga lokal na sangkap?"
             ]
             for reply in ["I am learning. How can I politely order a coffee?", advanced[id] ?? "Tell me more."] {
                 let before = coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0
@@ -96,12 +102,14 @@ extension AudioVerification {
             }
             let recognizer = NLLanguageRecognizer()
             recognizer.processString(coordinator.caption)
-            if let detected = recognizer.dominantLanguage?.rawValue {
-                report.targetLanguageDetected = detected == id || detected.hasPrefix(id + "-")
+            if let detected = recognizer.languageHypotheses(withMaximum: 2).max(by: { $0.value < $1.value }) {
+                report.detectedLanguageID = detected.key.rawValue
+                report.detectedLanguageConfidence = detected.value
+                report.targetLanguageDetected = detected.key.rawValue == id || detected.key.rawValue.hasPrefix(id + "-")
             }
             report.pinyinAvailable = MandarinPinyin.reading(coordinator.caption) != nil
             report.translated = await waitFor(20) { !coordinator.meaning.isEmpty && !coordinator.translating }
-            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡"]
+            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡", "tl": "kape"]
             do {
                 let result = try await coordinator.lookup(word: lookupWords[id] ?? coordinator.language.greetingWord, sentence: coordinator.caption)
                 report.lookupReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

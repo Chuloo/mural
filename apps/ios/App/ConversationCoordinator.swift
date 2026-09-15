@@ -331,17 +331,19 @@ import MuralCore
         if state == .ended, let resetDeadline, Date() >= resetDeadline { resetConversation() }
     }
     #if DEBUG
-    func prepareEndedPreview() {
+    func prepareConversationPreview(active: Bool) {
         guard ProcessInfo.processInfo.arguments.contains("--preview") else { return }
         if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--preview-language=") }) {
             selectLanguage(String(argument.dropFirst("--preview-language=".count)))
         }
         selectedTheme = language.themes.first { $0.id == "coffee" }
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
-        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。"]
+        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "tl": "Gusto ko ng kape."]
         record.append(Fragment(speaker: .assistant, text: sample[language.id] ?? language.greeting, startMS: 0, endMS: 1000))
         record.translations[MeaningRequest.cacheKey(revisionKey: record.passages[0].revisionKey, language: "English")] = "I like coffee."
-        session = record; state = .closing; finish(final: true)
+        session = record
+        if active { state = .active; scheduleTranslation() }
+        else { state = .closing; finish(final: true) }
     }
     #endif
     #if DEBUG && targetEnvironment(simulator)
@@ -396,7 +398,8 @@ import MuralCore
         }
     }
     private func checkLanguage() {
-        guard let p = assistantPassage, p.text.count > 70, p.id != lastLanguageCheck else { return }
+        guard TeachingPolicy.supportsSpeechLanguageDetection(language: language),
+              let p = assistantPassage, p.text.count > 70, p.id != lastLanguageCheck else { return }
         let recognizer = NLLanguageRecognizer(); recognizer.processString(p.text)
         if let detected = recognizer.languageHypotheses(withMaximum: 2).max(by: { $0.value < $1.value }),
            TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: detected.key.rawValue, confidence: detected.value) {

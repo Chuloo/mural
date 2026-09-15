@@ -39,6 +39,8 @@ final class MuralUITests: XCTestCase {
         }
     }
 
+    func testTagalogOnboarding() { checkNewOnboarding(id: "tl", greeting: "Kumusta!") }
+
     func testGermanOnboarding() { checkNewOnboarding(id: "de", greeting: "Hallo!") }
     func testItalianOnboarding() { checkNewOnboarding(id: "it", greeting: "Ciao!") }
     func testBrazilianPortugueseOnboarding() { checkNewOnboarding(id: "pt", greeting: "Olá!") }
@@ -73,7 +75,8 @@ final class MuralUITests: XCTestCase {
             ("German · Germany", "German", "Hallo!", "Ein Kaffee?"),
             ("Italian · Italy", "Italian", "Ciao!", "Un caffè?"),
             ("Portuguese · Brazil", "Portuguese", "Olá!", "Um cafezinho?"),
-            ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？")
+            ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？"),
+            ("Tagalog (Filipino) · Philippines", "Tagalog (Filipino)", "Kumusta!", "Kape tayo?")
         ] {
             app.buttons["Settings"].tap()
             app.buttons["learning-language-picker"].tap()
@@ -126,6 +129,125 @@ final class MuralUITests: XCTestCase {
         app.tabBars.buttons["Words"].tap()
         app.buttons["Past conversations"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "喝杯咖啡？")).firstMatch.exists)
+    }
+
+    func testTagalogOnboardingAtLargestAccessibilitySizePreservesSubtitleChoice() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let choice = app.buttons["onboarding-language-tl"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 10))
+        reveal(choice, in: app)
+        choice.tap()
+        XCTAssertTrue(choice.isSelected)
+        XCTAssertEqual(choice.label, "Tagalog (Filipino) · Philippines")
+        let viewport = app.scrollViews.firstMatch.frame
+        let continueButton = app.buttons["onboarding-continue"]
+        XCTAssertGreaterThan(choice.frame.height, 0)
+        XCTAssertTrue(viewport.contains(choice.frame), "The entire Tagalog card must fit inside the visible scroll area")
+        XCTAssertTrue(app.frame.contains(continueButton.frame), "Continue must fit inside the screen")
+        XCTAssertLessThan(choice.frame.maxY, continueButton.frame.minY)
+        XCTAssertTrue(continueButton.isHittable)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Tagalog onboarding - largest accessibility text"; screen.lifetime = .keepAlways; add(screen)
+        app.buttons["onboarding-continue"].tap()
+        app.buttons["onboarding-meaning-picker"].tap()
+        app.buttons["French"].tap()
+        app.buttons["onboarding-back"].tap()
+        reveal(choice, in: app)
+        XCTAssertTrue(choice.isSelected)
+        app.buttons["onboarding-continue"].tap()
+        XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "Salut !")
+        app.buttons["onboarding-continue"].tap()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Kumusta!")
+        XCTAssertEqual(app.staticTexts["meaning-caption"].label, "Salut !")
+        XCTAssertFalse(app.buttons["pinyin-toggle"].exists)
+    }
+
+    func testTagalogTranscriptAndMeaningSurviveResetAndLanguageSwitch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--ended-conversation", "--preview-language=tl"]
+        app.launch()
+        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Gusto ko ng kape.")
+        XCTAssertEqual(app.staticTexts["meaning-caption"].label, "I like coffee.")
+        XCTAssertFalse(app.buttons["pinyin-toggle"].exists)
+        app.buttons["Conversation transcript"].tap()
+        XCTAssertTrue(app.staticTexts["Gusto ko ng kape."].exists)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Tagalog transcript and English meaning"; screen.lifetime = .keepAlways; add(screen)
+        app.buttons["Done"].tap()
+        if app.buttons["new-conversation"].exists { app.buttons["new-conversation"].tap() }
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Kumusta!")
+        app.buttons["Settings"].tap()
+        app.buttons["learning-language-picker"].tap()
+        app.buttons["Spanish · Spain"].tap()
+        app.buttons["Done"].tap()
+        app.tabBars.buttons["Words"].tap()
+        app.buttons["Past conversations"].tap()
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Kape tayo?")).firstMatch.exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Talk"].tap()
+        app.buttons["Settings"].tap()
+        app.buttons["learning-language-picker"].tap()
+        app.buttons["Tagalog (Filipino) · Philippines"].tap()
+        app.buttons["Done"].tap()
+        app.tabBars.buttons["Words"].tap()
+        app.buttons["Past conversations"].tap()
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Kape tayo?")).firstMatch
+        XCTAssertTrue(saved.exists)
+        saved.tap()
+        XCTAssertTrue(app.staticTexts["Gusto ko ng kape."].exists)
+    }
+
+    func testTagalogLanguageSwitchIsDisabledDuringConversation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--active-conversation", "--preview-language=tl"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Gusto ko ng kape.")
+        app.buttons["Settings"].tap()
+        XCTAssertFalse(app.buttons["learning-language-picker"].isEnabled)
+        XCTAssertTrue(app.staticTexts["End this conversation to switch languages. Each language keeps its own words and progress."].exists)
+    }
+
+    func testTagalogSelectionPersistsAcrossNormalRelaunch() {
+        let app = XCUIApplication()
+        addTeardownBlock {
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+            app.buttons["Settings"].tap()
+            app.buttons["learning-language-picker"].tap()
+            app.buttons["Norwegian · Bokmål"].tap()
+            app.buttons["Done"].tap()
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+            XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
+            app.terminate()
+        }
+        app.launch()
+        if app.buttons["onboarding-continue"].waitForExistence(timeout: 5) {
+            let choice = app.buttons["onboarding-language-tl"]
+            reveal(choice, in: app)
+            choice.tap()
+            app.buttons["onboarding-continue"].tap()
+            app.buttons["onboarding-continue"].tap()
+        }
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        app.buttons["Settings"].tap()
+        app.buttons["learning-language-picker"].tap()
+        app.buttons["Tagalog (Filipino) · Philippines"].tap()
+        app.buttons["Done"].tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Kumusta!")
+        XCTAssertFalse(app.buttons["onboarding-continue"].exists)
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.buttons["learning-language-picker"].label.contains("Tagalog (Filipino)"))
     }
 
     private func launch(ended: Bool = false) -> XCUIApplication {

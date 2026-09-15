@@ -52,6 +52,37 @@ import XCTest
         XCTAssertTrue(visible!.assessments.isEmpty)
     }
 
+    func testTagalogFinalAssessmentStaysWithItsOriginalSessionAfterSwitching() async {
+        for (oldID, newID) in [("tl", "es"), ("pt", "tl")] {
+            let old = ended(oldID), new = ended(newID), provider = Provider()
+            var records = [old.id: old, new.id: new]
+            let queue = FinalAssessmentQueue(assess: provider.assess)
+            queue.onResult = { result in
+                if let updated = result.applying(to: records[result.sessionID]) { records[updated.id] = updated }
+            }
+            XCTAssertTrue(queue.submit(old))
+            await waitUntil { provider.pending.count == 1 }
+            provider.finish()
+            await waitUntil { !queue.isPending(old.id) }
+            XCTAssertEqual(records[old.id]?.assessments.first?.words.first?.language, oldID)
+            XCTAssertEqual(records[old.id]?.inputTokens, 100)
+            XCTAssertTrue(records[new.id]!.assessments.isEmpty)
+            XCTAssertTrue(LearningEngine.project([records[new.id]!], languageID: newID).words.isEmpty)
+        }
+    }
+
+    func testTagalogResultCannotApplyToARecordWithAnotherLanguage() {
+        let original = ended("tl")
+        let passage = original.passages[0]
+        let assessment = Assessment(passageID: passage.id, revisionKey: passage.revisionKey, outcome: .success,
+            suggestedLevel: 1, nextGoal: "Magtanong pa.", capability: "Names an object", words: [])
+        let result = FinalAssessmentResult(sessionID: original.id, languageID: "fil", assessment: assessment)
+        XCTAssertNil(result.applying(to: original))
+        let correct = FinalAssessmentResult(sessionID: original.id, languageID: "tl", assessment: assessment)
+        XCTAssertNotNil(correct.applying(to: original))
+        XCTAssertNil(correct.applying(to: ended("es")))
+    }
+
     func testDeletedSessionIsNeverRecreatedByALateResult() async {
         let session = ended(), provider = Provider()
         var records = [session.id: session]

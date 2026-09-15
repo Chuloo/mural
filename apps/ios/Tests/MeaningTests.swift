@@ -126,6 +126,37 @@ import XCTest
         XCTAssertEqual(controller.text, "Hi!")
     }
 
+    func testSwitchingBetweenTagalogAndSpanishDiscardsLateMeaningsAndErrors() async {
+        for (oldID, newID) in [("tl", "es"), ("es", "tl")] {
+            for fails in [false, true] {
+                let translator = Translator()
+                let controller = MeaningController(delay: .zero, translate: translator.translate)
+                let passage = Passage(id: "same-passage", speaker: .assistant, fragments: [
+                    Fragment(speaker: .assistant, text: "Kumusta!", startMS: 0, endMS: 1000)
+                ])
+                func request(_ id: String) -> MeaningRequest {
+                    MeaningRequest(sessionID: sessionID, passage: passage, learningLanguageID: id, meaningLanguage: "English")
+                }
+                var saved: [String] = []
+                controller.onResult = { request, _ in saved.append(request.learningLanguageID) }
+                controller.update(request(oldID))
+                await waitUntil { translator.pending.count == 1 }
+                controller.update(request(newID))
+                await waitUntil { translator.pending.count == 2 }
+                if fails { translator.fail() } else { translator.succeed("Old meaning") }
+                try? await Task.sleep(for: .milliseconds(10))
+                XCTAssertEqual(controller.text, "")
+                XCTAssertNil(controller.error)
+                XCTAssertTrue(controller.isLoading)
+                XCTAssertTrue(saved.isEmpty)
+                translator.succeed("New meaning")
+                await waitUntil { !controller.isLoading }
+                XCTAssertEqual(controller.text, "New meaning")
+                XCTAssertEqual(saved, [newID])
+            }
+        }
+    }
+
     func testChangingMeaningLanguageClearsOldTextAndUsesSeparateCacheKeys() async {
         let translator = Translator()
         let controller = MeaningController(delay: .zero, translate: translator.translate)

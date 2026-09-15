@@ -14,6 +14,9 @@ Language-specific content lives in `apps/ios/Core/Languages/`. Each module defin
 | `it` | Italian from Italy | `it-IT` |
 | `pt` | Brazilian Portuguese | `pt-BR` |
 | `zh` | Standard Mandarin, Simplified Chinese | `zh-CN` |
+| `tl` | Tagalog (Filipino) from the Philippines | `tl-PH` |
+
+Tagalog uses Filipino as a display alias and keeps one `tl` storage namespace. Its iPhone automatic speech-language detector is disabled because valid Tagalog can be classified as Indonesian with high confidence; explicit target-language teaching instructions remain in use. See [Tagalog teaching choices and references](tagalog.md) for the evidence, vocabulary conventions and verification limits.
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
 
@@ -27,7 +30,7 @@ Mandarin builds on [richardguerre's contribution in #4](https://github.com/Chulo
 
 Pinyin appears separately below selectable Chinese text, with a Show/Hide control. Word links use Chinese word boundaries. Lemmas stay in characters, observed forms and quotations stay unchanged, and generated pinyin never becomes learning evidence. Script identifiers such as `zh-Hans` and `zh-Hant` are accepted by the spoken-language check, so Chinese text does not trigger a false language redirect. Simplified Chinese is also available for meaning subtitles.
 
-These are compiled modules. Adding one ships with an app update; there is no remote module download or extra service. Every new language needs a proficient-speaker teaching and pronunciation review. The Android contribution is not integrated in this checkout, so there is no Android generated catalog to update here.
+These are compiled modules. Adding one ships with an app update; there is no remote module download or extra service. Every new language needs a proficient-speaker teaching and pronunciation review. Regenerate the Android catalog when adding or changing a Swift language module.
 
 See [how to add a language](add-language.md) for the implementation steps.
 

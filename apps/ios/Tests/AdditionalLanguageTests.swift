@@ -2,12 +2,13 @@ import XCTest
 @testable import MuralCore
 
 final class AdditionalLanguageTests: XCTestCase {
-    private let ids = ["de", "it", "pt", "zh"]
+    private let ids = ["de", "it", "pt", "zh", "tl"]
     private let samples = [
         ("de", "Ich gehe über die Straße.", "die Straße", "Straße", "street"),
         ("it", "Vorrei un caffè.", "un caffè", "caffè", "coffee"),
         ("pt", "Eu gosto de pão e maçã.", "o pão", "pão", "bread"),
-        ("zh", "我想去银行。", "银行", "银行", "bank")
+        ("zh", "我想去银行。", "银行", "银行", "bank"),
+        ("tl", "Mag-aaral ako araw-araw.", "mag-aral", "Mag-aaral", "study")
     ]
 
     private func session(_ id: String, text: String = "radio", lemma: String = "radio", form: String = "radio", meaning: String = "radio", day: Int = 0, supported: Bool = false, typed: Bool = false) -> SessionRecord {
@@ -24,8 +25,8 @@ final class AdditionalLanguageTests: XCTestCase {
     }
 
     func testRegistrationPreservesOldIDsAndSetsRequestedVarieties() {
-        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh"])
-        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！")] {
+        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "tl"])
+        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("tl", "tl-PH", "Kumusta!")] {
             XCTAssertEqual(LanguageRegistry.module(for: id)?.locale, locale)
             XCTAssertEqual(LanguageRegistry.module(for: id)?.greeting, greeting)
         }
@@ -57,7 +58,7 @@ final class AdditionalLanguageTests: XCTestCase {
         }
     }
 
-    func testAllEightLanguagesRoundTripWithIsolatedProgressAndHiddenWords() throws {
+    func testAllRegisteredLanguagesRoundTripWithIsolatedProgressAndHiddenWords() throws {
         var archive = Archive()
         archive.sessions = LanguageRegistry.all.flatMap { [session($0.id), session($0.id, day: 2)] }
         archive.preferences.meaningLanguage = "Chinese (Simplified)"
@@ -79,7 +80,7 @@ final class AdditionalLanguageTests: XCTestCase {
                 let hidden = LearningEngine.project(restored.sessions, languageID: language.id, hiddenWords: restored.preferences.hiddenWords)
                 XCTAssertEqual(hidden.words.count, language.id == "pt" ? 0 : 1)
             }
-            XCTAssertEqual(keys.count, 8)
+            XCTAssertEqual(keys.count, LanguageRegistry.all.count)
         }
     }
 
