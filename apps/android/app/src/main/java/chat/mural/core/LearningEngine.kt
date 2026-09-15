@@ -24,12 +24,12 @@ object LearningEngine {
             if (word.language != session.languageID || word.sourceIDs.isEmpty() || !allowed.containsAll(word.sourceIDs) ||
                 !word.confidence.isFinite() || word.confidence !in 0.8..1.0 || word.lemma.isEmpty() || word.lemma.length>=100 ||
                 word.meaning.isEmpty() || word.meaning.length>=180 || word.form.isEmpty() || word.quote.isEmpty() ||
-                !passage.text.contains(word.quote,ignoreCase=true) || !word.quote.contains(word.form,ignoreCase=true)) return@mapNotNull null
+                !passage.text.containsCanonical(word.quote) || !word.quote.containsCanonical(word.form)) return@mapNotNull null
             val refs=passage.fragments.filter { word.sourceIDs.contains(it.id) }.joinToString("") { it.text }
-            if (!refs.contains(word.quote,ignoreCase=true)) return@mapNotNull null
+            if (!refs.containsCanonical(word.quote)) return@mapNotNull null
             var out=word
             if (out.kind==EvidenceKind.independent) {
-                val modeled=session.passages.any { p -> p.speaker==Speaker.assistant && p.startMS<=passage.startMS && passage.startMS-p.endMS<90000 && p.text.contains(word.form,ignoreCase=true) }
+                val modeled=session.passages.any { p -> p.speaker==Speaker.assistant && p.startMS<=passage.startMS && passage.startMS-p.endMS<90000 && p.text.containsCanonical(word.form) }
                 if (passage.fragments.any { it.meaningVisible || it.typed } || modeled) out=out.copy(kind=EvidenceKind.assisted)
             }
             out
@@ -37,6 +37,7 @@ object LearningEngine {
         return proposal.copy(nextGoal=proposal.nextGoal.take(300),capability=proposal.capability.take(160),words=words)
     }
     fun project(sessions:List<SessionRecord>,languageID:String=LanguageRegistry.defaultID,hiddenWords:List<String> = emptyList(),now:Double=nowSeconds()):LearnerState {
+        val hidden=hiddenWords.map { it.canonical() }
         var level=0; var count=0; var successes=0
         var nextGoal="Start with a greeting and one small question. Adjust from what the learner actually says."
         val caps=mutableMapOf<String,MutableSet<String>>()
@@ -55,7 +56,7 @@ object LearningEngine {
                 if(a.nextGoal.isNotEmpty()) nextGoal=a.nextGoal
                 if(a.outcome==Outcome.success && a.capability.isNotEmpty()) caps.getOrPut(a.capability){mutableSetOf()}.add("${dayKey(a.createdAt)}|${a.context}")
                 val seenWords=mutableSetOf<String>()
-                for(word in a.words) if(hiddenWords.none { it==word.key } && seenWords.add(word.key)) events.getOrPut(word.key){mutableListOf()}.add(Triple(word,a.createdAt,a.context))
+                for(word in a.words) if(hidden.none { it==word.key } && seenWords.add(word.key)) events.getOrPut(word.key){mutableListOf()}.add(Triple(word,a.createdAt,a.context))
             }
         }
         val words=events.mapNotNull { (key,obs) ->

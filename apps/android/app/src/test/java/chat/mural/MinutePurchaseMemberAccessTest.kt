@@ -23,6 +23,8 @@ class MinutePurchaseMemberAccessTest {
         assertFalse(MinutePurchaseCapability.checked(true, "test", false, "chat.mural.android").enabled)
         assertFalse(MinutePurchaseCapability.checked(true, "test", true, "chat.mural.android.uitest").enabled)
         assertTrue(MinutePurchaseCapability.checked(true, "test", true, "chat.mural.android").enabled)
+        assertTrue(MinutePurchaseCapability.checked(true, "live", true, "chat.mural.android", "stripe").enabled)
+        assertFalse(MinutePurchaseCapability.checked(true, "live", true, "chat.mural.android", "unknown").enabled)
         assertEquals("live", MinutePurchaseCapability.checked(true, "live", true, "chat.mural.android").environment)
     }
     @Test fun noSelectedMemberNeverReadsStoredGuestOrMakesProfileRequest() = runTest {

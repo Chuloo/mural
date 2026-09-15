@@ -68,14 +68,11 @@ class CredentialStore internal constructor(
 
     @Synchronized
     fun delete() {
-        var failed = !preferences.edit().clear().commit()
+        if (!preferences.edit().clear().commit()) throw CredentialException.Remove
         try {
             val store = keyStore()
             if (store.containsAlias(keyAlias)) store.deleteEntry(keyAlias)
-        } catch (_: Exception) {
-            failed = true
-        }
-        if (failed) throw CredentialException.Remove
+        } catch (_: Exception) { }
     }
 
     private fun encryptionKey(): SecretKey {

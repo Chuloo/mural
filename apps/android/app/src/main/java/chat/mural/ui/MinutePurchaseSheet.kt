@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import chat.mural.R
+import chat.mural.core.PurchaseChannel
 import chat.mural.core.MinutePack
 import chat.mural.core.MinutePurchaseNotice
 import chat.mural.core.MinutePurchaseState
@@ -107,7 +108,7 @@ fun MinutePurchaseSheet(
                     }
                     if (state.packs.isNotEmpty()) Text(stringResource(R.string.minute_purchases_one_time),
                         style = MaterialTheme.typography.labelMedium, color = MuralColors.Secondary, textAlign = TextAlign.Center)
-                    Text(stringResource(R.string.minute_purchases_play_terms), style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(if (state.channel == PurchaseChannel.STRIPE) R.string.minute_purchases_stripe_terms else R.string.minute_purchases_play_terms), style = MaterialTheme.typography.bodySmall,
                         color = MuralColors.Secondary, textAlign = TextAlign.Center)
                     MuralTextButton(onRefresh, enabled = !checking && !accountBusy,
                         modifier = Modifier.testTag("minute-purchase-refresh")) {

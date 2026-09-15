@@ -24,6 +24,60 @@ class MinuteCommerceClientTest {
     @Before fun setup() { server = MockWebServer(); server.start(); api = MinuteCommerceClient(server.url("/"), OkHttpClient(), now = { 1_000 }) }
     @After fun teardown() { server.shutdown() }
 
+    @Test fun channelsCannotCallEachOthersPurchaseRoutes() = runBlocking {
+        val stripe = MinuteCommerceClient(server.url("/"), OkHttpClient(), now = { 1_000 }, channel = PurchaseChannel.STRIPE)
+        try { stripe.create(session, "test-30", "idempotent-001"); fail("Play create in direct build") } catch (_: MinuteCommerceFailure.Unavailable) { }
+        try { stripe.recover(session, "receipt"); fail("Play recover in direct build") } catch (_: MinuteCommerceFailure.Unavailable) { }
+        try { stripe.verify(session, id, "receipt"); fail("Play verify in direct build") } catch (_: MinuteCommerceFailure.Unavailable) { }
+        try { api.createStripe(session, "test-30", id); fail("Stripe create in Play build") } catch (_: MinuteCommerceFailure.Unavailable) { }
+        assertEquals(0, server.requestCount)
+        server.enqueue(MockResponse().setBody(catalog))
+        stripe.catalog()
+        assertEquals("/v1/minutes/products?provider=stripe", server.takeRequest().path)
+    }
+
+    @Test fun stripeRecoveryUsesOwnedKeyRouteAndDoesNotTreatTransportFailuresAsMissing() = runBlocking {
+        val stripe = MinuteCommerceClient(server.url("/"), OkHttpClient(), now = { 1_000 }, channel = PurchaseChannel.STRIPE)
+        server.enqueue(MockResponse().setBody("""{"orderID":"$id"}"""))
+        assertEquals(id, stripe.findStripeOrder(session, id))
+        val request = server.takeRequest()
+        assertEquals("/v1/minutes/orders/by-key/$id?provider=stripe", request.path)
+        assertEquals("Bearer ${session.accessToken}", request.getHeader("Authorization"))
+        server.enqueue(MockResponse().setResponseCode(404).setBody("{}"))
+        assertNull(stripe.findStripeOrder(session, id))
+        server.enqueue(MockResponse().setResponseCode(503).setBody("{}"))
+        try { stripe.findStripeOrder(session, id); fail("outage treated as absent order") } catch (error: MinuteCommerceFailure.Http) {
+            assertEquals(503, error.status)
+        }
+        try { api.findStripeOrder(session, id); fail("Stripe lookup in Play build") } catch (_: MinuteCommerceFailure.Unavailable) { }
+        try { stripe.findStripeOrder(session, "../account"); fail("bad key") } catch (_: MinuteCommerceFailure.InvalidResponse) { }
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun stripeOrderUsesOwnedRouteAndCanonicalQuoteAndRejectsUnsafePayment() = runBlocking {
+        val stripe = MinuteCommerceClient(server.url("/"), OkHttpClient(), now = { 1_000 }, channel = PurchaseChannel.STRIPE)
+        val value = """"entitlementKind":"ai_value","billingBasis":"actual-ai-usage","estimate":true,"aiValueNanoUSD":"2000000000","estimatedMilliseconds":1200000,"quote":{"currency":"usd","currencyExponent":2,"aiValueMinor":200,"serviceFeeBasisPoints":1500,"serviceFeeMinor":30,"processingEstimateMinor":39,"processingBufferMinor":2,"totalMinor":271,"policyVersion":1,"exchangeRateVersion":"synthetic-usd","estimateRateVersion":"synthetic-estimate"}"""
+        val url = "https://checkout.stripe.com/c/pay/cs_test_synthetic#opaque"
+        val body = """{"orderID":"$id","currency":"usd","totalMinor":271,"payment":{"orderID":"$id","checkoutURL":"$url"},$value}"""
+        server.enqueue(MockResponse().setBody(body))
+        val result = stripe.createStripe(session, "synthetic-value", id)
+        assertEquals(url, result.checkout.value)
+        assertEquals(39, result.aiValue.quote.processingEstimateMinor)
+        assertFalse(result.toString().contains("cs_test"))
+        val request = server.takeRequest()
+        assertEquals("/v1/minutes/orders", request.path)
+        assertEquals("Bearer ${session.accessToken}", request.getHeader("Authorization"))
+        assertEquals(id, request.getHeader("Idempotency-Key"))
+        assertEquals("""{"provider":"stripe","sku":"synthetic-value"}""", request.body.readUtf8())
+        for (invalid in listOf(body.replace("checkout.stripe.com", "checkout.stripe.com.evil.test"),
+            body.replace("\"payment\":{\"orderID\":\"$id\"", "\"payment\":{\"orderID\":\"87654321-1234-1234-1234-123456789012\""),
+            body.replace("\"serviceFeeMinor\":30", "\"serviceFeeMinor\":0"))) {
+            server.enqueue(MockResponse().setBody(invalid))
+            try { stripe.createStripe(session, "synthetic-value", id); fail("invalid Stripe response") }
+            catch (_: MinuteCommerceFailure.InvalidResponse) { }
+        }
+    }
+
     @Test fun actualValueCatalogOrderAndRefundKeepMoneySeparateFromTime() = runBlocking {
         val value = """"entitlementKind":"ai_value","billingBasis":"actual-ai-usage","estimate":true,"aiValueNanoUSD":"2000000000","estimatedMilliseconds":1200000,"quote":{"currency":"usd","currencyExponent":2,"aiValueMinor":200,"serviceFeeBasisPoints":1500,"serviceFeeMinor":30,"processingEstimateMinor":39,"processingBufferMinor":2,"totalMinor":271,"policyVersion":1,"exchangeRateVersion":"synthetic-usd","estimateRateVersion":"synthetic-estimate"}"""
         val product = """{"sku":"synthetic-value","providerProduct":"synthetic_value","currency":"usd","totalMinor":271,"environment":"test",$value}"""

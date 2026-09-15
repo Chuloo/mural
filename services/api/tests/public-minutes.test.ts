@@ -6,7 +6,7 @@ import { migrate } from '../src/migrate.js';
 import { createApp } from '../src/app.js';
 import { AuthAdmission } from '../src/auth-admission.js';
 import { createChallenge, exchangeIdentity } from '../src/auth.js';
-import { InstallationGuestMinuteAttestor, linkGuestMinutes } from '../src/guest-minutes.js';
+import { finalizeDeferredGuestLinks, InstallationGuestMinuteAttestor, linkGuestMinutes } from '../src/guest-minutes.js';
 import { appendMinuteEntry, finishMinuteReservation, minuteBalance, reserveMinutes } from '../src/minutes.js';
 import { reconcileSandboxMinutes, updateWelcomePolicy, welcomePolicy } from '../src/minutes-admin.js';
 import { updateWelcomeFunding, welcomeFunding } from '../src/welcome-funding.js';
@@ -218,4 +218,33 @@ integration('ambiguous legacy sandbox balances require audited reconciliation wi
     assert.equal((await minuteBalance(f.db,member.accountID,true)).availableMilliseconds,60_000);
     await assert.rejects(f.db.query('DELETE FROM minute_sandbox_reconciliations'),/immutable/);
   }finally{await f.cleanup();}
+});
+
+integration('opt-in deferred login permits member gifts while guest closure remains pending and rejects new guest calls',async()=>{
+ const f=await fixture(300,300);try{
+  const installation=install(),guest=await f.guest(installation),live=await f.hosted.create(guest.guestID,randomUUID(),'v=0','es-ES');
+  const member=await f.member();await f.gift(member.accountID,1800000);
+  const headers={...f.headers,authorization:`Bearer ${member.accessToken}`};
+  const url='/v1/minutes/link-guest';
+  const legacy=await f.app.inject({method:'POST',url,headers,payload:{guestAccessToken:guest.accessToken}});
+  assert.equal(legacy.statusCode,409);
+  for(const payload of [{deferPending:'yes',guestAccessToken:guest.accessToken},{deferPending:true,accountID:member.accountID}])
+   assert.equal((await f.app.inject({method:'POST',url,headers,payload})).statusCode,400);
+  const accepted=await f.app.inject({method:'POST',url,headers,payload:{guestAccessToken:guest.accessToken,deferPending:true}});
+  assert.equal(accepted.statusCode,200);assert.equal(accepted.json().pending,true);
+  await assert.rejects(f.hosted.create(guest.guestID,randomUUID(),'v=0','es-ES'),{code:'sign_in_to_continue'});
+  assert.equal((await f.guest(installation)).reason,'sign_in_required');
+  const guestRecord=(await f.db.query('SELECT close_requested_at,provider_cost_nano,reserved_ms FROM hosted_sessions WHERE id=$1',[live.sessionID])).rows[0];
+  assert.ok(guestRecord.close_requested_at);assert.equal(guestRecord.provider_cost_nano,null);assert.equal(guestRecord.reserved_ms,'600000');
+  const own=await f.hosted.create(member.accountID,randomUUID(),'v=0','fr-FR');
+  assert.equal((await f.app.inject({method:'POST',url,headers,payload:{deferPending:true,guestAccountID:guest.guestID}})).json().pending,true);
+  await f.finish(guest.guestID,live.sessionID,37.123);
+  // The member's separate active reservation must not block the old guest transfer.
+  await finalizeDeferredGuestLinks(f.db);
+  const done=await f.app.inject({method:'POST',url,headers,payload:{deferPending:true,guestAccountID:guest.guestID}});
+  assert.equal(done.statusCode,200);assert.equal(done.json().pending,false);assert.equal(done.json().transferredMilliseconds,562877);
+  await f.finish(member.accountID,own.sessionID,15);
+  assert.equal((await minuteBalance(f.db,member.accountID,true)).availableMilliseconds,2347877);
+  assert.equal((await f.db.query('SELECT count(*) FROM welcome_funding_allocations')).rows[0].count,'1');
+ }finally{await f.cleanup();}
 });

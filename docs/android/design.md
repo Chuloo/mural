@@ -16,6 +16,12 @@ The orb has a smooth twelve-point outline, warm blended color, a feathered shado
 
 Both onboarding steps use dropdown menus over a softly moving warm background. Continue stays at the bottom; content can scroll at larger text sizes. Reply entry opens in a rounded sheet with keyboard padding and a visible send action. Search, settings and other input fields share the same rounded surfaces and warm focus color.
 
+Caption taps open a cream bottom sheet with the selected word, its original sentence and an automatic contextual explanation, following the iOS lookup flow. All eight languages use this interaction. The sentence stays fixed while the conversation advances; closing the sheet cancels its request. Lookup has its own loading state so another helper cannot leave the sheet empty or have its work cancelled by dismissal.
+
+Mandarin keeps the inline Show/Hide pinyin control between the Chinese caption and the English meaning. The Chinese passage and its reading scroll together; the meaning retains its own visible area. Small screens and large system text use a scrolling page. Source characters and caption tap boundaries remain independent of pronunciation phrases.
+
+Pinyin uses the MIT-licensed [phrase-pinyin-data](https://github.com/mozillazg/phrase-pinyin-data/tree/cee0ed6e6e4898580cafd2bd5e3723e20b214aa0) dictionary (version 0.19.0), bundled offline with its license in `app/src/main/resources/mandarin/`. Local overrides cover everyday neutral-tone and erhua forms. The dictionary supplies written pronunciation aids, not acoustic tone assessment or guaranteed disambiguation of every sentence. Common ambiguous characters without a resolving entry retain their Han text. Apple’s tokenizer and Android’s ICU/dictionary can differ in segmentation, spacing, regional readings and coverage. Android 8–9 retain caption links without pinyin.
+
 ## Components
 
 - `core/`: serializable models, the v1/v2 archive, language modules, evidence rules, teaching policy, `MeaningController`, `FinalAssessmentQueue`, session limits and usage summary. No Android dependencies, so it runs in JVM tests.
@@ -35,6 +41,7 @@ Both onboarding steps use dropdown menus over a softly moving warm background. C
 | stasel/WebRTC | webrtc-sdk for Android |
 | iOS recording permission | Runtime `RECORD_AUDIO` |
 | NaturalLanguage recognizer | `TextClassifier` language detection (Android 10+; skipped on older versions) |
+| `CFStringTokenizer` word readings for Mandarin | ICU word segmentation for caption links; bundled phrase readings with a guarded ICU fallback for pinyin (Android 10+; readings are omitted on older versions) |
 | File exporter and importer | Storage Access Framework, no broad storage permission |
 | Background events | `Activity.onStop` and resource cancellation |
 

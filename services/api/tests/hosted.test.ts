@@ -7,7 +7,7 @@ import type Stripe from 'stripe';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
 import { appendEntry } from '../src/ledger.js';
-import { OpenAILiveProvider } from '../src/live-provider.js';
+import { LiveCreateFailure, LiveCreateRejectedError, OpenAILiveProvider } from '../src/live-provider.js';
 import { HostedVoice } from '../src/hosted-voice.js';
 import { applyStripeEvent } from '../src/payments.js';
 import { appendMinuteEntry } from '../src/minutes.js';
@@ -22,7 +22,7 @@ async function until(predicate: () => Promise<boolean> | boolean) {
   const deadline = Date.now() + 3_000;
   while (!(await predicate())) { if (Date.now() > deadline) throw new Error('Timed out waiting for test condition'); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
-async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBudget?: bigint) {
+async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBudget?: bigint, paid = false) {
   const schema = `voice_test_${randomUUID().replaceAll('-', '')}`, url = new URL(databaseURL!);
   url.searchParams.set('options', `-c search_path=${schema}`);
   const db = connectDatabase(url.toString()); await db.query(`CREATE SCHEMA ${schema}`); await migrate(db);
@@ -30,19 +30,25 @@ async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBud
   await db.query('INSERT INTO accounts(id) VALUES($1)', [account]); await db.query('INSERT INTO wallets(account_id) VALUES($1)', [account]);
   await transaction(db, sql => appendEntry(sql, account, `seed:${account}`, 'purchase', 2_000_000_000n, 0n));
   if (minuteAllowance !== undefined) {
-    await db.query('UPDATE accounts SET is_guest=true WHERE id=$1', [account]);
-    await db.query('DELETE FROM wallets WHERE account_id=$1', [account]);
+    if (!paid) {
+      await db.query('UPDATE accounts SET is_guest=true WHERE id=$1', [account]);
+      await db.query('DELETE FROM wallets WHERE account_id=$1', [account]);
+    }
     await transaction(db, sql => appendMinuteEntry(sql, account, `minute-seed:${account}`, 'gift', minuteAllowance, 0));
   }
   const sockets = new Map<string, WebSocket>();
   let creates = 0, hangups = 0, closes = 0, respondToClose = false, rejectCreate = false, cancelBeforeProvider = false, seconds = 0, now = Date.now(), setupDelay = 0;
+  let rejectionStatus = 502, malformedSuccess = false, dropCreate = false;
+  const diagnostics: unknown[] = [];
   const payloads: unknown[] = [];
   const server = createServer(async (request, response) => {
     assert.equal(request.headers.authorization, 'Bearer test-no-real-provider-key');
     if (request.url === '/v1/live/sessions') {
       creates++; const chunks = []; for await (const chunk of request) chunks.push(chunk);
       now += setupDelay;
-      if (rejectCreate) { response.writeHead(502); response.end('private-provider-error'); return; }
+      if (dropCreate) { request.socket.destroy(); return; }
+      if (rejectCreate) { response.writeHead(rejectionStatus, { 'x-request-id': 'req_test_rejection' }); response.end('private-provider-error'); return; }
+      if (malformedSuccess) { response.writeHead(200); response.end('private-malformed-success'); return; }
       payloads.push(JSON.parse(Buffer.concat(chunks).toString()));
       response.writeHead(201, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ session: { id: `live_fake_${creates}` }, transport: { type: 'webrtc', sdp: 'v=0\r\nfake-answer' } }));
@@ -67,22 +73,27 @@ async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBud
   const helpers = helperBudget === undefined ? undefined : new HostedHelpers(db,
     { send: async () => { throw new Error('No helper network call expected.'); } }, {
       accountAllowlist: new Set([account]), aggregateFundingCapNano: cap, helperBudgetNanoPerMinute: helperBudget,
+      publicMinuteAccess: paid, publicPaidAccess: paid,
       maxRequestsPerMinute: 6, maxSearchesPerSession: 0, maxConcurrentPerSession: 2, maxConcurrentGlobal: 4,
       postSessionMilliseconds: 120_000, inputFramingTokenAllowance: 4096, searchInputTokenAllowance: 1_050_000,
       timeoutMilliseconds: 1000,
     });
-  const helperAdmission = { async reserveSessionBudget(sql: any, owner: string, id: string) {
+  const helperAdmission = { paidFundingPolicy: helpers?.paidFundingPolicy, closeCashBudget: helpers?.closeCashBudget.bind(helpers), async reserveSessionBudget(sql: any, owner: string, id: string) {
     await helpers?.reserveSessionBudget(sql, owner, id);
     if (cancelBeforeProvider) await sql.query("UPDATE hosted_sessions SET state='closing',close_requested_at=now() WHERE id=$1", [id]);
   } };
   let controller = new HostedVoice(db, provider, { accountAllowlist: new Set([account]), lifetimeFundingCapNano: cap,
+    publicMinuteAccess: paid, publicPaidAccess: paid, onStartupFailure: diagnostic => diagnostics.push(diagnostic),
     billingUnit: minuteAllowance === undefined ? 'nanoUSD' : 'milliseconds',
     helpers: helperAdmission, now: () => now, closeGraceMilliseconds: 20 });
   await controller.start();
-  return { db, account, payloads, provider, get controller() { return controller; },
+  return { db, account, payloads, diagnostics, provider, get controller() { return controller; },
     get creates() { return creates; }, get hangups() { return hangups; }, get closes() { return closes; },
     set closeReplies(value: boolean) { respondToClose = value; }, set seconds(value: number) { seconds = value; },
     set rejectCreate(value: boolean) { rejectCreate = value; },
+    set rejectionStatus(value: number) { rejectionStatus = value; },
+    set malformedSuccess(value: boolean) { malformedSuccess = value; },
+    set dropCreate(value: boolean) { dropCreate = value; },
     set cancelBeforeProvider(value: boolean) { cancelBeforeProvider = value; },
     set setupDelay(value: number) { setupDelay = value; }, get now() { return now; },
     advance(ms: number) { now += ms; },
@@ -90,7 +101,8 @@ async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBud
     disconnect(id: string) { sockets.get(id)!.terminate(); },
     async restart() { await controller.stop(); controller = new HostedVoice(db, provider,
       { accountAllowlist: new Set([account]), lifetimeFundingCapNano: cap,
-        billingUnit: minuteAllowance === undefined ? 'nanoUSD' : 'milliseconds', helpers: helperAdmission, now: () => now, closeGraceMilliseconds: 20 }); await controller.start(); },
+        publicMinuteAccess: paid, publicPaidAccess: paid, onStartupFailure: diagnostic => diagnostics.push(diagnostic),
+    billingUnit: minuteAllowance === undefined ? 'nanoUSD' : 'milliseconds', helpers: helperAdmission, now: () => now, closeGraceMilliseconds: 20 }); await controller.start(); },
     async wallet() { return (await db.query('SELECT balance_nano,reserved_nano FROM wallets WHERE account_id=$1', [account])).rows[0]; },
     async minutes() { return (await db.query('SELECT balance_ms,reserved_ms FROM minute_wallets WHERE account_id=$1', [account])).rows[0]; },
     async cleanup() {
@@ -462,6 +474,128 @@ integration('refunding a minute purchase during speech closes and recovers relea
     assert.equal(status.reversalOutstandingMilliseconds, 15_000);
     assert.equal(status.reversedMilliseconds, 1_785_000);
     assert.equal((await f.db.query('SELECT close_reason FROM hosted_sessions WHERE id=$1', [live.sessionID])).rows[0].close_reason, 'funding_reversed');
+  } finally { await f.cleanup(); }
+});
+
+for (const mode of ['legacy', 'minutes', 'paid'] as const) {
+  integration(`explicit HTTP rejection releases ${mode} funding and permits a new attempt without reusing its key`, async () => {
+    const f = await fixture(2_000_000_000n, mode === 'legacy' ? undefined : mode === 'paid' ? 0 : 600_000,
+      mode === 'legacy' ? undefined : 50_000_000n, mode === 'paid');
+    try {
+      f.rejectCreate = true; f.rejectionStatus = 429;
+      const before = mode === 'minutes' ? await f.minutes() : await f.wallet();
+      await assert.rejects(f.controller.create(f.account, 'explicit-rejection-key', 'v=0', 'es-ES'), {
+        code: 'provider_create_rejected', providerStatus: 429, requestID: 'req_test_rejection'
+      });
+      assert.deepEqual(mode === 'minutes' ? await f.minutes() : await f.wallet(), before);
+      const row = (await f.db.query('SELECT * FROM hosted_sessions')).rows[0];
+      assert.equal(row.state, 'closed'); assert.equal(row.provider_rejection_status, 429);
+      assert.equal(row.provider_rejection_request_id, 'req_test_rejection');
+      assert.equal(row.provider_cost_nano, '0'); assert.equal(row.funding_exposure_nano, '0');
+      assert.equal(row.provider_session_id, null);
+      assert.equal(JSON.stringify(row).includes('private-provider-error'), false);
+      assert.deepEqual(f.diagnostics, [{ category: 'http_rejected', providerStatus: 429, requestID: 'req_test_rejection' }]);
+      if (mode !== 'legacy') {
+        assert.ok(row.provider_attempted_at);
+        const helper = (await f.db.query('SELECT * FROM hosted_helper_sessions')).rows[0];
+        assert.equal(helper.post_close_budget_nano, '0'); assert.equal(helper.liability_nano, '0');
+        assert.equal(helper.cash_pool_nano, '0');
+      }
+      await assert.rejects(f.db.query('UPDATE hosted_sessions SET provider_rejection_status=NULL WHERE id=$1', [row.id]));
+      await assert.rejects(f.controller.create(f.account, 'explicit-rejection-key', 'v=0', 'es-ES'), { code: 'live_request_already_created' });
+      assert.equal(f.creates, 1);
+      await f.restart(); f.rejectCreate = false;
+      const next = await f.controller.create(f.account, 'new-after-http-rejection', 'v=0', 'es-ES');
+      assert.equal(f.creates, 2); assert.equal((await f.controller.status(f.account, next.sessionID)).state, 'active');
+    } finally { await f.cleanup(); }
+  });
+}
+for (const failure of ['timeout-status', 'server-status', 'transport', 'malformed-success'] as const) {
+  integration(`${failure} remains uncertain and keeps minute and helper holds`, async () => {
+    const f = await fixture(2_000_000_000n, 600_000, 50_000_000n);
+    try {
+      f.rejectCreate = ['timeout-status', 'server-status'].includes(failure);
+      f.rejectionStatus = failure === 'timeout-status' ? 408 : 503;
+      f.dropCreate = failure === 'transport'; f.malformedSuccess = failure === 'malformed-success';
+      await assert.rejects(f.controller.create(f.account, 'uncertain-create-failure', 'v=0', 'es-ES'), { code: 'provider_session_unconfirmed' });
+      assert.equal((await f.minutes()).reserved_ms, '600000');
+      const row = (await f.db.query('SELECT * FROM hosted_sessions')).rows[0];
+      assert.equal(row.state, 'incomplete'); assert.equal(row.provider_rejection_status, null);
+      const helper = (await f.db.query('SELECT * FROM hosted_helper_sessions')).rows[0];
+      assert.equal(helper.liability_nano, '500000000'); assert.equal(helper.post_close_budget_nano, null);
+      assert.equal(JSON.stringify(f.diagnostics).includes('private-'), false);
+      await f.restart();
+      await assert.rejects(f.controller.create(f.account, 'blocked-new-offer', 'v=0', 'es-ES'), { code: 'live_session_unresolved' });
+      assert.equal(f.creates, 1);
+    } finally { await f.cleanup(); }
+  });
+}
+integration('a settlement database failure rolls back all releases and logs only its category', async () => {
+  const f = await fixture(2_000_000_000n, 600_000, 50_000_000n);
+  try {
+    await f.db.query(`CREATE FUNCTION reject_rejection_test() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.provider_rejection_status IS NOT NULL THEN RAISE EXCEPTION 'private-database-error'; END IF; RETURN NEW; END $$`);
+    await f.db.query('CREATE TRIGGER reject_rejection_test BEFORE UPDATE ON hosted_sessions FOR EACH ROW EXECUTE FUNCTION reject_rejection_test()');
+    f.rejectCreate = true; f.rejectionStatus = 400;
+    await assert.rejects(f.controller.create(f.account, 'rejected-but-db-fails', 'v=0', 'es-ES'), { code: 'provider_session_unconfirmed' });
+    assert.deepEqual(await f.minutes(), { balance_ms: '600000', reserved_ms: '600000' });
+    assert.equal((await f.db.query("SELECT count(*) AS total FROM minute_entries WHERE kind='settle'")).rows[0].total, '0');
+    assert.equal((await f.db.query('SELECT state FROM minute_reservations')).rows[0].state, 'open');
+    assert.equal((await f.db.query('SELECT liability_nano FROM hosted_helper_sessions')).rows[0].liability_nano, '500000000');
+    assert.deepEqual(f.diagnostics.at(-1), { category: 'rejection_settlement_failed' });
+    assert.equal(JSON.stringify(f.diagnostics).includes('private-'), false);
+    await assert.rejects(f.controller.create(f.account, 'db-failure-retry', 'v=0', 'es-ES'), { code: 'live_session_unresolved' });
+  } finally { await f.cleanup(); }
+});
+test('rejection diagnostics reject unsafe metadata and never include provider body text', () => {
+  const error = new LiveCreateRejectedError(401, 'private value with spaces');
+  assert.equal(error.requestID, undefined); assert.equal(error.message, 'provider_create_rejected');
+  for (const status of [200, 408, 500, NaN]) assert.throws(() => new LiveCreateRejectedError(status));
+  assert.equal(new LiveCreateFailure('http_uncertain', 502, 'req_safe').requestID, 'req_safe');
+});
+
+integration('an attach rejection after successful create keeps its confirmed provider hold', async () => {
+  const f = await fixture(2_000_000_000n, 600_000, 50_000_000n);
+  try {
+    f.provider.attach = async () => { throw new LiveCreateRejectedError(403, 'req_attach_rejection'); };
+    await assert.rejects(f.controller.create(f.account, 'attach-failure-offer', 'v=0', 'es-ES'), { code: 'provider_session_unconfirmed' });
+    const row = (await f.db.query('SELECT * FROM hosted_sessions')).rows[0];
+    assert.equal(row.provider_session_id, 'live_fake_1'); assert.equal(row.state, 'incomplete');
+    assert.equal(row.provider_rejection_status, null); assert.equal((await f.minutes()).reserved_ms, '600000');
+    assert.equal(f.hangups, 1);
+    assert.deepEqual(f.diagnostics, [{ category: 'provider_attach_failed' }]);
+  } finally { await f.cleanup(); }
+});
+integration('the real HTTP adapter recognizes explicit client rejection status without retaining its body', async () => {
+  const f = await fixture();
+  try {
+    f.rejectCreate = true;
+    for (const status of [400, 401, 403, 404, 409, 422, 429]) {
+      f.rejectionStatus = status;
+      await assert.rejects(f.provider.create('v=0', 'es-ES'), error => {
+        assert.ok(error instanceof LiveCreateRejectedError); assert.equal(error.providerStatus, status);
+        assert.equal(error.requestID, 'req_test_rejection');
+        assert.equal(JSON.stringify(error).includes('private-provider-error'), false); return true;
+      });
+    }
+  } finally { await f.cleanup(); }
+});
+
+integration('a late provider result cannot reopen a session closed by operator recovery', async () => {
+  const f = await fixture(2_000_000_000n, 600_000);
+  try {
+    const create = f.provider.create.bind(f.provider);
+    f.provider.create = async (...args) => {
+      const result = await create(...args);
+      // Simulate the operator's committed closure while this network result was delayed.
+      await f.db.query("UPDATE hosted_sessions SET state='closed',charged_ms=0,close_reason='operator_funded_startup_recovery' WHERE account_id=$1", [f.account]);
+      return result;
+    };
+    await assert.rejects(f.controller.create(f.account, 'late-provider-result', 'v=0', 'es-ES'), { code: 'provider_session_unconfirmed' });
+    const row = (await f.db.query('SELECT * FROM hosted_sessions')).rows[0];
+    assert.equal(row.state, 'closed'); assert.equal(row.close_reason, 'operator_funded_startup_recovery');
+    assert.equal(row.provider_session_id, null); assert.equal(f.hangups, 1);
+    assert.deepEqual(f.diagnostics, [{ category: 'persist_provider_session_failed' }]);
   } finally { await f.cleanup(); }
 });
 

@@ -167,3 +167,34 @@ integration('runtime submits without reading reports and can only prune expired 
     await runtime.end(); await db!.query(`DROP OWNED BY ${role}; DROP ROLE ${role}`);
   }
 });
+
+integration('review view stays inaccessible after default privileges and broad grant refreshes', async () => {
+  const role = `feedback_view_runtime_${suffix}`;
+  await db!.query(`CREATE ROLE ${role}; GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
+  const grants = (await readFile(new URL('../operations/feedback-runtime-grants.sql', import.meta.url), 'utf8'))
+    .replaceAll('mural_runtime', role);
+  const runtimeURL = new URL(url!); runtimeURL.searchParams.set('options', `-c search_path=${schema} -c role=${role}`);
+  const runtime = connectDatabase(runtimeURL.toString());
+  try {
+    await db!.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT SELECT,INSERT,UPDATE ON TABLES TO ${role}`);
+    await db!.query(`CREATE VIEW unexpired_ai_feedback WITH (security_barrier=true) AS
+      SELECT * FROM ai_feedback_reports WHERE expires_at>now()`);
+    await new AIReports(db!, config).submit(body(), network());
+    assert.equal((await runtime.query('SELECT excerpt FROM unexpired_ai_feedback')).rowCount, 1,
+      'Default table privileges also apply to newly created views.');
+    await db!.query(grants);
+    for (const statement of ['SELECT excerpt FROM unexpired_ai_feedback', 'SELECT excerpt FROM ai_feedback_reports',
+      "UPDATE unexpired_ai_feedback SET excerpt='changed'", 'DELETE FROM unexpired_ai_feedback'])
+      await assert.rejects(runtime.query(statement), /permission denied/);
+    await db!.query(`GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA ${schema} TO ${role}`);
+    assert.equal((await runtime.query('SELECT excerpt FROM unexpired_ai_feedback')).rowCount, 1);
+    await db!.query(grants);
+    await assert.rejects(runtime.query('SELECT excerpt FROM unexpired_ai_feedback'), /permission denied/);
+    await assert.rejects(runtime.query('SELECT excerpt FROM ai_feedback_reports'), /permission denied/);
+    await new AIReports(runtime, config).submit(body(), network('198.51.100.29'));
+    assert.deepEqual(await pruneAIReports(runtime), { reports: 0, limits: 0 });
+  } finally {
+    await runtime.end();
+    await db!.query(`DROP VIEW IF EXISTS unexpired_ai_feedback; DROP OWNED BY ${role}; DROP ROLE ${role}`);
+  }
+});

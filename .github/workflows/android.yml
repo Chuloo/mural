@@ -78,6 +78,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Install SDK components
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Build interface tests before starting the emulator
+        working-directory: apps/android
+        run: ./gradlew --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process :app:assembleUiTest :app:assembleUiTestAndroidTest
       - name: Allow the test runner to use hardware virtualization
         run: sudo chmod a+rw /dev/kvm
       - name: Run native interface and compatibility checks
@@ -90,10 +95,23 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
           working-directory: apps/android
-          script: ./gradlew --no-daemon :app:connectedUiTestAndroidTest
+          script: |
+            mkdir -p build/device-diagnostics
+            adb logcat -c
+            adb logcat -v threadtime > build/device-diagnostics/logcat.txt &
+            ./gradlew --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process :app:connectedUiTestAndroidTest
+      - name: Collect runner diagnostics
+        if: always()
+        run: |
+          mkdir -p apps/android/build/device-diagnostics
+          free -h > apps/android/build/device-diagnostics/memory.txt
+          sudo dmesg --ctime > apps/android/build/device-diagnostics/kernel.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: android-device-test-reports
-          path: apps/android/app/build/reports/androidTests/
+          path: |
+            apps/android/app/build/reports/androidTests/
+            apps/android/app/build/outputs/androidTest-results/
+            apps/android/build/device-diagnostics/
           retention-days: 14

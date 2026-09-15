@@ -82,8 +82,9 @@ class AccountController(
                 notice = if (remoteEnded) null else AccountNotice.SIGNED_OUT_LOCALLY)
         }
     }
-    suspend fun delete() = operation {
+    suspend fun delete(beforeRequest: suspend (String) -> Unit = {}) = operation {
         val current = session ?: return@operation
+        beforeRequest(current.accountID)
         api.delete(current)
         withContext(NonCancellable) {
             storage.clear(); session = null

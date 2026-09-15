@@ -504,6 +504,10 @@ def check_archive_fields(swift_path, kotlin_path):
             continue
         call_match = re.search(r'fields\(' + re.escape(variable) + r',\s*"([^"]*)"\)', kotlin_text)
         if not call_match:
+            if re.search(r'\bfun fields\(', kotlin_text):
+                failures.append(format_failure(
+                    'archive-fields', f'{struct_name} has no fields({variable}, ...) required-key check in Kotlin, so archives Swift rejects would decode with defaults',
+                    kotlin_path, kotlin_line, swift_path, struct_line))
             continue
         call_line = line_of(kotlin_text, call_match.start())
         call_fields = set(call_match.group(1).split())

@@ -1,5 +1,5 @@
-REVOKE ALL ON minute_provider_receipts,minute_stripe_checkout_attempts,minute_play_order_bindings,
+REVOKE ALL ON minute_provider_receipts,minute_stripe_checkout_attempts,minute_stripe_paid_totals,minute_play_order_bindings,
   minute_provider_voids,minute_provider_jobs FROM mural_runtime;
-GRANT SELECT,INSERT ON minute_provider_receipts,minute_stripe_checkout_attempts,minute_play_order_bindings,
+GRANT SELECT,INSERT ON minute_provider_receipts,minute_stripe_checkout_attempts,minute_stripe_paid_totals,minute_play_order_bindings,
   minute_provider_voids TO mural_runtime;
 GRANT SELECT,INSERT,UPDATE ON minute_provider_jobs TO mural_runtime;

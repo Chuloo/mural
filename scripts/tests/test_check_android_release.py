@@ -1,5 +1,7 @@
 import importlib.util
+import io
 import json
+from contextlib import redirect_stdout
 from pathlib import Path
 import struct
 import tempfile
@@ -267,6 +269,100 @@ class AndroidReleaseTests(unittest.TestCase):
         for name, limit in release.TEXT_LIMITS.items():
             release.check_text(release.ROOT / "release/android/metadata" / spec["metadataLocale"] / f"{name}.txt", limit,
                                name in ("title", "short-description"))
+
+    def cli_fixture(self):
+        spec = self.branding() | {"schemaVersion": 1, "scope": "hosted-guest-preview",
+            "packageName": "chat.mural.android", "versionCode": 5, "versionName": "0.1",
+            "minSdk": 26, "targetSdk": 36, "metadataLocale": "en-US", "requiredLicenses": ["LICENSE.txt"],
+            "assets": {"icon": "assets/icon.png", "featureGraphic": "assets/feature.png",
+                       "phoneScreenshots": ["assets/one.png", "assets/two.png"]}}
+        directory = self.root / "release"
+        metadata = directory / "metadata/en-US"
+        metadata.mkdir(parents=True)
+        for name in release.TEXT_LIMITS:
+            (metadata / f"{name}.txt").write_text("Mural preview\n")
+        assets = directory / "assets"
+        assets.mkdir()
+        for name, width, height, color in [("icon", 512, 512, 6), ("feature", 1024, 500, 2),
+                                           ("one", 1080, 1920, 2), ("two", 1080, 1920, 2)]:
+            png(assets / f"{name}.png", width, height, color)
+        (directory / "release-spec.json").write_text(json.dumps(spec))
+        historical = directory / "specs/play-v4.json"
+        historical.parent.mkdir()
+        historical.write_text(json.dumps(spec | {"versionCode": 4}))
+        jar = self.root / "bundletool.jar"
+        jar.write_bytes(b"local fixture")
+        return directory, historical, self.bundle(), jar
+
+    def run_cli(self, directory, aab, jar, manifest_version, *extra):
+        def execute(command, **kwargs):
+            config = {"optimizations": {"uncompressNativeLibraries": {"alignment": "PAGE_ALIGNMENT_16K"}}}
+            manifest = f'''<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+                package="chat.mural.android" android:versionCode="{manifest_version}" android:versionName="0.1">
+                <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/>
+                <application android:allowBackup="false" android:usesCleartextTraffic="false"/>
+            </manifest>'''
+            return SimpleNamespace(returncode=0, stdout=json.dumps(config) if "config" in command else manifest)
+        output = io.StringIO()
+        with patch.object(release, "ROOT", self.root), patch.object(release, "git_state", return_value={}), \
+                patch.object(release.subprocess, "run", execute), redirect_stdout(output):
+            status = release.main(["--release-dir", str(directory), "--aab", str(aab),
+                                   "--bundletool-jar", str(jar), "--require-bundle", "--require-assets", *extra])
+        return status, json.loads(output.getvalue())
+
+    def test_cli_default_keeps_current_version_and_rejects_archived_bundle(self):
+        directory, _, aab, jar = self.cli_fixture()
+        status, result = self.run_cli(directory, aab, jar, 5)
+        self.assertEqual(status, 0)
+        self.assertEqual(result["specification"]["versionCode"], 5)
+        self.assertEqual(result["specification"]["sha256"], release.sha256(directory / "release-spec.json"))
+        status, result = self.run_cli(directory, aab, jar, 4)
+        self.assertEqual(status, 1)
+        self.assertIn("versionCode differs", result["error"])
+
+    def test_cli_explicit_historical_spec_uses_shared_assets_and_enforces_v4(self):
+        directory, historical, aab, jar = self.cli_fixture()
+        status, result = self.run_cli(directory, aab, jar, 4, "--spec", str(historical))
+        self.assertEqual(status, 0)
+        self.assertEqual(result["specification"]["file"], "play-v4.json")
+        self.assertEqual(result["specification"]["sha256"], release.sha256(historical))
+        self.assertEqual(result["checks"]["bundletool"]["manifest"]["versionCode"], 4)
+        self.assertEqual(len(result["checks"]["assets"]), 4)
+        self.assertEqual(json.loads((directory / "release-spec.json").read_text())["versionCode"], 5)
+        status, result = self.run_cli(directory, aab, jar, 5, "--spec", str(historical))
+        self.assertEqual(status, 1)
+        self.assertIn("versionCode differs", result["error"])
+
+    def test_cli_explicit_missing_or_invalid_spec_does_not_fall_back(self):
+        directory, historical, aab, jar = self.cli_fixture()
+        for path, content in [(historical, '{"schemaVersion": 99}'),
+                              (historical, '{"schemaVersion": 1, "scope": "unknown"}'),
+                              (directory / "missing.json", None)]:
+            if content is not None:
+                path.write_text(content)
+            with self.subTest(content=content):
+                status, result = self.run_cli(directory, aab, jar, 5, "--spec", str(path))
+                self.assertEqual(status, 1)
+                self.assertFalse(result["passed"])
+
+    def test_checked_in_specs_separate_current_default_direct_and_historical_versions(self):
+        directory = release.ROOT / "release/android"
+        current = json.loads((directory / "release-spec.json").read_text())
+        direct = json.loads((directory / "specs/direct-v6.json").read_text())
+        previous_direct = json.loads((directory / "specs/direct-v5.json").read_text())
+        historical = json.loads((directory / "specs/play-v4.json").read_text())
+        submitted = json.loads((directory / "evidence/play-submission-2026-09-14.json").read_text())
+        build = (release.ROOT / "apps/android/app/build.gradle.kts").read_text()
+        self.assertRegex(build, rf"versionCode\s*=\s*{current['versionCode']}\b")
+        self.assertEqual(historical["versionCode"], submitted["versionCode"])
+        self.assertEqual(historical["scope"], "hosted-guest-preview")
+        self.assertEqual(previous_direct["versionCode"], 5)
+        self.assertEqual(direct["versionCode"], 6)
+        self.assertEqual(current["versionCode"], direct["versionCode"])
+        self.assertGreater(current["versionCode"], previous_direct["versionCode"])
+        self.assertGreater(previous_direct["versionCode"], historical["versionCode"])
+        self.assertEqual(previous_direct["scope"], "hosted-minute-release")
+        self.assertEqual(direct["scope"], "hosted-minute-release")
 
 
 if __name__ == "__main__":

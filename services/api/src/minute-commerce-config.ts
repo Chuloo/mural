@@ -118,10 +118,10 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
   const vault = new MinuteReceiptVault(db, receipt.activeKeyID, ring);
   let stripe: StripeMinuteProvider | undefined, play: PlayMinuteProvider | undefined;
   if (manifest.stripe) {
-    const settings = keys(manifest.stripe, ['accountID']);
+    const settings = keys(manifest.stripe, ['accountID','managedPayments']);
     const credentials = keys((await protectedJSON(env[prefix + 'STRIPE_CREDENTIALS_FILE'])).value, ['secretKey','webhookSecret']);
     stripe = new StripeMinuteProvider(db, vault, { accountID: settings.accountID, secretKey: credentials.secretKey,
-      webhookSecret: credentials.webhookSecret, environment, allowLive, checkoutEnabled: salesEnabled, webOrigin: manifest.webOrigin }, dependencies.stripeTransport);
+      webhookSecret: credentials.webhookSecret, managedPayments: settings.managedPayments, environment, allowLive, checkoutEnabled: salesEnabled, webOrigin: manifest.webOrigin }, dependencies.stripeTransport);
   } else if (env[prefix + 'STRIPE_CREDENTIALS_FILE'] !== undefined || dependencies.stripeTransport) throw invalid();
   if (manifest.play) {
     const settings = keys(manifest.play, ['packageName','currencyExponents']);

@@ -28,7 +28,7 @@ The manifest contains `version: 1`, `environment: "test" | "live"`, at least one
 | Field | Shape |
 | --- | --- |
 | `webOrigin` | HTTPS origin without credentials, port, query, fragment or non-root path. Required for Stripe. |
-| `stripe` | `{ "accountID": "acct_…" }` |
+| `stripe` | `{ "accountID": "acct_…", "managedPayments": false }`; mode defaults to `false` and accepts only a boolean. |
 | `play` | `{ "packageName": "chat.mural.android", "currencyExponents": { "usd": 2 } }` |
 | `runner` | Optional limits listed below. |
 
@@ -44,7 +44,7 @@ The active catalog contains `{ "version": 2, "products": [...] }`. It has at mos
 | `sku` | Server SKU, 1–128 characters using letters, numbers, `.`, `_`, `:`, `-` |
 | `providerProduct` | Actual Stripe Price ID or Play product ID, at most 200 characters |
 | `currency` | Three lowercase letters |
-| `totalMinor` | Final provider charge in integer currency minor units, 1–100,000,000 |
+| `totalMinor` | Original quote in integer currency minor units, 1–100,000,000. For Managed Payments this is the pre-tax base; Stripe calculates tax and any local-currency presentation at Checkout. |
 | `entitlementKind` | `ai_value` |
 | `billingBasis` | `actual-ai-usage` |
 | `estimate` | `true` |
@@ -105,3 +105,5 @@ The initial sweep covers the previous 29 days, leaving time to complete paginati
 The cursor stores only environment, package, pagination token, timestamps and watermark; it stores no user or purchase tokens. Receipt reconciliation every six hours also refetches individual provider orders. Google applies void time filters to when its systems observe the void and supports token pagination. [Google Play voided purchases API](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.voidedpurchases/list).
 
 Related: [How to enable minute commerce](enable-minute-commerce.md), [provider integration](minute-provider-integration.md), [minute purchase accounting](minute-purchases.md).
+
+Managed mode and refund amount checks are defined in the [Stripe Managed Payments verification reference](stripe-managed-payments.md).

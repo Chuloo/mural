@@ -1,0 +1,71 @@
+{
+  "filename": "Mural-Android-preview-2026-09-14-v4.apk",
+  "bytes": 63496043,
+  "sha256": "4f0b5eb731c6bb9508a853d3d46976916ba0bf244830161facb68bbcb6d18373",
+  "manifest": {
+    "package": "chat.mural.android",
+    "versionCode": 4,
+    "versionName": "0.1",
+    "minSdk": 26,
+    "targetSdk": 36,
+    "debuggable": true,
+    "testOnly": false,
+    "allowBackup": false,
+    "usesCleartextTraffic": false
+  },
+  "buildType": "debug",
+  "apiOrigin": "https://api.mural.chat",
+  "minutePurchasesEnabled": false,
+  "minutePurchaseEnvironment": "test",
+  "signatureVerified": true,
+  "signerCertificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+  "matchesExistingPersonalDebugIdentity": true,
+  "zipalign16KB": true,
+  "embeddedSecretScan": {
+    "entriesScanned": 605,
+    "patterns": [
+      "OpenAI secret key",
+      "Stripe secret or restricted key",
+      "Google OAuth client secret",
+      "GitHub token",
+      "private key material"
+    ],
+    "findings": 0,
+    "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+  },
+  "requiredNotices": {
+    "Mural-LICENSE.txt": true,
+    "Apache-2.0.txt": true,
+    "Nunito-OFL.txt": true,
+    "THIRD-PARTY-NOTICES.txt": true,
+    "WebRTC-SDK-LICENSE.txt": true,
+    "WebRTC-THIRD-PARTY-NOTICES.md": true
+  },
+  "nativeLibraries": {
+    "lib/arm64-v8a/libandroidx.graphics.path.so": {
+      "bytes": 10096,
+      "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6"
+    },
+    "lib/arm64-v8a/libjingle_peerconnection_so.so": {
+      "bytes": 12287312,
+      "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca"
+    }
+  },
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-14T08:48:13.005394+00:00",
+  "source": {
+    "commit": "cd75bdb23ee1ed5d4318ff084d7400b35306120a",
+    "dirtyAtBuild": false,
+    "description": "Built from a clean committed tree with explicit public API/Google client configuration and paid checkout disabled.",
+    "androidSourceFingerprintSHA256": "370bce5ed0da707d1af36af3372c712bedac96c493cc595a52b78d0a6f9d0e77",
+    "sourceManifest": "release/private/android-final-2026-09-14-v4/build-snapshot.json",
+    "sourceUnchangedAtPackagingVerification": true
+  },
+  "buildTests": {
+    "tests": 257,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "scope": "Signed personal debug preview. Full UI tests use the isolated variant. No personal installation or live provider call by this packaging audit."
+}

@@ -23,6 +23,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import chat.mural.core.ArchiveCodec
+import chat.mural.core.MandarinPinyin
+import chat.mural.network.IcuHanReader
 import chat.mural.ui.MuralApp
 import chat.mural.ui.MuralStartup
 import java.io.ByteArrayOutputStream
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MandarinPinyin.reader = IcuHanReader()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
@@ -143,7 +146,7 @@ class MainActivity : ComponentActivity() {
             // AccountController rejects a different Google account before saving its bearer.
             val pendingOwner = vm.pendingMemberForSignIn()
             account.refreshAndWait()
-            if (pendingOwner == null && !vm.prepareForAccountChange()) return@launch
+            if (pendingOwner == null && !vm.prepareForSignIn()) return@launch
             account.signIn(expectedAccountID = pendingOwner) { nonce ->
                 try {
                     val option = GetSignInWithGoogleOption.Builder(config.googleServerClientID).setNonce(nonce).build()
@@ -157,7 +160,7 @@ class MainActivity : ComponentActivity() {
                 catch (error: CancellationException) { throw error }
                 catch (_: Exception) { throw AccountFailure.Google }
             }
-            if (pendingOwner != null && account.state.value.accountID == pendingOwner) vm.prepareForAccountChange()
+            if (pendingOwner != null && account.state.value.accountID == pendingOwner) vm.settleRenewedMember()
             if (account.state.value.signedIn) { vm.completeGuestSignIn(); account.refreshAndWait() }
             vm.refreshHostedReadiness()
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -169,7 +172,7 @@ class MainActivity : ComponentActivity() {
     private fun changeAccount(delete: Boolean) {
         if (changingAccount || account.state.value.busy) return
         val conversation = vm
-        account.changeAccount(delete, conversation::prepareForAccountChange, conversation::refreshHostedReadiness)
+        account.changeAccount(delete, conversation::prepareForAccountChange, conversation::refreshHostedReadiness, conversation::prepareGuestCustodyForDeletion)
         synchronizeAccountState()
     }
 

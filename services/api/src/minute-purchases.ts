@@ -4,6 +4,18 @@ import { transaction, type Database } from './db.js';
 import { ServiceError } from './errors.js';
 import { appendMinuteEntry, lockMinuteWallet, millisecondsForMinutes } from './minutes.js';
 
+/** Recover a durable client attempt without contacting Stripe or creating a new purchase.
+ * Both minute and AI-value orders share this immutable, account-scoped key. */
+export async function stripeOrderByKey(db: Database, accountID: string, key: string): Promise<{ orderID: string }> {
+  if (!uuid.test(accountID) || typeof key !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(key))
+    throw new ServiceError('invalid_minute_order');
+  const row = (await db.query(`SELECT o.id FROM minute_purchase_orders o JOIN accounts a ON a.id=o.account_id
+    WHERE o.account_id=$1 AND o.idempotency_key=$2 AND o.provider='stripe'
+      AND a.deleted_at IS NULL AND NOT a.is_guest`, [accountID, key])).rows[0];
+  if (!row) throw new ServiceError('purchase_not_found', 404);
+  return { orderID: row.id };
+}
+
 export type PurchaseProvider = 'stripe' | 'play';
 export type PurchaseEnvironment = 'test' | 'live';
 export interface PurchaseScope {

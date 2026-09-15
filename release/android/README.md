@@ -1,17 +1,25 @@
 # Android release package
 
-This directory prepares the **Android guest preview for adults 18+**. Eligible new installations can receive ten free conversation minutes while trial funding is available. Google sign-in and an optional personal OpenAI key are supported; paid checkout remains disabled. These files do not establish Play release approval.
+The default release specification tracks **version 6**, matching the Android build. Clean builds keep paid purchases disabled. The separate direct-distribution configuration enables Stripe purchases; it requires its own configuration and release checks.
+
+The archived **version 4 guest preview for adults 18+** was submitted to Play production review on 14 September 2026, with paid checkout disabled. That [submission record](evidence/play-submission-2026-09-14.json) does not establish approval or publication. The retained Play listing copy, declarations and v4 test results describe that submitted preview. See [candidate scopes](candidate-scopes.md) before validating or distributing a build.
 
 | File | Purpose |
 | --- | --- |
-| [signed-candidate-2026-09-14-v3.md](signed-candidate-2026-09-14-v3.md) | Current version 3 APK/AAB, full UI results, certificate and packaging checks |
+| [candidate-scopes.md](candidate-scopes.md) | Current v6 configurations, historical v5 direct distribution and the v4 Play submission |
+| [signed-candidate-2026-09-14-v4.md](signed-candidate-2026-09-14-v4.md) | Historical version 4 free-trial/BYOK APK/AAB, full UI results and packaging checks |
+| [signed-candidate-2026-09-14-v3.md](signed-candidate-2026-09-14-v3.md) | Historical version 3 APK/AAB, certificate and packaging checks |
 | [signed-candidate-2026-09-14-v2.md](signed-candidate-2026-09-14-v2.md) | Historical version 2 APK/AAB and packaging evidence |
 | [signed-candidate-2026-09-14.md](signed-candidate-2026-09-14.md) | Historical version 1 signed bundle and verification scope |
 | [preview-readiness-2026-09-13.md](preview-readiness-2026-09-13.md) | Earlier debug APK and its verification scope |
 | [candidate-audit-8768c86-2026-09-13.md](candidate-audit-8768c86-2026-09-13.md) | Historical unsigned candidate after the account lifecycle fixes; rebuild after later native changes |
 | [candidate-audit-2026-09-13.md](candidate-audit-2026-09-13.md) | Historical candidate before the account lifecycle fixes |
-| [release-spec.json](release-spec.json) | Candidate identity, version, metadata locale, expected assets and bundled notices |
-| [metadata/en-US](metadata/en-US) | Copyable listing text and preview release notes |
+| [release-spec.json](release-spec.json) | Default current v6 identity and funded-preview scope; purchases disabled by default |
+| [specs/direct-v6.json](specs/direct-v6.json) | Current v6 scope for configured direct Stripe distribution |
+| [direct-v6-preparation.md](direct-v6-preparation.md) | Version 6 recovery scope and checks required before building and distribution |
+| [specs/direct-v5.json](specs/direct-v5.json) | Historical v5 direct Stripe specification |
+| [specs/play-v4.json](specs/play-v4.json) | Explicit historical v4 identity for rechecking the submitted Play bundle |
+| [metadata/en-US](metadata/en-US) | Retained v4 Play listing text and preview release notes; revise before a paid Play submission |
 | [declarations.md](declarations.md) | Data flows, permissions, Console declarations and unresolved answers |
 | [build-and-verify.md](build-and-verify.md) | Build and evidence procedure for an approved candidate |
 | [release-gates.md](release-gates.md) | Minimum internal-preview and public-release acceptance checks |

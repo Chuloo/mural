@@ -5,7 +5,7 @@ import { appendEntry, lockWallet, lockPaidWallet, reservePaidInTransaction, sett
 import { ServiceError } from './errors.js';
 import { VoiceMeter } from './meter.js';
 import { cost, RATE_VERSION, TRIAL_MS } from './pricing.js';
-import { supportsLanguage, parseLiveContext, type LiveProvider, type Sideband, type VoiceUsage } from './live-provider.js';
+import { LiveCreateFailure, LiveCreateRejectedError, supportsLanguage, parseLiveContext, type LiveProvider, type Sideband, type VoiceUsage } from './live-provider.js';
 import { appendMinuteEntry, lockMinuteWallet } from './minutes.js';
 import { recoverMinutePurchaseShortfalls } from './minute-purchases.js';
 import { hostedHelperExposure, type HostedHelpers } from './hosted-helpers.js';
@@ -24,6 +24,7 @@ export interface HostedConfig {
   publicPaidAccess?: boolean;
   billingUnit?: 'nanoUSD' | 'milliseconds';
   helpers?: Pick<HostedHelpers, 'reserveSessionBudget'> & Partial<Pick<HostedHelpers,'paidFundingPolicy'|'closeCashBudget'>>;
+  onStartupFailure?: (diagnostic: { category: string; providerStatus?: number; requestID?: string }) => void;
   now?: () => number;
   closeGraceMilliseconds?: number;
 }
@@ -77,7 +78,7 @@ export class HostedVoice {
             await this.prepareMinuteProviderAttempt(row.id, row.account_id, false);
             continue;
           }
-          await this.db.query("UPDATE hosted_sessions SET state='incomplete',close_reason='create_uncertain' WHERE id=$1", [row.id]);
+          await this.db.query("UPDATE hosted_sessions SET state='incomplete',close_reason='create_uncertain' WHERE id=$1 AND state<>'closed'", [row.id]);
           continue;
         }
         try { await this.attach(row.id, row.provider_session_id); } catch { /* The watchdog retries. */ }
@@ -108,6 +109,8 @@ export class HostedVoice {
       await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
       const minuteWallet = minutes ? await lockMinuteWallet(sql, account) : undefined;
       let wallet = minuteWallet ?? await lockWallet(sql, account, true);
+      if((await sql.query('SELECT 1 FROM minute_guest_link_intents WHERE guest_account_id=$1',[account])).rowCount)
+        throw new ServiceError('sign_in_to_continue',403);
       const previous = (await sql.query('SELECT id FROM hosted_sessions WHERE account_id=$1 AND idempotency_key=$2', [account, key])).rows[0];
       // SDP is not persisted. Retrying an offer never starts a second billed call.
       if (previous) throw new ServiceError('live_request_already_created', 409);
@@ -161,11 +164,16 @@ export class HostedVoice {
     if ((minutes || paid) && !await this.prepareMinuteProviderAttempt(id, account))
       throw new ServiceError('live_session_cancelled', 409);
     let created: { sessionID: string; sdp: string } | undefined;
+    let startupStage = 'provider_create';
     try {
       created = await this.provider.create(sdp, language, teachingContext);
       if (minutes || paid) deadline = new Date(this.now() + reservedMilliseconds);
-      await this.db.query("UPDATE hosted_sessions SET provider_session_id=$2,state='active',deadline=$3 WHERE id=$1", [id, created.sessionID, deadline]);
+      startupStage = 'persist_provider_session';
+      const persisted = await this.db.query("UPDATE hosted_sessions SET provider_session_id=$2,state='active',deadline=$3 WHERE id=$1 AND state<>'closed'", [id, created.sessionID, deadline]);
+      if (persisted.rowCount !== 1) throw new ServiceError('provider_session_no_longer_active', 502);
+      startupStage = 'provider_attach';
       await this.attach(id, created.sessionID);
+      startupStage = 'confirm_active';
       const row = (await this.db.query('SELECT state,close_requested_at FROM hosted_sessions WHERE id=$1', [id])).rows[0];
       if (row.state !== 'active' || row.close_requested_at || !this.accepting) throw new ServiceError('provider_connection_lost', 502);
       return { sessionID: id, providerSessionID: created.sessionID, sdp: created.sdp,
@@ -180,13 +188,62 @@ export class HostedVoice {
         helperReservedNanoUSD: paid ? paidReserve.helper.toString() : undefined,
         helperRateVersion: paid ? this.config.helpers!.paidFundingPolicy!.rateVersion : undefined,
         rateVersion: RATE_VERSION, experimental: true };
-    } catch {
+    } catch (error) {
+      this.reportStartupFailure(error instanceof LiveCreateFailure ? {
+        category: error.category, providerStatus: error.providerStatus, requestID: error.requestID
+      } : { category: `${startupStage}_failed` });
+      if (!created && error instanceof LiveCreateRejectedError) {
+        try {
+          await this.settleRejectedCreate(id, account, error);
+        } catch {
+          this.reportStartupFailure({ category: 'rejection_settlement_failed' });
+          // Database failure leaves the original reservation intact for reconciliation.
+          throw new ServiceError('provider_session_unconfirmed', 502);
+        }
+        throw error;
+      }
       if (created) await this.provider.hangup(created.sessionID).catch(() => {});
       await this.db.query(`UPDATE hosted_sessions SET state='incomplete',close_reason='create_or_attach_uncertain'
         WHERE id=$1 AND state<>'closed'`, [id]).catch(() => {});
       // Never guess a final bill or release this hold before a trusted final event/reconciliation.
       throw new ServiceError('provider_session_unconfirmed', 502);
     }
+  }
+  private reportStartupFailure(diagnostic: { category: string; providerStatus?: number; requestID?: string }) {
+    try { this.config.onStartupFailure?.(diagnostic); } catch { /* Diagnostics cannot change accounting. */ }
+  }
+  private async settleRejectedCreate(id: string, account: string, rejection: LiveCreateRejectedError): Promise<void> {
+    await transaction(this.db, async sql => {
+      await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
+      const funding = (await sql.query('SELECT minute_reservation_id FROM hosted_sessions WHERE id=$1 AND account_id=$2', [id, account])).rows[0];
+      if (!funding) throw new ServiceError('provider_reconciliation_required', 503);
+      if (funding.minute_reservation_id) await lockMinuteWallet(sql, account, false);
+      else await lockWallet(sql, account);
+      const row = (await sql.query('SELECT * FROM hosted_sessions WHERE id=$1 AND account_id=$2 FOR UPDATE', [id, account])).rows[0];
+      if (row.state === 'closed' && row.provider_rejection_status !== null) return;
+      if (row.provider_session_id || Number(row.observed_ms) !== 0 || !['creating', 'closing', 'incomplete'].includes(row.state))
+        throw new ServiceError('provider_reconciliation_required', 503);
+      if (row.minute_reservation_id) {
+        const hold = (await sql.query('SELECT * FROM minute_reservations WHERE id=$1 FOR UPDATE', [row.minute_reservation_id])).rows[0];
+        if (hold.state !== 'open') throw new ServiceError('reservation_closed', 409);
+        await appendMinuteEntry(sql, account, `minute-finish:${hold.id}`, 'settle', 0, -Number(hold.amount_ms), row.public_minutes ? 'funded' : 'mixed');
+        await sql.query("UPDATE minute_reservations SET state='settled',used_ms=0 WHERE id=$1", [hold.id]);
+        await recoverMinutePurchaseShortfalls(sql, account);
+      } else if (row.funding_mode === 'ai-value') {
+        await settlePaidInTransaction(sql, account, row.reservation_id, 0n);
+      } else {
+        const hold = (await sql.query('SELECT * FROM reservations WHERE id=$1 FOR UPDATE', [row.reservation_id])).rows[0];
+        if (hold.state !== 'open') throw new ServiceError('reservation_closed', 409);
+        await appendEntry(sql, account, `settlement:${hold.id}`, 'settle', 0n, -BigInt(hold.reserved_nano), row.rate_version);
+        await sql.query("UPDATE reservations SET state='settled',actual_nano=0 WHERE id=$1", [hold.id]);
+      }
+      await sql.query(`UPDATE hosted_sessions SET state='closed',provider_cost_nano=0,funding_exposure_nano=0,
+        charged_ms=CASE WHEN minute_reservation_id IS NOT NULL THEN 0 ELSE NULL END,
+        charged_nano=CASE WHEN reservation_id IS NOT NULL THEN 0 ELSE NULL END,
+        close_reason='provider_create_rejected',provider_rejection_status=$2,provider_rejection_request_id=$3 WHERE id=$1`,
+        [id, rejection.providerStatus, rejection.requestID ?? null]);
+      if (row.funding_mode === 'ai-value') await this.config.helpers!.closeCashBudget!(sql, account, id);
+    });
   }
   /** A committed attempt marker precedes the network call. A crash after it stays uncertain;
    * only a durable cancellation before it can release time without a provider final event. */

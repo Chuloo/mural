@@ -1,0 +1,33 @@
+{
+  "tests": 49,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "seconds": 137.125,
+  "user": 13,
+  "device": {
+    "user": "13",
+    "size": "Physical size: 1080x2424",
+    "density": "Physical density: 420",
+    "fontScale": "1.0",
+    "sdk": "36",
+    "build": "google/sdk_gphone64_arm64/emu64a:16/BE2A.250530.026.D1/13818094:user/release-keys"
+  },
+  "appSHA256": "1454bd84c6f506593c80ec2d0f4225cc9900bd1ea788bcc06ef87ed301e34d9e",
+  "testAPKSHA256": "0fd66ec3319e79a3b6e31a071aec6f566760701f62e42f0f9a687650e0a573c9",
+  "logSHA256": "8836801f6d4a880e4168e1cd73216301fbd81ec677a34d1af06498a3cc1f82c3",
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-14T08:48:13.005394+00:00",
+  "source": {
+    "commit": "cd75bdb23ee1ed5d4318ff084d7400b35306120a",
+    "dirtyAtBuild": false,
+    "description": "Built from a clean committed tree with explicit public API/Google client configuration and paid checkout disabled.",
+    "androidSourceFingerprintSHA256": "370bce5ed0da707d1af36af3372c712bedac96c493cc595a52b78d0a6f9d0e77",
+    "sourceManifest": "release/private/android-final-2026-09-14-v4/build-snapshot.json",
+    "sourceUnchangedAtPackagingVerification": true
+  },
+  "personalDataPreserved": true,
+  "originalUserRestored": true,
+  "deviceSettingsPreserved": true,
+  "scope": "Full offline isolated test package; not live provider, physical audio or Play-signed verification."
+}

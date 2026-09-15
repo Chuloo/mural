@@ -29,6 +29,18 @@ class ConversationProvidersTest {
             assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, true, invalid))
     }
 
+    @Test fun acknowledgedGuestRecoveryDetachesOnlyThatOwnersLeasesAndCannotReuseThemForMember() = runTest {
+        var guestCalls = 0; var memberCalls = 0; var guestCloses = 0
+        val controller = HostedConversationBindings(backgroundScope)
+        controller.bind("guest-local", "guest-owner", lease(Teacher { guestCalls++; response }, { guestCloses++ }, { status("incomplete") }))
+        controller.bind("member-local", "member-owner", lease(Teacher { memberCalls++; response }))
+        controller.delegateOwnerRecovery("guest-owner")
+        assertFalse(controller.hasLease("guest-local")); assertEquals(listOf("member-local"), controller.openSessionIDs)
+        try { controller.respond("guest-local", HelperPurpose.MEANING, "old", "policy", "text"); fail("Guest helper reused") }
+        catch (_: HostedFailure.Unavailable) { }
+        assertEquals(response, controller.respond("member-local", HelperPurpose.MEANING, "new", "policy", "text"))
+        assertEquals(0, guestCalls); assertEquals(0, guestCloses); assertEquals(1, memberCalls)
+    }
     @Test fun helperStaysWithCreatingLeaseAndDeduplicatesLogicalRevision() = runTest {
         var aCalls = 0; var bCalls = 0
         val controller = HostedConversationBindings(backgroundScope) { testScheduler.currentTime }

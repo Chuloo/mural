@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "hosted-guest-preview",
   "packageName": "chat.mural.android",
-  "versionCode": 4,
+  "versionCode": 6,
   "versionName": "0.1",
   "minSdk": 26,
   "targetSdk": 36,

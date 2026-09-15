@@ -60,6 +60,33 @@ class GuestMinuteClientTest {
         assertEquals("/v1/minutes/link-guest", request.path); assertEquals("Bearer ${member.accessToken}", request.getHeader("Authorization"))
         assertEquals(buildJsonObject { put("guestAccessToken", guest.accessToken) }, Json.parseToJsonElement(request.body.readUtf8()))
     }
+    @Test fun deferredLinkUsesBothProofsInitiallyThenOnlyMemberBearerForRecovery() = runBlocking {
+        val member = guest.copy(accountID = "22222222-2222-4222-8222-222222222222", accessToken = "m".repeat(43))
+        repeat(2) { server.enqueue(MockResponse().setBody("""{"transferredMilliseconds":0,"alreadyLinked":false,"outcome":"pending","pending":true}""")) }
+        assertTrue(api.deferLink(member, guest.accessToken, guest.accountID).pending)
+        assertTrue(api.deferLink(member, null, guest.accountID).pending)
+        val initial = server.takeRequest(); val recovery = server.takeRequest()
+        assertEquals("Bearer ${member.accessToken}", initial.getHeader("Authorization"))
+        assertEquals("Bearer ${member.accessToken}", recovery.getHeader("Authorization"))
+        assertEquals(buildJsonObject { put("guestAccessToken", guest.accessToken); put("deferPending", true); put("guestAccountID", guest.accountID) }, Json.parseToJsonElement(initial.body.readUtf8()))
+        assertEquals(buildJsonObject { put("deferPending", true); put("guestAccountID", guest.accountID) }, Json.parseToJsonElement(recovery.body.readUtf8()))
+        assertEquals("/v1/minutes/link-guest", recovery.path)
+    }
+    @Test fun deferredRecoveryExplicitlyScopesEachDeviceAndRejectsMalformedGuestID() = runBlocking {
+        val otherGuest = "33333333-3333-4333-8333-333333333333"
+        repeat(2) { server.enqueue(MockResponse().setBody("""{"transferredMilliseconds":0,"alreadyLinked":false,"outcome":"pending","pending":true}""")) }
+        api.deferLink(guest, null, id); api.deferLink(guest, null, otherGuest)
+        val first = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val second = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals(id, first.getValue("guestAccountID").jsonPrimitive.content)
+        assertEquals(otherGuest, second.getValue("guestAccountID").jsonPrimitive.content)
+        try { api.deferLink(guest, null, "not-an-account"); fail("Invalid scope") } catch (_: AccountFailure.InvalidResponse) { }
+        assertEquals(2, server.requestCount)
+    }
+    @Test fun legacyCallCannotSilentlyAcceptDeferredOwnership() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{"transferredMilliseconds":0,"alreadyLinked":false,"outcome":"pending","pending":true}"""))
+        try { api.link(guest, "x".repeat(43)); fail("Legacy call accepted pending") } catch (_: AccountFailure.InvalidResponse) { }
+    }
     @Test fun redirectCannotReceiveInstallationSecretOrGuestBearer() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(307).setHeader("Location", server.url("/other")).setBody("{}"))
         try { api.start(installation); fail("followed redirect") } catch (error: AccountFailure.Http) { assertEquals(307, error.status) }

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "scope": "hosted-minute-release",
+  "packageName": "chat.mural.android",
+  "versionCode": 6,
+  "versionName": "0.1",
+  "minSdk": 26,
+  "targetSdk": 36,
+  "metadataLocale": "en-US",
+  "branding": {
+    "iosIconSet": "apps/ios/App/Assets.xcassets/AppIcon.appiconset",
+    "iosIconFile": "MuralIcon.png",
+    "androidIconFile": "apps/android/app/src/main/res/drawable-nodpi/mural_icon.png",
+    "androidManifest": "apps/android/app/src/main/AndroidManifest.xml",
+    "androidAdaptiveIcon": "apps/android/app/src/main/res/mipmap-anydpi-v26/ic_mural.xml",
+    "androidForeground": "apps/android/app/src/main/res/drawable/ic_mural_foreground.xml",
+    "iosDesignSource": "apps/ios/App/Design.swift",
+    "androidDesignSource": "apps/android/app/src/main/java/chat/mural/ui/Design.kt"
+  },
+  "requiredLicenses": [
+    "Mural-LICENSE.txt",
+    "Apache-2.0.txt",
+    "Nunito-OFL.txt",
+    "THIRD-PARTY-NOTICES.txt",
+    "WebRTC-SDK-LICENSE.txt",
+    "WebRTC-THIRD-PARTY-NOTICES.md"
+  ],
+  "assets": {
+    "icon": "assets/icon.png",
+    "featureGraphic": "assets/feature-graphic.png",
+    "phoneScreenshots": [
+      "assets/en-US/01-greeting.png",
+      "assets/en-US/02-conversation.png",
+      "assets/en-US/03-themes.png",
+      "assets/en-US/04-words.png",
+      "assets/en-US/05-languages.png",
+      "assets/en-US/06-settings.png"
+    ]
+  }
+}

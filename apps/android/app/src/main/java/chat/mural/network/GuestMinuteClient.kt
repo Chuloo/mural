@@ -50,12 +50,21 @@ class GuestMinuteClient internal constructor(private val origin: HttpUrl, transp
         } catch (_: Exception) { throw AccountFailure.InvalidResponse }
     }
     override suspend fun balance(session: AccountSession): MinuteBalance = decode(request("GET", "minutes", session))
-    override suspend fun link(member: AccountSession, guestAccessToken: String): GuestLinkResult {
-        if (!Regex("[A-Za-z0-9_-]{43}").matches(guestAccessToken) || !member.isValid(now())) throw AccountFailure.InvalidResponse
-        val value = request("POST", "minutes/link-guest", member, buildJsonObject { put("guestAccessToken", guestAccessToken) })
+    override suspend fun link(member: AccountSession, guestAccessToken: String): GuestLinkResult =
+        linkRequest(member, guestAccessToken, false)
+    override suspend fun deferLink(member: AccountSession, guestAccessToken: String?, guestAccountID: String): GuestLinkResult =
+        linkRequest(member, guestAccessToken, true, guestAccountID)
+    private suspend fun linkRequest(member: AccountSession, guestAccessToken: String?, deferred: Boolean, guestAccountID: String? = null): GuestLinkResult {
+        if ((deferred && (guestAccountID == null || !Regex("[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}").matches(guestAccountID))) || (guestAccessToken != null && !Regex("[A-Za-z0-9_-]{43}").matches(guestAccessToken)) ||
+            (!deferred && guestAccessToken == null) || !member.isValid(now())) throw AccountFailure.InvalidResponse
+        val value = request("POST", "minutes/link-guest", member, buildJsonObject {
+            guestAccessToken?.let { put("guestAccessToken", it) }
+            if (deferred) { put("deferPending", true); put("guestAccountID", guestAccountID!!) }
+        })
         return try {
             GuestLinkResult(value.getValue("transferredMilliseconds").jsonPrimitive.long,
-                value.getValue("alreadyLinked").jsonPrimitive.boolean, value.getValue("outcome").jsonPrimitive.content)
+                value.getValue("alreadyLinked").jsonPrimitive.boolean, value.getValue("outcome").jsonPrimitive.content,
+                value["pending"]?.jsonPrimitive?.boolean ?: false).also { require(deferred || !it.pending) }
         } catch (_: Exception) { throw AccountFailure.InvalidResponse }
     }
     private inline fun <reified T> decode(value: JsonObject): T = try { json.decodeFromJsonElement<T>(value) }

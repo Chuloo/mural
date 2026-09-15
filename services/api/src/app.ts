@@ -14,7 +14,7 @@ import type { AuthAdmission } from './auth-admission.js';
 import { claimWelcomeMinutes, minuteBalance, UnconfiguredMinuteAttestor, type MinuteAttestor } from './minutes.js';
 import { startGuestMinutes, linkGuestMinutes, UnconfiguredGuestMinuteAttestor, type GuestMinuteAttestor } from './guest-minutes.js';
 import { AI_REPORT_BODY_LIMIT, AI_REPORT_PATH, reportNetwork, type AIReports } from './feedback.js';
-import type { MinutePurchases } from './minute-purchases.js';
+import { stripeOrderByKey, type MinutePurchases } from './minute-purchases.js';
 import type { AIValuePurchases, PurchaseFulfillmentRouter } from './ai-value-purchases.js';
 import type { StripeMinuteProvider } from './stripe-minute-provider.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
@@ -26,7 +26,7 @@ export interface Services { db: Database; auth: AuthConfig; payments?: SandboxPa
     stripe?: StripeMinuteProvider; play?: PlayMinuteProvider };
   accounts?: { admission: AuthAdmission; identityVerifier?: typeof verifyIdentity } }
 const accountPaths = new Set(['/v1/auth/challenge', '/v1/auth/exchange', '/v1/auth/sign-out', '/v1/account', '/v1/wallet', '/v1/minutes/welcome', '/v1/minutes/link-guest',
-  '/v1/minutes/orders', '/v1/minutes/orders/:id', '/v1/minutes/orders/:id/play', '/v1/minutes/play/recover']);
+  '/v1/minutes/orders', '/v1/minutes/orders/by-key/:key', '/v1/minutes/orders/:id', '/v1/minutes/orders/:id/play', '/v1/minutes/play/recover']);
 const objectBody = (request: FastifyRequest): Record<string, unknown> => {
   if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body) || Buffer.isBuffer(request.body)) throw new ServiceError('invalid_request');
   return request.body as Record<string, unknown>;
@@ -53,7 +53,7 @@ export function createApp(services: Services) {
     }
     return commerce.purchases.status(account, id);
   };
-  const app = Fastify({ logger: false, bodyLimit: 262_144,
+  const app = Fastify({ logger: false, bodyLimit: 262_144, routerOptions: { maxParamLength: 128 },
     requestTimeout: 15_000, trustProxy: false, genReqId: () => randomUUID() });
   // No request bodies, Authorization headers, tokens, transcripts, or Stripe payloads are logged.
   app.removeContentTypeParser('application/json');
@@ -214,8 +214,9 @@ export function createApp(services: Services) {
   });
   app.post('/v1/minutes/link-guest', { bodyLimit: 1024 }, async request => {
     const account = await authenticate(db, request.headers.authorization), body = objectBody(request);
-    if (Object.keys(body).some(key => key !== 'guestAccessToken')) throw new ServiceError('invalid_request');
-    return linkGuestMinutes(db, account, stringField(body, 'guestAccessToken', 43));
+    if (Object.keys(body).some(key => !['guestAccessToken','deferPending','guestAccountID'].includes(key)) ||
+      (body.deferPending!==undefined&&typeof body.deferPending!=='boolean')) throw new ServiceError('invalid_request');
+    return linkGuestMinutes(db,account,body.guestAccessToken===undefined&&body.deferPending===true?undefined:stringField(body,'guestAccessToken',43),body.deferPending===true,body.guestAccountID===undefined?undefined:uuid(stringField(body,'guestAccountID',36)));
   });
   app.post('/v1/minutes/welcome', { bodyLimit: 20_000 }, async request => {
     const account = await authenticate(db, request.headers.authorization);
@@ -255,6 +256,14 @@ export function createApp(services: Services) {
       return { ...quoted, payment };
     }
     return { orderID: order.orderID, minutes: order.minutes, currency: order.currency, totalMinor: order.totalMinor, payment };
+  });
+  app.get('/v1/minutes/orders/by-key/:key', async request => {
+    const account = await authenticate(db, request.headers.authorization);
+    const query = request.query as Record<string, unknown>;
+    if (Object.keys(query).some(key => key !== 'provider')) throw new ServiceError('invalid_request');
+    if (query.provider !== 'stripe') throw new ServiceError('invalid_purchase_provider');
+    if (!services.minuteCommerce) throw new ServiceError('minute_purchases_unavailable', 503);
+    return stripeOrderByKey(db, account, (request.params as { key: string }).key);
   });
   app.get('/v1/minutes/orders/:id', async request => {
     const account = await authenticate(db, request.headers.authorization);

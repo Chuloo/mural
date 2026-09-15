@@ -26,8 +26,9 @@ class MinuteCommerceConfiguration private constructor(val origin: HttpUrl) {
 
 /** Fixed backend endpoints only; client price, quantity, account identity and payment state are never sent. */
 class MinuteCommerceClient internal constructor(private val origin: HttpUrl, transport: OkHttpClient,
-    private val now: () -> Long = System::currentTimeMillis) : MinuteCommerceService {
-    constructor(config: MinuteCommerceConfiguration) : this(config.origin, OkHttpClient())
+    private val now: () -> Long = System::currentTimeMillis,
+    private val channel: PurchaseChannel = PurchaseChannel.PLAY) : MinuteCommerceService, StripeCommerceService {
+    constructor(config: MinuteCommerceConfiguration, channel: PurchaseChannel = PurchaseChannel.PLAY) : this(config.origin, OkHttpClient(), channel = channel)
     private val client = transport.newBuilder().followRedirects(false).followSslRedirects(false)
         .cookieJar(CookieJar.NO_COOKIES).cache(null).authenticator(Authenticator.NONE).proxyAuthenticator(Authenticator.NONE)
         .retryOnConnectionFailure(false).callTimeout(30, TimeUnit.SECONDS)
@@ -48,6 +49,7 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         })
     }
     override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String): MinuteOrder = decoded {
+        if (channel != PurchaseChannel.PLAY) throw MinuteCommerceFailure.Unavailable
         if (sku.length > 128 || !minuteIdentifier.matches(sku) || !Regex("[A-Za-z0-9._:-]{8,128}").matches(idempotencyKey))
             throw MinuteCommerceFailure.InvalidResponse
         val body = request("POST", "minutes/orders", session, buildJsonObject { put("provider", "play"); put("sku", sku) }, idempotencyKey)
@@ -56,18 +58,43 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         MinuteOrder(body.text("orderID"), ai?.displayMinutes ?: body.count("minutes", 1440).toInt(), body.text("currency"), body.count("totalMinor", 100_000_000),
             PlayOrderBinding(payment.text("orderID"), payment.text("obfuscatedAccountID"), payment.text("obfuscatedProfileID")), ai)
     }
+    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder = decoded {
+        if (channel != PurchaseChannel.STRIPE) throw MinuteCommerceFailure.Unavailable
+        if (sku.length > 128 || !minuteIdentifier.matches(sku) || !minuteUUID.matches(idempotencyKey))
+            throw MinuteCommerceFailure.InvalidResponse
+        val body = request("POST", "minutes/orders", session,
+            buildJsonObject { put("provider", "stripe"); put("sku", sku) }, idempotencyKey)
+        val payment = body["payment"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
+        val ai = parseAIValue(body)
+        val order = StripeMinuteOrder(body.text("orderID"), body.text("currency"), body.count("totalMinor", 100_000_000),
+            StripeCheckoutURL.checked(payment.text("checkoutURL")), ai)
+        if (payment.text("orderID") != order.orderID) throw MinuteCommerceFailure.InvalidResponse
+        return@decoded order
+    }
+    override suspend fun findStripeOrder(session: AccountSession, idempotencyKey: String): String? = decoded {
+        if (channel != PurchaseChannel.STRIPE) throw MinuteCommerceFailure.Unavailable
+        if (!minuteUUID.matches(idempotencyKey)) throw MinuteCommerceFailure.InvalidResponse
+        try {
+            request("GET", "minutes/orders/by-key/$idempotencyKey", session, providerQuery = true)
+                .text("orderID").also(::validateID)
+        } catch (error: MinuteCommerceFailure.Http) {
+            if (error.status == 404) null else throw error
+        }
+    }
     override suspend fun status(session: AccountSession, orderID: String): MinutePurchaseStatus = decoded {
         validateID(orderID); parseStatus(request("GET", "minutes/orders/$orderID", session)).also {
             if (it.orderID != orderID) throw MinuteCommerceFailure.InvalidResponse
         }
     }
     override suspend fun verify(session: AccountSession, orderID: String, token: String): MinutePurchaseStatus = decoded {
+        if (channel != PurchaseChannel.PLAY) throw MinuteCommerceFailure.Unavailable
         validateID(orderID); validateToken(token)
         parseStatus(request("POST", "minutes/orders/$orderID/play", session, buildJsonObject { put("purchaseToken", token) })).also {
             if (it.orderID != orderID) throw MinuteCommerceFailure.InvalidResponse
         }
     }
     override suspend fun recover(session: AccountSession, token: String): MinutePurchaseStatus = decoded {
+        if (channel != PurchaseChannel.PLAY) throw MinuteCommerceFailure.Unavailable
         validateToken(token)
         parseStatus(request("POST", "minutes/play/recover", session, buildJsonObject { put("purchaseToken", token) }))
     }
@@ -99,7 +126,7 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
     private suspend fun request(method: String, path: String, session: AccountSession? = null, body: JsonObject? = null,
         idempotencyKey: String? = null, providerQuery: Boolean = false): JsonObject {
         if (session != null && !session.isValid(now())) throw MinuteCommerceFailure.SignInRequired
-        val url = origin.newBuilder().addPathSegments("v1/$path").apply { if (providerQuery) addQueryParameter("provider", "play") }.build()
+        val url = origin.newBuilder().addPathSegments("v1/$path").apply { if (providerQuery) addQueryParameter("provider", channel.provider) }.build()
         val request = Request.Builder().url(url).header("Accept", "application/json").header("Cache-Control", "no-store")
             .apply { session?.let { header("Authorization", "Bearer ${it.accessToken}") }; idempotencyKey?.let { header("Idempotency-Key", it) } }
             .method(method, body?.toString()?.toRequestBody("application/json".toMediaType())).build()

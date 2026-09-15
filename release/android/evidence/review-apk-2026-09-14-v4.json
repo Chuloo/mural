@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-14T11:01:46.338968+00:00",
+  "filename": "Mural-Android-review-v4.apk",
+  "bytes": 59200633,
+  "sha256": "e02248efb13a1403d7a2e80c5d0902dcc05f08e5ee4a080cde8485619308ffdb",
+  "source": {
+    "commit": "cd75bdb23ee1ed5d4318ff084d7400b35306120a",
+    "sealedAABSHA256": "8e408404ac2c9cf397eeceac0e0d71b245b8d24884169df2b424729bc62a8946",
+    "packaging": "Universal APK derived from the sealed release bundle and signed for the existing review installation."
+  },
+  "manifest": {
+    "package": "chat.mural.android",
+    "versionCode": 4,
+    "versionName": "0.1",
+    "minSdk": 26,
+    "targetSdk": 36,
+    "debuggable": false,
+    "allowBackup": false,
+    "usesCleartextTraffic": false
+  },
+  "releaseScope": "Free-trial and bring-your-own-key review preview; paid checkout disabled.",
+  "signature": {
+    "verified": true,
+    "v2": true,
+    "v3": true,
+    "certificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+    "identity": "Existing local Android debug/review certificate with registered Google OAuth fingerprint. This is not the Google Play app-signing certificate."
+  },
+  "zipalign16KB": true,
+  "embeddedSecretScan": {
+    "entriesScanned": 602,
+    "patterns": [
+      "OpenAI secret key",
+      "Stripe secret or restricted key",
+      "Google OAuth client secret",
+      "GitHub token",
+      "private key material",
+      "credential filename"
+    ],
+    "findings": 0,
+    "scope": "Known credential filenames and high-confidence secret patterns in all uncompressed archive entries, including null-separated strings. This does not prove every possible secret format is absent."
+  },
+  "emulatorVerification": {
+    "existingDataPreserved": true,
+    "isolatedProfileUsed": true,
+    "releasePayloadOpened": true,
+    "spanishGreetingPlayed": true,
+    "englishMeaningDisplayed": true,
+    "listeningStateObserved": true,
+    "conversationEndedCleanly": true,
+    "returnedHome": true,
+    "ownerProfileRestored": true,
+    "emulatorShutDown": true
+  },
+  "notVerified": [
+    "Physical microphone conversation",
+    "Bluetooth routing",
+    "Acoustic quality on a physical phone",
+    "Google Play-signed installation",
+    "Paid checkout"
+  ]
+}

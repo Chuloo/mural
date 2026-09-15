@@ -38,10 +38,10 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
     fun beginSignInTransition(): Long? = if (state.value.busy) null else mutations.begin()
     fun endSignInTransition(ticket: Long) = mutations.end(ticket)
     /** Pass retained conversation-owner callbacks, never an Activity or its lifecycle scope. */
-    fun changeAccount(delete: Boolean, prepare: suspend () -> Boolean, finished: () -> Unit): Boolean {
+    fun changeAccount(delete: Boolean, prepare: suspend () -> Boolean, finished: () -> Unit, beforeDelete: suspend (String) -> Unit = {}): Boolean {
         if (state.value.busy) return false
         return mutations.submit(prepare, {
-            if (delete) controller?.delete() else controller?.signOut()
+            if (delete) controller?.delete(beforeDelete) else controller?.signOut()
             clearGoogleIfSignedOut()
         }, finished)
     }

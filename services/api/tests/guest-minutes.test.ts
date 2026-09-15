@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
-import { authenticate } from '../src/auth.js';
+import { authenticate, deleteAccount, digest, signOut } from '../src/auth.js';
 import { createApp } from '../src/app.js';
 import { captureWelcomeOffer, claimWelcomeMinutes, finishMinuteReservation, minuteBalance, reserveMinutes } from '../src/minutes.js';
-import { linkGuestMinutes, startGuestMinutes, UnconfiguredGuestMinuteAttestor } from '../src/guest-minutes.js';
+import { finalizeDeferredGuestLinks, linkGuestMinutes, startGuestMinutes, UnconfiguredGuestMinuteAttestor } from '../src/guest-minutes.js';
 import { applyMinuteCampaign, prepareMinuteCampaign, updateWelcomePolicy, welcomePolicy } from '../src/minutes-admin.js';
 import { welcomeFunding, updateWelcomeFunding } from '../src/welcome-funding.js';
 
@@ -144,4 +144,125 @@ integration('all-user campaigns target registered accounts, not anonymous trial 
     assert.equal((await minuteBalance(f.db, member)).availableMilliseconds, 1_800_000);
     await assert.rejects(prepareMinuteCampaign(f.db, { ...request, id: randomUUID(), audience: [guest.guestID] }), /recipient_not_found/);
   } finally { await f.cleanup(); }
+});
+
+integration('deferred ownership survives guest expiry, isolates members, preserves holds and finalizes once',async()=>{
+ const f=await fixture();try{
+  const proof=attestor(),guest=await startGuestMinutes(f.db,{},proof),member=await f.member(),other=await f.member();
+  const hold=await reserveMinutes(f.db,guest.guestID,'deferred-live',180000);
+  assert.deepEqual(await linkGuestMinutes(f.db,member,guest.accessToken,true),{transferredMilliseconds:0,alreadyLinked:false,outcome:'pending',pending:true});
+  await assert.rejects(linkGuestMinutes(f.db,other,guest.accessToken,true),{code:'guest_already_linked'});
+  await assert.rejects(linkGuestMinutes(f.db,other,undefined,true,guest.guestID),{code:'guest_link_not_found'});
+  await assert.rejects(startGuestMinutes(f.db,{},proof),{code:'sign_in_to_continue'});
+  await assert.rejects(claimWelcomeMinutes(f.db,member,{},attestor()),{code:'finish_guest_conversation_first'});
+  assert.equal((await minuteBalance(f.db,guest.guestID)).reservedMilliseconds,180000);
+  assert.equal((await f.db.query('SELECT count(*) FROM minute_guest_links')).rows[0].count,'0');
+  await f.db.query("UPDATE auth_sessions SET expires_at=now()-interval '1 hour' WHERE account_id=$1",[guest.guestID]);
+  assert.equal((await linkGuestMinutes(f.db,member,undefined,true,guest.guestID)).pending,true);
+  assert.equal((await linkGuestMinutes(f.db,member,guest.accessToken,true)).pending,true);
+  await finishMinuteReservation(f.db,hold,123456);
+  const outcomes=await Promise.all([linkGuestMinutes(f.db,member,undefined,true,guest.guestID),linkGuestMinutes(f.db,member,guest.accessToken,true),finalizeDeferredGuestLinks(f.db)]);
+  assert.equal((await minuteBalance(f.db,member)).availableMilliseconds,476544);
+  assert.equal((await f.db.query('SELECT reserved_ms FROM minute_wallets WHERE account_id=$1',[guest.guestID])).rows[0].reserved_ms,'0');
+  assert.equal((await f.db.query('SELECT count(*) FROM minute_guest_link_completions')).rows[0].count,'1');
+  assert.equal((await f.db.query('SELECT count(*) FROM minute_guest_links')).rows[0].count,'1');
+  assert.equal((await linkGuestMinutes(f.db,member,undefined,true,guest.guestID)).alreadyLinked,true);
+  assert.ok(outcomes.length===3);
+ }finally{await f.cleanup();}
+});
+integration('two members racing to bind one guest cannot reassign ownership or duplicate transfer',async()=>{
+ const f=await fixture();try{
+  const guest=await startGuestMinutes(f.db,{},attestor()),members=[await f.member(),await f.member()];
+  const hold=await reserveMinutes(f.db,guest.guestID,'race-live',60000);
+  const results=await Promise.allSettled(members.map(id=>linkGuestMinutes(f.db,id,guest.accessToken,true)));
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+  assert.equal(results.filter(r=>r.status==='rejected').length,1);
+  const owner=(await f.db.query('SELECT member_account_id FROM minute_guest_link_intents')).rows[0].member_account_id;
+  await finishMinuteReservation(f.db,hold,30000);await finalizeDeferredGuestLinks(f.db);
+  assert.equal((await minuteBalance(f.db,owner)).availableMilliseconds,570000);
+  for(const table of ['minute_guest_link_intents','minute_guest_link_completions']){
+   await assert.rejects(f.db.query(`DELETE FROM ${table}`));
+  }
+  await assert.rejects(f.db.query('UPDATE minute_guest_link_intents SET member_account_id=$1',[members.find(id=>id!==owner)]));
+ }finally{await f.cleanup();}
+});
+integration('welcome claims racing a deferred binding never stack a second allowance on that member',async()=>{
+ const f=await fixture();try{
+  const guest=await startGuestMinutes(f.db,{},attestor()),member=await f.member();
+  const hold=await reserveMinutes(f.db,guest.guestID,'welcome-race',60000);
+  const [link,claim]=await Promise.allSettled([linkGuestMinutes(f.db,member,guest.accessToken,true),claimWelcomeMinutes(f.db,member,{},attestor())]);
+  assert.equal(link.status,'fulfilled');
+  await finishMinuteReservation(f.db,hold,30000);await finalizeDeferredGuestLinks(f.db);
+  const amount=(await minuteBalance(f.db,member)).availableMilliseconds;
+  assert.equal(amount,claim.status==='fulfilled'?600000:570000);
+  const outcome=(await f.db.query('SELECT outcome FROM minute_guest_link_completions')).rows[0].outcome;
+  assert.equal(outcome,claim.status==='fulfilled'?'member_trial_already_claimed':'transferred');
+ }finally{await f.cleanup();}
+});
+integration('background finalization is bounded, skips unsettled guests, and handles multiple bindings without stacking',async()=>{
+ const f=await fixture();try{
+  const member=await f.member(),holds:string[]=[];
+  for(let i=0;i<3;i++){
+   const guest=await startGuestMinutes(f.db,{},attestor());
+   holds.push(await reserveMinutes(f.db,guest.guestID,`bounded-${i}`,60000));
+   await linkGuestMinutes(f.db,member,guest.accessToken,true);
+  }
+  await finishMinuteReservation(f.db,holds[0]!,30000);await finishMinuteReservation(f.db,holds[1]!,30000);
+  assert.deepEqual(await finalizeDeferredGuestLinks(f.db,1),{examined:1,completed:1});
+  assert.deepEqual(await finalizeDeferredGuestLinks(f.db,1),{examined:1,completed:1});
+  assert.deepEqual(await finalizeDeferredGuestLinks(f.db,1),{examined:0,completed:0});
+  assert.equal((await minuteBalance(f.db,member)).availableMilliseconds,570000);
+  await finishMinuteReservation(f.db,holds[2]!,30000);await finalizeDeferredGuestLinks(f.db);
+  assert.equal((await minuteBalance(f.db,member)).availableMilliseconds,570000);
+  await assert.rejects(finalizeDeferredGuestLinks(f.db,101),{code:'invalid_guest_link_batch'});
+ }finally{await f.cleanup();}
+});
+integration('member sign-out preserves deferred ownership and deletion never receives a late grant',async()=>{
+ const f=await fixture();try{
+  const guest=await startGuestMinutes(f.db,{},attestor()),member=await f.member();
+  const hold=await reserveMinutes(f.db,guest.guestID,'deleted-member-live',180000);
+  await linkGuestMinutes(f.db,member,guest.accessToken,true);
+  const token=randomBytes(32).toString('base64url');
+  await f.db.query("INSERT INTO auth_sessions(id,account_id,token_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[randomUUID(),member,digest(token)]);
+  await signOut(f.db,`Bearer ${token}`);
+  assert.equal((await f.db.query('SELECT count(*) FROM minute_guest_link_intents')).rows[0].count,'1');
+  assert.deepEqual(await deleteAccount(f.db,member),{retainedFinancialRecords:true});
+  assert.equal((await minuteBalance(f.db,guest.guestID)).reservedMilliseconds,180000);
+  await finishMinuteReservation(f.db,hold,120000);await finalizeDeferredGuestLinks(f.db);
+  assert.equal((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1',[member])).rows[0].balance_ms,'0');
+  assert.equal((await f.db.query('SELECT outcome FROM minute_guest_link_completions')).rows[0].outcome,'member_deleted');
+  assert.equal((await f.db.query('SELECT count(*) FROM minute_guest_links')).rows[0].count,'0');
+  assert.equal((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1',[guest.guestID])).rows[0].balance_ms,'0');
+  await assert.rejects(linkGuestMinutes(f.db,member,undefined,true,guest.guestID),{code:'account_not_found'});
+ }finally{await f.cleanup();}
+});
+
+integration('tokenless recovery is bound to the requested guest across multiple devices',async()=>{
+ const f=await fixture();try{
+  const member=await f.member(),other=await f.member();
+  const a=await startGuestMinutes(f.db,{},attestor()),b=await startGuestMinutes(f.db,{},attestor());
+  const holdA=await reserveMinutes(f.db,a.guestID,'device-a',60000),holdB=await reserveMinutes(f.db,b.guestID,'device-b',60000);
+  await linkGuestMinutes(f.db,member,a.accessToken,true);await linkGuestMinutes(f.db,member,b.accessToken,true);
+  await finishMinuteReservation(f.db,holdB,30000);await finalizeDeferredGuestLinks(f.db);
+  assert.equal((await linkGuestMinutes(f.db,member,undefined,true,a.guestID)).pending,true);
+  assert.equal((await linkGuestMinutes(f.db,member,undefined,true,b.guestID)).pending,false);
+  await assert.rejects(linkGuestMinutes(f.db,other,undefined,true,a.guestID),{code:'guest_link_not_found'});
+  await assert.rejects(linkGuestMinutes(f.db,member,undefined,true),{code:'invalid_request'});
+  await assert.rejects(linkGuestMinutes(f.db,member,a.accessToken,true,b.guestID),{code:'guest_link_mismatch'});
+  await finishMinuteReservation(f.db,holdA,30000);await finalizeDeferredGuestLinks(f.db);
+  assert.equal((await minuteBalance(f.db,member)).availableMilliseconds,570000);
+ }finally{await f.cleanup();}
+});
+integration('an expired bearer without an accepted binding cannot link until the same installation resumes',async()=>{
+ const f=await fixture();try{
+  const proof=attestor(),guest=await startGuestMinutes(f.db,{},proof),member=await f.member();
+  const hold=await reserveMinutes(f.db,guest.guestID,'expired-before-binding',60000);
+  await f.db.query("UPDATE auth_sessions SET expires_at=now()-interval '1 hour' WHERE account_id=$1",[guest.guestID]);
+  await assert.rejects(linkGuestMinutes(f.db,member,guest.accessToken,true),{code:'invalid_guest_session'});
+  assert.equal((await f.db.query('SELECT count(*) FROM minute_guest_link_intents')).rows[0].count,'0');
+  const resumed=await startGuestMinutes(f.db,{},proof);assert.equal(resumed.guestID,guest.guestID);
+  assert.equal((await linkGuestMinutes(f.db,member,resumed.accessToken,true,guest.guestID)).pending,true);
+  await finishMinuteReservation(f.db,hold,30000);await finalizeDeferredGuestLinks(f.db);
+  assert.equal((await f.db.query("SELECT count(*) FROM minute_entries WHERE kind='welcome'")).rows[0].count,'1');
+ }finally{await f.cleanup();}
 });

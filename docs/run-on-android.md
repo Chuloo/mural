@@ -24,7 +24,7 @@ If `apps/android/.signing/debug.keystore` exists (it is ignored by Git), the deb
 
 Mural speaks the interface language of your phone: Spanish on a Spanish phone, English otherwise. That is separate from the language you practise and the language you read meanings in, which you choose next.
 
-Choose the language you practise and the language for meanings. Read the consent to send audio and text to OpenAI. You can decline and still browse your local data.
+Choose the language you practise and the language for meanings. When you practise Mandarin, captions link each word and show pinyin underneath on Android 10 or later; **Hide pinyin** keeps the characters only. Read the consent to send audio and text to OpenAI. You can decline and still browse your local data.
 
 In **Settings**, save your own OpenAI key. Do not send it through chat or put it in repository files. It is encrypted with an Android Keystore key and is never included in learning backups.
 

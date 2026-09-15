@@ -34,6 +34,21 @@ python3 scripts/check_android_release.py \
 
 For a local unsigned inspection candidate, add `--require-unsigned`. If only Gradle’s cached bundletool library is available, use `--bundletool-classpath-file /absolute/path/classpath.json` instead of `--bundletool-jar`. This file must contain a JSON array of trusted local JAR paths for bundletool and its dependencies. The evidence records each dependency hash; no download or Gradle change is required.
 
+The default specification is the current v6 candidate. To recheck the archived v4 Play bundle, select its historical spec explicitly:
+
+```sh
+python3 scripts/check_android_release.py \
+  --spec release/android/specs/play-v4.json \
+  --aab /absolute/path/Mural-Android-release-2026-09-14-v4.aab \
+  --bundletool-jar /absolute/path/bundletool-all.jar \
+  --require-bundle --require-assets \
+  --output /absolute/path/candidate-evidence/v4-recheck.json
+```
+
+For a configured v6 direct-distribution bundle, use `--spec release/android/specs/direct-v6.json`. The historical v5 direct spec remains at `release/android/specs/direct-v5.json`. `--spec` paths are relative to the working directory. `--release-dir` still sets the root for metadata and assets; selecting a spec does not move that root. With no `--spec`, the checker reads `release-spec.json` in that root. A missing or invalid explicit spec fails, and a bundle whose version differs from the selected spec fails. Keep the default version aligned with the current build rather than changing it to make an older bundle pass.
+
+The report records the selected spec filename, hash and candidate identity. Historical rechecks use the currently available shared listing/assets and branding source; compare their hashes with the original [v4 evidence](evidence/signed-release-files-2026-09-14-v4.json) and preserve that original report. A spec's scope labels the intended release; it does not verify purchase flags, payment behavior or Play approval. [Candidate scopes](candidate-scopes.md) identifies which copy and evidence belong to each version.
+
 The check records artifact and asset hashes, listing lengths, required license files, every packaged 64-bit library's LOAD/RELRO layout, package/version/SDK identity and the bundle's request for 16 KB APK alignment. It verifies that the Android launcher image is byte-identical to the iOS source and that the source resource references still select it. It also reports JAR signature entries and checks packaged files for credential filenames and known OpenAI, Stripe, Google OAuth, GitHub and private-key patterns. Matches fail without including the credential value in the report. This pattern scan does not prove that every possible secret format is absent; inspect the release configuration separately. Missing final assets fail when `--require-assets` is used. The report explicitly lists runtime, signing, visual brand parity and product checks it does not perform.
 
 An unaligned RELRO end is reported for review. The validator fails if rounding RELRO protection to 16 KB pages overlaps writable LOAD data outside the declared RELRO regions. A gap after RELRO can avoid that overlap, so an end-address remainder alone is not proof of a crash. Preserve any warnings and resolve them with runtime evidence. [Android's page-size guide](https://developer.android.com/guide/practices/page-sizes) and [Bionic's protection logic](https://android.googlesource.com/platform/bionic/+/main/linker/linker_phdr.cpp) describe the relevant checks and behavior.

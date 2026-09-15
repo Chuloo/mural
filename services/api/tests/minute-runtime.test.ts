@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
-import { startGuestMinutes, linkGuestMinutes } from '../src/guest-minutes.js';
+import { finalizeDeferredGuestLinks, startGuestMinutes, linkGuestMinutes } from '../src/guest-minutes.js';
 import { captureWelcomeOffer, minuteBalance, reserveMinutes, finishMinuteReservation } from '../src/minutes.js';
 import { welcomePolicy, updateWelcomePolicy } from '../src/minutes-admin.js';
 import { welcomeFunding, updateWelcomeFunding } from '../src/welcome-funding.js';
@@ -47,6 +47,18 @@ test('restricted runtime can serve signup and minute usage but cannot change ope
       const linked = await linkGuestMinutes(runtime, member, guest.accessToken);
       assert.equal(linked.transferredMilliseconds, 587_655);
       assert.equal((await minuteBalance(runtime, member)).availableMilliseconds, 587_655);
+      await updateWelcomeFunding(owner,{...await welcomeFunding(owner),dailyBudgetMinor:500,lifetimeBudgetMinor:500},'runtime-test','Deferred runtime fixture');
+      const secondGuest=await startGuestMinutes(runtime,{}, {verify:async()=>({deviceReference:`second:${suffix}`,previouslyClaimed:false})});
+      const pending=await reserveMinutes(runtime,secondGuest.guestID,'runtime-deferred',60000);
+      assert.equal((await linkGuestMinutes(runtime,member,secondGuest.accessToken,true)).pending,true);
+      await finishMinuteReservation(runtime,pending,30000);
+      assert.deepEqual(await finalizeDeferredGuestLinks(runtime),{examined:1,completed:1});
+      assert.equal((await minuteBalance(runtime,member)).availableMilliseconds,587655);
+      for(const table of ['minute_guest_link_intents','minute_guest_link_completions']){
+        await assert.rejects(runtime.query(`DELETE FROM ${table}`),/permission denied/);
+        const privileges=(await owner.query('SELECT has_table_privilege($1,$2,$3) AS allowed',[role,`${schema}.${table}`,'UPDATE,DELETE,TRUNCATE'])).rows[0];
+        assert.equal(privileges.allowed,false);
+      }
       await assert.rejects(runtime.query('UPDATE minute_welcome_claims SET allowance_ms=1'), /permission denied/);
       await assert.rejects(runtime.query("UPDATE minute_welcome_claims SET proof_reference='forged-device'"), /permission denied/);
       for (const table of ['minute_policy', 'welcome_funding_policy', 'minute_campaigns', 'minute_campaign_recipients']) {

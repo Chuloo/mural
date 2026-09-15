@@ -200,6 +200,11 @@ class ArchiveFieldsReverseTests(unittest.TestCase):
         failures = self.check(ArchiveFieldsTests.SWIFT_OK, kotlin)
         self.assertTrue(any('SessionRecord.mood' in f for f in failures), failures)
 
+    def test_missing_required_field_check_fails_when_kotlin_validates_keys(self):
+        kotlin = ArchiveFieldsTests.KOTLIN_OK + 'fun fields(obj: JsonObject, names: String) {}\n'
+        failures = self.check(ArchiveFieldsTests.SWIFT_OK, kotlin)
+        self.assertTrue(any('fields(s, ...)' in f and 'SessionRecord' in f for f in failures), failures)
+
     def test_matching_fields_check_passes(self):
         kotlin = ArchiveFieldsTests.KOTLIN_OK + 'fun check(s: JsonObject) { fields(s, "id languageID title") }\n'
         self.assertEqual(self.check(ArchiveFieldsTests.SWIFT_OK, kotlin), [])

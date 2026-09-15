@@ -1,4 +1,4 @@
--- Run as the migration owner after migration 016.
+-- Run as the migration owner after migration 023.
 -- Operators use a separate privileged connection for reviewed grant/policy commands.
 GRANT SELECT ON minute_policy, minute_policy_audit, minute_wallets, minute_entries,
   minute_welcome_offers, minute_welcome_claims, minute_guest_links, minute_reservations,
@@ -22,3 +22,7 @@ REVOKE DELETE ON minute_reservations FROM mural_runtime;
 REVOKE ALL ON FUNCTION preserve_public_minute_scope(),check_hosted_public_scope() FROM mural_runtime;
 GRANT SELECT ON ai_pricing_policy, ai_pricing_audit TO mural_runtime;
 REVOKE INSERT, UPDATE, DELETE ON ai_pricing_policy, ai_pricing_audit FROM mural_runtime;
+
+-- Accepted guest ownership and finalization receipts are append-only; never runtime-editable.
+REVOKE ALL ON minute_guest_link_intents,minute_guest_link_completions FROM mural_runtime;
+GRANT SELECT,INSERT ON minute_guest_link_intents,minute_guest_link_completions TO mural_runtime;

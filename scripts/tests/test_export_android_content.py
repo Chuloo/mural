@@ -34,6 +34,13 @@ public enum LanguageRegistry {{
     public static let all: [LanguageModule] = [{refs}]
     public static func module(for id: String) -> LanguageModule? {{ all.first {{ $0.id == id }} }}
 }}
+
+public enum MeaningLanguages {{
+    public static let all = ["English", "Spanish", "Chinese (Simplified)"]
+    public static func greeting(in language: String) -> String {{
+        ["English": "Hi!", "Spanish": "¡Hola!", "Chinese (Simplified)": "你好！", "Chinese": "你好！"][language] ?? "Hi!"
+    }}
+}}
 '''
 
 MODULE_TEMPLATE = '''import Foundation
@@ -149,6 +156,27 @@ class ExportAndroidContentTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             eac.theme('("coffee", "A coffee?", "Something warm", "cup", "Everyday", 0)')
         self.assertIn('ConversationTheme', str(ctx.exception))
+
+    def test_meaning_languages_and_greetings_come_from_swift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = eac.generate(write_core(pathlib.Path(tmp), ['Norwegian']))
+            self.assertIn('val all = listOf("English", "Spanish", "Chinese (Simplified)")', output)
+            self.assertIn('"Chinese (Simplified)" to "你好！"', output)
+            self.assertIn(')[language] ?: "Hi!"', output)
+
+    def test_missing_meaning_languages_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = write_core(pathlib.Path(tmp), ['Norwegian'])
+            path = core / 'Languages/LanguageModule.swift'
+            path.write_text(path.read_text().split('public enum MeaningLanguages')[0])
+            with self.assertRaises(SystemExit) as ctx:
+                eac.generate(core)
+            self.assertIn('MeaningLanguages', str(ctx.exception))
+
+    def test_default_language_comes_from_the_swift_registry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = eac.generate(write_core(pathlib.Path(tmp), ['Spanish', 'Norwegian']))
+            self.assertIn('const val defaultID = "sp"', output)
 
     def test_generation_is_deterministic(self):
         with tempfile.TemporaryDirectory() as tmp:

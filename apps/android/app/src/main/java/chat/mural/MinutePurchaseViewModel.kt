@@ -2,6 +2,8 @@ package chat.mural
 
 import android.app.Activity
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -51,9 +53,9 @@ internal class MinutePurchaseMemberAccess(
 
 internal data class MinutePurchaseCapability(val enabled: Boolean, val environment: String) {
     companion object {
-        fun checked(enabled: Boolean, environment: String, hasConfiguration: Boolean, packageName: String): MinutePurchaseCapability {
+        fun checked(enabled: Boolean, environment: String, hasConfiguration: Boolean, packageName: String, channel: String = "play"): MinutePurchaseCapability {
             val validEnvironment = environment in listOf("test", "live")
-            return MinutePurchaseCapability(enabled && validEnvironment && hasConfiguration && packageName == "chat.mural.android",
+            return MinutePurchaseCapability(enabled && validEnvironment && PurchaseChannel.parse(channel) != null && hasConfiguration && packageName == "chat.mural.android",
                 if (validEnvironment) environment else "test")
         }
     }
@@ -104,28 +106,37 @@ class MinutePurchaseViewModel(application: Application) : AndroidViewModel(appli
     private val configuration = MinuteCommerceConfiguration.parse(BuildConfig.MANAGED_API_ORIGIN)
     private val accountConfiguration = ManagedAccountConfiguration.parse(BuildConfig.MANAGED_API_ORIGIN, BuildConfig.GOOGLE_SERVER_CLIENT_ID)
     private val capability = MinutePurchaseCapability.checked(BuildConfig.MINUTE_PURCHASES_ENABLED,
-        BuildConfig.MINUTE_PURCHASE_ENVIRONMENT, configuration != null && accountConfiguration != null, application.packageName)
+        BuildConfig.MINUTE_PURCHASE_ENVIRONMENT, configuration != null && accountConfiguration != null, application.packageName, BuildConfig.PURCHASE_CHANNEL)
+    private val channel = PurchaseChannel.parse(BuildConfig.PURCHASE_CHANNEL) ?: PurchaseChannel.PLAY
     val enabled: Boolean get() = capability.enabled
     private val access = if (enabled) MinutePurchaseMemberAccess(AccountSessionStore(application, configuration!!.origin.toString()),
         ManagedAccountClient(accountConfiguration!!)::profile) else null
-    private val store = if (enabled) PlayBillingAdapter(application, enabled = true) else null
+    private val store = if (enabled && channel == PurchaseChannel.PLAY) PlayBillingAdapter(application, enabled = true) else null
     private val mutableBalanceChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val balanceChanges = mutableBalanceChanges.asSharedFlow()
     private val selectedAccount = MutableStateFlow<String?>(null)
     private val walletOwner = MutableStateFlow<String?>(null)
     private val launchGate = MinutePurchaseLaunchGate()
-    private val controller = if (enabled) MinutePurchaseController(viewModelScope, MinuteCommerceClient(configuration!!), store!!,
+    private val controller = if (enabled && channel == PurchaseChannel.PLAY) MinutePurchaseController(viewModelScope, MinuteCommerceClient(configuration!!), store!!,
         readMember = { access!!.read() }, enabled = true, expectedEnvironment = capability.environment,
         onBalanceChanged = {
             walletOwner.value = access!!.accountID
             mutableBalanceChanges.tryEmit(Unit)
         }) else null
-    val state: StateFlow<MinutePurchaseState> = controller?.let { purchases ->
-        combine(purchases.state, selectedAccount, walletOwner) { value, selected, owner ->
-            // Account changes clear the previous wallet immediately, even during a suspended request.
+    private val stripeController = if (enabled && channel == PurchaseChannel.STRIPE) StripeMinutePurchaseController(
+        MinuteCommerceClient(configuration!!, PurchaseChannel.STRIPE),
+        StripePurchaseAttemptStore(application, configuration.origin.toString(), capability.environment),
+        readMember = { access!!.read() }, enabled = true, expectedEnvironment = capability.environment,
+        onBalanceChanged = {
+            walletOwner.value = access!!.accountID
+            mutableBalanceChanges.tryEmit(Unit)
+        }) else null
+    private val purchaseState = controller?.state ?: stripeController?.state
+    val state: StateFlow<MinutePurchaseState> = purchaseState?.let { purchases ->
+        combine(purchases, selectedAccount, walletOwner) { value, selected, owner ->
             value.copy(balance = value.balance.takeIf { selected != null && selected == owner })
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, MinutePurchaseState())
-    } ?: MutableStateFlow(MinutePurchaseState()).asStateFlow()
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, MinutePurchaseState(channel = channel))
+    } ?: MutableStateFlow(MinutePurchaseState(channel = channel)).asStateFlow()
 
     /** Retained ViewModel flows only. Never pass an Activity-bound combined flow here. */
     fun bindAccountState(account: StateFlow<AccountState>, transitionBusy: StateFlow<Boolean>) {
@@ -134,27 +145,44 @@ class MinutePurchaseViewModel(application: Application) : AndroidViewModel(appli
     /** Call from the foreground lifecycle and pass the current AccountViewModel state. */
     fun onForeground(account: AccountState) {
         selectAccount(account)
-        viewModelScope.launch { controller?.onForeground() }
+        viewModelScope.launch { controller?.onForeground(); stripeController?.onForeground() }
     }
     /** Call when membership or account-operation state changes, including sign-out and deletion. */
     fun onAccountChanged(account: AccountState) {
         val changed = selectAccount(account)
-        if (changed) viewModelScope.launch { controller?.onForeground() }
+        if (changed) viewModelScope.launch { controller?.onForeground(); stripeController?.onForeground() }
     }
-    fun refresh() { viewModelScope.launch { controller?.refresh() } }
+    fun refresh() { viewModelScope.launch { controller?.refresh(); stripeController?.refresh() } }
     fun launch(activity: Activity, sku: String) {
         if (!enabled) return
         val permit = launchGate.begin() ?: return
         val currentActivity = WeakReference(activity)
-        viewModelScope.launch { controller?.buy(sku) { prepared ->
-            val host = currentActivity.get()
-            val lifecycle = (host as? LifecycleOwner)?.lifecycle?.currentState
-            val readiness = if (host != null && lifecycle != null)
-                MinutePurchaseActivityState(lifecycle, host.isFinishing, host.isDestroyed) else null
-            launchGate.launchIfReady(permit, readiness) { store!!.launch(host!!, prepared) }
-        } }
+        viewModelScope.launch {
+            stripeController?.buy(sku) { checkout ->
+                val host = currentActivity.get()
+                val lifecycle = (host as? LifecycleOwner)?.lifecycle?.currentState
+                val readiness = if (host != null && lifecycle != null)
+                    MinutePurchaseActivityState(lifecycle, host.isFinishing, host.isDestroyed) else null
+                launchGate.launchIfReady(permit, readiness) {
+                    try {
+                        // No custom URI callback and no account credentials appended to Stripe's URL.
+                        host!!.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(checkout.value)).apply {
+                            addCategory(Intent.CATEGORY_BROWSABLE)
+                        })
+                        MinuteStoreOutcome.OPENED
+                    } catch (_: Exception) { MinuteStoreOutcome.UNAVAILABLE }
+                }
+            }
+            controller?.buy(sku) { prepared ->
+                val host = currentActivity.get()
+                val lifecycle = (host as? LifecycleOwner)?.lifecycle?.currentState
+                val readiness = if (host != null && lifecycle != null)
+                    MinutePurchaseActivityState(lifecycle, host.isFinishing, host.isDestroyed) else null
+                launchGate.launchIfReady(permit, readiness) { store!!.launch(host!!, prepared) }
+            }
+        }
     }
-    fun dismissNotice() { controller?.dismissNotice() }
+    fun dismissNotice() { controller?.dismissNotice(); stripeController?.dismissNotice() }
     private fun selectAccount(account: AccountState): Boolean {
         launchGate.observe(account)
         val id = account.accountID.takeIf { account.signedIn }
@@ -164,5 +192,5 @@ class MinutePurchaseViewModel(application: Application) : AndroidViewModel(appli
         access?.selectAccount(id)
         return changed
     }
-    override fun onCleared() { launchGate.clear(); controller?.close(); access?.selectAccount(null); super.onCleared() }
+    override fun onCleared() { launchGate.clear(); controller?.close(); stripeController?.close(); access?.selectAccount(null); super.onCleared() }
 }

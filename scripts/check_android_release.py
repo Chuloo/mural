@@ -323,7 +323,10 @@ def git_state(root: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--release-dir", type=Path, default=ROOT / "release/android")
+    parser.add_argument("--release-dir", type=Path, default=ROOT / "release/android",
+                        help="Root for listing metadata and store assets")
+    parser.add_argument("--spec", type=Path,
+                        help="Explicit specification file; defaults to RELEASE_DIR/release-spec.json. Relative paths use the working directory")
     parser.add_argument("--aab", type=Path, help="Inspect every 64-bit native library and required notice in this bundle")
     bundletool = parser.add_mutually_exclusive_group()
     bundletool.add_argument("--bundletool-jar", type=Path, help="Also verify the bundle's own manifest and 16 KB packaging request")
@@ -339,10 +342,14 @@ def main(argv: list[str] | None = None) -> int:
                   "launcher mask/scale, in-app logo and Play artwork visual parity with iOS",
                   "store declarations and owner release approval"]}
     try:
-        spec = json.loads((args.release_dir / "release-spec.json").read_text())
+        spec_path = args.spec if args.spec is not None else args.release_dir / "release-spec.json"
+        spec = json.loads(spec_path.read_text())
         require(spec["schemaVersion"] == 1, "Unsupported release specification")
         require(spec["scope"] in ("internal-byok-preview", "hosted-guest-preview", "hosted-minute-release"), "Unknown release scope")
         result["scope"] = spec["scope"]
+        result["specification"] = {"file": spec_path.name, "sha256": sha256(spec_path),
+                                   "packageName": spec["packageName"], "versionCode": spec["versionCode"],
+                                   "versionName": spec["versionName"]}
         result["checks"]["branding"] = check_branding(ROOT, spec)
         locale = below(args.release_dir / "metadata", spec["metadataLocale"])
         result["checks"]["metadata"] = {name: check_text(locale / f"{name}.txt", limit, name in ("title", "short-description"))

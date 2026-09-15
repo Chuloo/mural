@@ -107,6 +107,12 @@ class HostedConversationBindings(private val scope: CoroutineScope, private val 
         check(localID !in bindings && bindings.size < 16)
         bindings[localID] = Binding(ownerID, lease)
     }
+    /** Only after an authenticated server acknowledgment accepts this owner's recovery. */
+    fun delegateOwnerRecovery(ownerID: String) {
+        bindings.filterValues { it.ownerID == ownerID }.keys.toList().forEach { id ->
+            bindings.remove(id)?.attempts?.values?.forEach { it.result.cancel() }
+        }
+    }
     fun hasLease(localID: String) = localID in bindings
     fun owner(localID: String) = bindings[localID]?.ownerID
     fun reachedDeadline(localID: String) = bindings[localID]?.let { now() >= it.lease.deadlineMilliseconds } == true

@@ -91,7 +91,7 @@ async function fixture(options: { enabled?: boolean; salesEnabled?: boolean; aiV
       });
       return { id, token, headers: { ...network, authorization: `Bearer ${token}` } };
     },
-    async order(account: { headers: Record<string,string> }, provider: 'stripe' | 'play' = 'stripe', key = randomUUID()) {
+    async order(account: { headers: Record<string,string> }, provider: 'stripe' | 'play' = 'stripe', key: string = randomUUID()) {
       const response = await app.inject({ method: 'POST', url: rootURL, headers: { ...account.headers, 'idempotency-key': key }, payload: { provider, sku: options.aiValue?'fixture-ai':'fixture-thirty' } });
       assert.equal(response.statusCode, 200, response.body); return response.json();
     },
@@ -379,4 +379,92 @@ integration('account deletion blocks pending AI orders and paid balances, but re
     assert.equal((await f.db.query('SELECT count(*) FROM identities WHERE account_id=$1',[member.id])).rows[0].count,'0');
     assert.equal((await f.db.query('SELECT count(*) FROM ai_value_purchase_transactions WHERE account_id=$1',[member.id])).rows[0].count,'1');
   }finally{await f.cleanup();}
+});
+
+for (const aiValue of [false, true]) {
+  integration(`durable Stripe key recovery is owner-bound for ${aiValue ? 'AI value' : 'minute'} orders`, async () => {
+    const f = await fixture({ aiValue });
+    try {
+      const member = await f.account(), other = await f.account(), key = randomUUID();
+      const order = await f.order(member, 'stripe', key);
+      const path = `${rootURL}/by-key/${key}?provider=stripe`;
+      const found = await f.app.inject({ url: path, headers: member.headers });
+      assert.equal(found.statusCode, 200, found.body); assert.deepEqual(found.json(), { orderID: order.orderID });
+      assert.equal(found.headers['cache-control'], 'no-store');
+      const denied = await f.app.inject({ url: path, headers: other.headers });
+      assert.equal(denied.statusCode, 404); assert.equal(denied.json().error.code, 'purchase_not_found');
+      const otherOrder = await f.order(other, 'stripe', key);
+      assert.deepEqual((await f.app.inject({ url: path, headers: other.headers })).json(), { orderID: otherOrder.orderID });
+      assert.deepEqual((await f.app.inject({ url: path, headers: member.headers })).json(), { orderID: order.orderID });
+      const ordinaryStatus = await f.app.inject({ url: `${rootURL}/${order.orderID}`, headers: member.headers });
+      assert.equal(ordinaryStatus.statusCode, 200); assert.equal(ordinaryStatus.json().orderID, order.orderID);
+      assert.equal(f.createCount, 2); // Lookup never contacts Stripe or creates another order.
+      const playKey = randomUUID(); await f.order(member, 'play', playKey);
+      const wrongProvider = await f.app.inject({ url: `${rootURL}/by-key/${playKey}?provider=stripe`, headers: member.headers });
+      assert.equal(wrongProvider.statusCode, 404); assert.equal(wrongProvider.json().error.code, 'purchase_not_found');
+    } finally { await f.cleanup(); }
+  });
+}
+integration('Stripe key recovery validates inputs, membership and trusted admission before exposing an order', async () => {
+  const f = await fixture();
+  try {
+    const member = await f.account(), guest = await f.account(true), key = randomUUID();
+    const order = await f.order(member, 'stripe', key), path = `${rootURL}/by-key/${key}?provider=stripe`;
+    for (const headers of [network, guest.headers]) {
+      const result = await f.app.inject({ url: path, headers });
+      assert.equal(result.statusCode, 401); assert.equal(result.json().error.code, 'sign_in_required');
+    }
+    for (const suffix of ['', '?provider=play', '?provider=stripe&provider=stripe']) {
+      const result = await f.app.inject({ url: `${rootURL}/by-key/${key}${suffix}`, headers: member.headers });
+      assert.equal(result.statusCode, 400); assert.equal(result.json().error.code, 'invalid_purchase_provider');
+    }
+    for (const bad of ['short', 'bad%20key', 'injection%27marker']) {
+      const result = await f.app.inject({ url: `${rootURL}/by-key/${bad}?provider=stripe`, headers: member.headers });
+      assert.equal(result.statusCode, 400); assert.equal(result.json().error.code, 'invalid_minute_order');
+    }
+    const extra = await f.app.inject({ url: `${path}&accountID=${member.id}`, headers: member.headers });
+    assert.equal(extra.statusCode, 400); assert.equal(extra.json().error.code, 'invalid_request');
+    const untrusted = await f.app.inject({ url: path, headers: { authorization: member.headers.authorization } });
+    assert.equal(untrusted.statusCode, 503); assert.equal(untrusted.json().error.code, 'accounts_proxy_not_ready');
+    const maxKey = 'A'.repeat(128), maxOrder = await f.order(member, 'stripe', maxKey);
+    assert.deepEqual((await f.app.inject({ url: `${rootURL}/by-key/${maxKey}?provider=stripe`, headers: member.headers })).json(), { orderID: maxOrder.orderID });
+    assert.equal((await f.app.inject({ url: `${rootURL}/by-key/${'A'.repeat(129)}?provider=stripe`, headers: member.headers })).statusCode, 414);
+    await f.db.query("UPDATE auth_rate_limits SET hits=600 WHERE operation='account' AND scope='network'");
+    const limited = await f.app.inject({ url: path, headers: member.headers });
+    assert.equal(limited.statusCode, 429); assert.equal(limited.json().error.code, 'rate_limit');
+    assert.equal(limited.headers['retry-after'], '3600'); assert.equal(limited.body.includes(order.orderID), false);
+  } finally { await f.cleanup(); }
+});
+integration('lost create responses remain recoverable after the Stripe idempotency window and with sales disabled', async () => {
+  const f = await fixture({ aiValue: true }); let disabled: ReturnType<typeof createApp> | undefined;
+  try {
+    const member = await f.account(), key = randomUUID();
+    const order = await f.aiPurchases!.createOrder(member.id, 'stripe', 'fixture-ai', key);
+    // An old request may have reached Stripe without its response reaching Mural. Never recreate it blindly.
+    await f.db.query("INSERT INTO minute_stripe_checkout_attempts(order_id,started_at) VALUES($1,now()-interval '25 hours')", [order.orderID]);
+    await assert.rejects(f.stripe.checkout(member.id, order.orderID), { code: 'checkout_reconciliation_required' });
+    disabled = createApp({ db: f.db, auth: { googleClientID: 'synthetic-google-client' }, accounts: { admission: new AuthAdmission(f.db, proxy) },
+      minuteCommerce: { purchases: new MinutePurchases(f.db, { salesEnabled: false }),
+        aiPurchases: new AIValuePurchases(f.db, { salesEnabled: false }), stripe: f.stripe } });
+    const found = await disabled.inject({ url: `${rootURL}/by-key/${key}?provider=stripe`, headers: member.headers });
+    assert.equal(found.statusCode, 200, found.body); assert.deepEqual(found.json(), { orderID: order.orderID });
+    const status = await disabled.inject({ url: `${rootURL}/${order.orderID}`, headers: member.headers });
+    assert.equal(status.statusCode, 200); assert.equal(status.json().state, 'created');
+    const unknown = await disabled.inject({ url: `${rootURL}/by-key/${randomUUID()}?provider=stripe`, headers: member.headers });
+    assert.equal(unknown.statusCode, 404); assert.equal(f.createCount, 0);
+    assert.equal((await f.db.query('SELECT count(*) FROM minute_purchase_orders')).rows[0].count, '1');
+  } finally { await disabled?.close(); await f.cleanup(); }
+});
+integration('mapped expired Stripe sessions reconcile to voided without a webhook or customer retry', async () => {
+  const f = await fixture({ aiValue: true });
+  try {
+    const member = await f.account(), key = randomUUID(), order = await f.order(member, 'stripe', key);
+    f.stripeEvent(order.orderID, 'expired'); // Change authoritative provider state; deliberately do not deliver this webhook.
+    const result = await f.drain(); assert.equal(result.completed, 1); assert.equal(result.retried, 0);
+    const recovered = await f.app.inject({ url: `${rootURL}/by-key/${key}?provider=stripe`, headers: member.headers });
+    assert.deepEqual(recovered.json(), { orderID: order.orderID });
+    const status = await f.app.inject({ url: `${rootURL}/${order.orderID}`, headers: member.headers });
+    assert.equal(status.json().state, 'voided'); assert.equal(status.json().grantedNanoUSD, '0');
+    assert.equal((await paidAIBalance(f.db, member.id)).balanceNanoUSD, '0'); assert.equal(f.createCount, 1);
+  } finally { await f.cleanup(); }
 });

@@ -82,6 +82,9 @@ export async function claimWelcomeMinutes(db: Database, account: string, proof: 
     await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-welcome-minutes'))");
     const policy = (await sql.query('SELECT * FROM minute_policy WHERE singleton')).rows[0];
     await lockMinuteWallet(sql, account);
+    if((await sql.query(`SELECT 1 FROM minute_guest_link_intents i WHERE i.member_account_id=$1
+      AND NOT EXISTS(SELECT 1 FROM minute_guest_link_completions c WHERE c.guest_account_id=i.guest_account_id) LIMIT 1`,[account])).rowCount)
+      throw new ServiceError('finish_guest_conversation_first',409);
     const previous = (await sql.query('SELECT * FROM minute_welcome_claims WHERE account_id=$1 OR proof_reference=$2',
       [account, verified.deviceReference])).rows;
     if (previous.some(row => row.account_id !== account || row.proof_reference !== verified.deviceReference))

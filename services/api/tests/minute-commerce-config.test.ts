@@ -185,3 +185,20 @@ test('unexpected fields, mismatched product bindings, partial providers and inva
     await assert.rejects(configuredMinuteCommerce(f.db, f.env), configError);
   } finally { await f.clean(); }
 });
+
+
+test('Managed Payments mode is an explicit boolean and configuration remains side-effect free', async () => {
+  const f = await fixture();
+  try {
+    f.manifest.stripe.managedPayments = true;
+    await f.file('COMMERCE_CONFIG_FILE', f.manifest);
+    const service = (await configuredMinuteCommerce(f.db, f.env, f.dependencies))!;
+    assert.ok(service.stripe); assert.equal(service.salesEnabled,false); assert.equal(f.network,0);
+    await service.runner.stop();
+    for (const invalid of ['true',1,null,{}]) {
+      f.manifest.stripe.managedPayments=invalid;
+      await f.file('COMMERCE_CONFIG_FILE',f.manifest);
+      await assert.rejects(configuredMinuteCommerce(f.db,f.env,f.dependencies),configError);
+    }
+  } finally {await f.clean();}
+});

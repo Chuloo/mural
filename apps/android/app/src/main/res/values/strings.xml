@@ -85,6 +85,8 @@
     <string name="talk_typed_reply_field_label">Your reply</string>
     <string name="talk_typed_reply_send_button">Send reply</string>
     <string name="talk_lookup_dialog_title">A little meaning</string>
+    <string name="talk_pinyin_show">Show pinyin</string>
+    <string name="talk_pinyin_hide">Hide pinyin</string>
     <string name="talk_lookup_field_label">Word or phrase</string>
     <string name="talk_lookup_button_action">Look up</string>
     <string name="talk_status_connecting">Getting comfortable…</string>
@@ -240,4 +242,6 @@
     <string name="consent_privacy_policy_link">Privacy policy</string>
     <string name="consent_agree_button">Agree and continue</string>
     <string name="consent_decline_button">Not now</string>
+    <string name="error_guest_secure_storage_unavailable">Mural couldn\'t restore your saved trial details. Your learning history is still available. Restart the app to try again.</string>
+    <string name="error_sign_in_finishing_startup">Mural is still saving your conversation. Please try signing in again shortly.</string>
 </resources>

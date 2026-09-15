@@ -360,7 +360,7 @@ async function refreshLiability(sql: PoolClient, budget: any): Promise<void> {
 }
 function earnedMilliseconds(session: any): number {
   const paid=session.funding_mode==='ai-value';
-  const value = session.state === 'closed' ? paid ? session.provider_attempted_at ? Math.max(15_000,Number(session.observed_ms)) : 0 : session.charged_ms
+  const value = session.state === 'closed' ? paid ? session.provider_attempted_at && !session.provider_rejection_status ? Math.max(15_000,Number(session.observed_ms)) : 0 : session.charged_ms
     : Math.max(Number(session.minimum_charge_ms), Number(session.observed_ms));
   if (value === null || !Number.isSafeInteger(Number(value)) || Number(value) < 0)
     throw new ServiceError('helper_session_funding_unavailable', 409);

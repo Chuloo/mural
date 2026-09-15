@@ -25,4 +25,5 @@
     <string name="minute_purchases_verification_failed">No hemos podido confirmar una compra. Vuelve a comprobarlo o inicia sesión con la cuenta de Mural que usaste para comprarla.</string>
     <string name="minute_purchases_sign_in_again">Inicia sesión para confirmar tus compras y ver tus minutos.</string>
     <string name="minute_purchases_play_terms">Google Play muestra el total final antes de que confirmes.</string>
+    <string name="minute_purchases_stripe_terms">El pago se abre de forma segura en Stripe. Después de pagar, vuelve a Mural y comprueba tus compras.</string>
 </resources>

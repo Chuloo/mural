@@ -48,6 +48,17 @@ class GuestMinutesSheetTest {
         compose.onNodeWithTag("guest-minutes-title").performScrollTo().assertTextEquals("Let’s try that again")
         compose.onNodeWithTag("guest-buy-minutes").performScrollTo().assertIsEnabled()
     }
+    @Test fun deferredGuestDoesNotHideReadyMembersGiftedMinutesOrRequireGoogleAgain() {
+        var starts = 0; var signIns = 0
+        compose.setContent { MuralTheme {
+            GuestMinutesSheet(GuestMinuteState(GuestMinuteStatus.DEFERRED), true, false, true,
+                memberRemaining = 1_800_000, onContinue = { starts++ }, onSignIn = { signIns++ },
+                onBuy = {}, onRetry = {}, onSettings = {}, onDismiss = {})
+        } }
+        compose.onNodeWithTag("guest-sign-in").assertDoesNotExist()
+        compose.onNodeWithTag("guest-continue").performScrollTo().assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(1, starts); assertEquals(0, signIns) }
+    }
     @Test fun consentIncludesAdultConfirmationWithoutDateOfBirthForm() {
         compose.setContent { MuralTheme { AIConsentDialog({}, {}) } }
         compose.onNodeWithTag("adult-confirmation").performScrollTo().assertTextEquals("By continuing, you confirm you’re 18 or older.")

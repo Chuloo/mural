@@ -218,3 +218,13 @@ No physical-device or live-provider check was performed. The original pending Ta
 The normal-relaunch UI test now restores Norwegian in an XCTest teardown block and verifies that restoration across a further normal launch. The maximum-accessibility test explicitly checks containment of the complete Tagalog card in the scroll viewport, containment of Continue in the screen and separation between them. The main README's remaining eight-language reference was corrected to nine.
 
 Both affected UI tests ran twice: **four executions passed with zero failures** in `.build/Tagalog-Review-Fixes.xcresult` on the same iPhone 17 / iOS 26.5 simulator. Visual inspection of a fresh accessibility attachment confirmed the Tagalog text and Continue button are untruncated; the preceding list row is intentionally partly outside the viewport. Production app behavior was unchanged, so the earlier core, API, Android and full UI suite results remain recorded above. The generic 80% docstring-coverage warning was not treated as a repository requirement or a reason to add boilerplate documentation to self-describing test functions.
+
+
+## 15 September 2026 — upstream Android parity and recovery integration
+
+Merged upstream `main` at `926fd95` into the Tagalog branch. The Android README retains the new Mandarin word-link and platform-specific pinyin guidance while reporting all nine languages. The hosted-session suite retains every new upstream rejection/recovery test and the existing Tagalog credit/minute reservation and settlement test. Android content was regenerated with the updated exporter, preserving the upstream Swift-derived defaults and meaning-language catalog.
+
+- **351 API tests passed with zero failures or skips**, using an isolated PostgreSQL 17 database, which was stopped afterward. TypeScript check and build passed.
+- **315 Android JVM tests passed with zero failures, errors or skips**. Android Debug APK assembly and lint passed.
+- **53 repository-tool tests passed**. Generated-content and cross-platform consistency checks passed, and the PR diff against upstream passed whitespace validation.
+- **Swift core build passed** using the installed Command Line Tools. The Swift test rerun could not compile because those tools do not include XCTest; the selected Xcode installation now requires license acceptance. The earlier successful Swift/UI results remain historical, not a new test pass. No iOS application source changed in this merge; upstream added a shared redirect-fixture test. Native UI and physical-device/provider checks were not rerun.

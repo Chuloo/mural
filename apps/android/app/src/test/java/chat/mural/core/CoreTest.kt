@@ -52,6 +52,11 @@ class CoreTest {
         assertEquals(listOf("nb","es","en","fr","de","it","pt","zh","tl"),LanguageRegistry.all.map { it.id })
         assertEquals(24,Themes.shared.map { it.id }.toSet().size)
         assertEquals("Salut !",LanguageRegistry.get("fr")!!.greeting)
+        for ((id, locale, greeting) in listOf(Triple("de","de-DE","Hallo!"),Triple("it","it-IT","Ciao!"),Triple("pt","pt-BR","Olá!"),Triple("zh","zh-CN","你好！"))) {
+            assertEquals(locale,LanguageRegistry.get(id)!!.locale); assertEquals(greeting,LanguageRegistry.get(id)!!.greeting)
+        }
+        assertTrue(MeaningLanguages.all.contains("Chinese (Simplified)"))
+        assertEquals("你好！",MeaningLanguages.greeting("Chinese (Simplified)"))
         assertEquals("Norwegian",LanguageRegistry.get("nb")!!.name)
         assertEquals("Hei!",MeaningLanguages.greeting("Norwegian"))
     }

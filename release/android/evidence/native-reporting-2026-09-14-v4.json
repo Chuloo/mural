@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-14",
+  "artifactSHA256": "4f0b5eb731c6bb9508a853d3d46976916ba0bf244830161facb68bbcb6d18373",
+  "versionCode": 4,
+  "package": "chat.mural.android",
+  "profile": "isolated Android secondary user",
+  "originalOwnerDataPreserved": true,
+  "reportSource": "imported synthetic one-turn archive",
+  "reason": "other",
+  "language": "es",
+  "explicitConsentSelected": true,
+  "nativeSuccessText": "Your report has been received.",
+  "databaseRowVerified": true,
+  "expiryHours": 720,
+  "syntheticReportRemoved": true,
+  "providerCallsMade": false,
+  "ownerProfileRestored": true,
+  "emulatorShutDown": true,
+  "limitations": [
+    "Debug-signed version 4 APK; does not establish Play-signed authentication or physical microphone quality."
+  ]
+}

@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-14T08:48:13.005394+00:00",
+  "status": "Version 4 free-trial/BYOK preview signed and locally verified; paid checkout disabled. No Play upload or live test performed by this audit.",
+  "artifact": {
+    "filename": "Mural-Android-release-2026-09-14-v4.aab",
+    "location": "Hej/deliverables (outside repository)",
+    "bytes": 33050159,
+    "sha256": "8e408404ac2c9cf397eeceac0e0d71b245b8d24884169df2b424729bc62a8946",
+    "unsignedSHA256": "fb60d628758da304b93268b5ff43f769890091257c298e92dc525fb09d903b92"
+  },
+  "previewAPK": {
+    "filename": "Mural-Android-preview-2026-09-14-v4.apk",
+    "bytes": 63496043,
+    "sha256": "4f0b5eb731c6bb9508a853d3d46976916ba0bf244830161facb68bbcb6d18373",
+    "manifest": {
+      "package": "chat.mural.android",
+      "versionCode": 4,
+      "versionName": "0.1",
+      "minSdk": 26,
+      "targetSdk": 36,
+      "debuggable": true,
+      "testOnly": false,
+      "allowBackup": false,
+      "usesCleartextTraffic": false
+    },
+    "buildType": "debug",
+    "apiOrigin": "https://api.mural.chat",
+    "minutePurchasesEnabled": false,
+    "minutePurchaseEnvironment": "test",
+    "signatureVerified": true,
+    "signerCertificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+    "matchesExistingPersonalDebugIdentity": true,
+    "zipalign16KB": true,
+    "embeddedSecretScan": {
+      "entriesScanned": 605,
+      "patterns": [
+        "OpenAI secret key",
+        "Stripe secret or restricted key",
+        "Google OAuth client secret",
+        "GitHub token",
+        "private key material"
+      ],
+      "findings": 0,
+      "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+    },
+    "requiredNotices": {
+      "Mural-LICENSE.txt": true,
+      "Apache-2.0.txt": true,
+      "Nunito-OFL.txt": true,
+      "THIRD-PARTY-NOTICES.txt": true,
+      "WebRTC-SDK-LICENSE.txt": true,
+      "WebRTC-THIRD-PARTY-NOTICES.md": true
+    },
+    "nativeLibraries": {
+      "lib/arm64-v8a/libandroidx.graphics.path.so": {
+        "bytes": 10096,
+        "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6"
+      },
+      "lib/arm64-v8a/libjingle_peerconnection_so.so": {
+        "bytes": 12287312,
+        "sha256": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca"
+      }
+    },
+    "schemaVersion": 1,
+    "recordedAt": "2026-09-14T08:48:13.005394+00:00",
+    "source": {
+      "commit": "cd75bdb23ee1ed5d4318ff084d7400b35306120a",
+      "dirtyAtBuild": false,
+      "description": "Built from a clean committed tree with explicit public API/Google client configuration and paid checkout disabled.",
+      "androidSourceFingerprintSHA256": "370bce5ed0da707d1af36af3372c712bedac96c493cc595a52b78d0a6f9d0e77",
+      "sourceManifest": "release/private/android-final-2026-09-14-v4/build-snapshot.json",
+      "sourceUnchangedAtPackagingVerification": true
+    },
+    "buildTests": {
+      "tests": 257,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "scope": "Signed personal debug preview. Full UI tests use the isolated variant. No personal installation or live provider call by this packaging audit."
+  },
+  "source": {
+    "commit": "cd75bdb23ee1ed5d4318ff084d7400b35306120a",
+    "dirtyAtBuild": false,
+    "description": "Built from a clean committed tree with explicit public API/Google client configuration and paid checkout disabled.",
+    "androidSourceFingerprintSHA256": "370bce5ed0da707d1af36af3372c712bedac96c493cc595a52b78d0a6f9d0e77",
+    "sourceManifest": "release/private/android-final-2026-09-14-v4/build-snapshot.json",
+    "sourceUnchangedAtPackagingVerification": true
+  },
+  "buildConfiguration": {
+    "package": "chat.mural.android",
+    "versionCode": 4,
+    "versionName": "0.1",
+    "buildType": "release",
+    "debuggable": false,
+    "minSdk": 26,
+    "targetSdk": 36,
+    "minutePurchasesEnabled": false,
+    "minutePurchaseEnvironment": "test",
+    "apiOrigin": "https://api.mural.chat",
+    "googleServerClientID": "1034240936303-v182map9ntca934qc10i2ql3366onue7.apps.googleusercontent.com",
+    "confirmedFrom": "Manifest and actual BuildConfig DEX in bundletool-generated base-master APK"
+  },
+  "signature": {
+    "allPayloadSignaturesValid": true,
+    "payloadEntriesVerified": 607,
+    "certificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+  },
+  "verification": {
+    "jvm": {
+      "tests": 257,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "releaseLint": {
+      "Error": 0,
+      "Warning": 44
+    },
+    "ui": {
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "seconds": 137.125,
+      "user": 13,
+      "device": {
+        "user": "13",
+        "size": "Physical size: 1080x2424",
+        "density": "Physical density: 420",
+        "fontScale": "1.0",
+        "sdk": "36",
+        "build": "google/sdk_gphone64_arm64/emu64a:16/BE2A.250530.026.D1/13818094:user/release-keys"
+      },
+      "appSHA256": "1454bd84c6f506593c80ec2d0f4225cc9900bd1ea788bcc06ef87ed301e34d9e",
+      "testAPKSHA256": "0fd66ec3319e79a3b6e31a071aec6f566760701f62e42f0f9a687650e0a573c9",
+      "logSHA256": "8836801f6d4a880e4168e1cd73216301fbd81ec677a34d1af06498a3cc1f82c3",
+      "schemaVersion": 1,
+      "recordedAt": "2026-09-14T08:48:13.005394+00:00",
+      "source": {
+        "commit": "cd75bdb23ee1ed5d4318ff084d7400b35306120a",
+        "dirtyAtBuild": false,
+        "description": "Built from a clean committed tree with explicit public API/Google client configuration and paid checkout disabled.",
+        "androidSourceFingerprintSHA256": "370bce5ed0da707d1af36af3372c712bedac96c493cc595a52b78d0a6f9d0e77",
+        "sourceManifest": "release/private/android-final-2026-09-14-v4/build-snapshot.json",
+        "sourceUnchangedAtPackagingVerification": true
+      },
+      "personalDataPreserved": true,
+      "originalUserRestored": true,
+      "deviceSettingsPreserved": true,
+      "scope": "Full offline isolated test package; not live provider, physical audio or Play-signed verification."
+    },
+    "releaseValidatorTests": {
+      "tests": 21,
+      "failures": 0
+    },
+    "bundleAndAssets": {
+      "passed": true,
+      "report": "signed-release-files-2026-09-14-v4.json"
+    },
+    "generatedSplits": {
+      "sourceAABSHA256": "8e408404ac2c9cf397eeceac0e0d71b245b8d24884169df2b424729bc62a8946",
+      "deviceSpec": {
+        "supportedAbis": [
+          "arm64-v8a"
+        ],
+        "supportedLocales": [
+          "en",
+          "es"
+        ],
+        "screenDensity": 420,
+        "sdkVersion": 36
+      },
+      "tool": "bundletool 1.18.0",
+      "localSplitSigning": "Approved upload certificate; these are not Play-signed installs.",
+      "installed": false,
+      "apks": [
+        {
+          "apk": "splits/base-arm64_v8a.apk",
+          "bytes": 12333520,
+          "sha256": "780713e7f41458943a2f0762846e711e2af6c3fc95f7036938e99caebd85dca5",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-en.apk",
+          "bytes": 86362,
+          "sha256": "c2b60959238deeef5e136b23e31b88f41cde028c3ae87d67c3331333794eef24",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-es.apk",
+          "bytes": 69978,
+          "sha256": "ff2bf5248d00911ee7ec961e615614fb0658cb2e70d83cf17dccc50eb17c591b",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-master.apk",
+          "bytes": 26919046,
+          "sha256": "625188f8ef5945a84f1812934e6a96989f0714963936f176e86d909fbec2fb7e",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        },
+        {
+          "apk": "splits/base-xxhdpi.apk",
+          "bytes": 84832,
+          "sha256": "9350dbb7cdcd5c5c3c41dac39c56cb8f1f512eeda8359ba90867422e63cdde38",
+          "zipalign16KB": true,
+          "signatureValid": true,
+          "signingCertificateSHA256": "e45e9cf5ed9d6164ba58ea5ad7dfc267cb822c7aeb8c46a35d39a3c8db20c65c"
+        }
+      ],
+      "releaseBuildConfigVerified": true
+    },
+    "nativeLibraryContinuity": {
+      "byteIdenticalToV3": true,
+      "earlier16KBRuntimeEvidence": "16kb-runtime-verified-2026-09-13.json",
+      "earlierScope": "Native graphics/WebRTC load and offline peer offer at 16,384-byte pages; not an installation of the exact version 4 bundle or a physical audio test."
+    },
+    "embeddedSecretScan": {
+      "entriesScanned": 610,
+      "patterns": [
+        "OpenAI secret key",
+        "Stripe secret or restricted key",
+        "Google OAuth client secret",
+        "GitHub token",
+        "private key material"
+      ],
+      "findings": 0,
+      "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+    }
+  },
+  "notPerformedByThisAudit": [
+    "Play upload, reviewer submission or publication",
+    "Play-signed installation and Google login",
+    "Live guest, account, provider or report calls",
+    "Live or sandbox Play purchase, refund or recovery; checkout disabled",
+    "Physical microphone, speaker, Bluetooth or interruptions",
+    "API 26 runtime test",
+    "Installation of the exact version 4 splits on a 16 KB runtime"
+  ],
+  "history": {
+    "version3ArtifactsPreserved": true,
+    "previousCandidate": "signed-candidate-2026-09-14-v3.json"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "date": "2026-09-14",
+  "package": "chat.mural.android",
+  "versionCode": 4,
+  "versionName": "0.1",
+  "track": "production",
+  "releaseName": "0.1 (4) \u2014 Free trial and BYOK preview",
+  "status": "in_review",
+  "submittedChanges": 10,
+  "countries": 162,
+  "targetAudience": "18+",
+  "purchasesEnabled": false,
+  "managedPublishing": false,
+  "consoleConfirmation": "Your changes are now in review.",
+  "reviewerAccess": {
+    "googleSignInVerified": true,
+    "hostedConversationsStartedAndSettled": 2,
+    "pendingReservations": 0
+  },
+  "physicalAndroidTested": false,
+  "playSignedInstallationTested": false
+}

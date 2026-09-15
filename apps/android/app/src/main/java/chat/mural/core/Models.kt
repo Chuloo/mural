@@ -45,12 +45,17 @@ object Transcript {
     }
 }
 
+/** Swift compares strings by canonical equivalence; Kotlin needs the same form on both sides. */
+fun String.canonical(): String = java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFC)
+
+fun String.containsCanonical(other: String): Boolean = canonical().contains(other.canonical(), ignoreCase = true)
+
 @Serializable
 data class WordProposal(
     val lemma: String, val meaning: String, val form: String, val kind: EvidenceKind,
     val confidence: Double, val sourceIDs: List<String>, val quote: String,
     val language: String = LanguageRegistry.defaultID
-) { val key get() = "${language}|${lemma.trim().lowercase()}|${meaning.lowercase()}" }
+) { val key get() = "${language}|${lemma.trim().lowercase().canonical()}|${meaning.lowercase().canonical()}" }
 
 @Serializable
 data class Assessment(

@@ -58,9 +58,31 @@ def call_arguments(module_swift_text):
     return set(re.findall(r'(?:^|,)[ \t]*(\w+):[ \t]', module_swift_text, re.MULTILINE))
 
 
+def meaning_languages(text):
+    """Kotlin lines for `MeaningLanguages`, read from the Swift enum so both clients offer the same list."""
+    block = re.search(r'enum MeaningLanguages\s*\{(.*?)\n\}', text, re.S)
+    if not block:
+        raise SystemExit('MeaningLanguages not found in Core/Languages/LanguageModule.swift.')
+    names = re.search(r'static let all\s*=\s*\[(.*?)\]', block.group(1), re.S)
+    greetings = re.search(r'func greeting\(in language: String\)[^\[]*\[(.*?)\]\[language\]\s*\?\?\s*("(?:[^"\\]|\\.)*")', block.group(1), re.S)
+    if not names or not greetings:
+        raise SystemExit('MeaningLanguages.all or greeting(in:) has an unexpected shape in Core/Languages/LanguageModule.swift.')
+    pairs = re.findall(r'("(?:[^"\\]|\\.)*")\s*:\s*("(?:[^"\\]|\\.)*")', greetings.group(1))
+    if not pairs:
+        raise SystemExit('MeaningLanguages greetings not found in Core/Languages/LanguageModule.swift.')
+    return ['    val all = listOf(' + ', '.join(map(quoted, swift_strings(names.group(1)))) + ')',
+            '    fun greeting(language: String) = mapOf(' + ', '.join(f'{quoted(json.loads(k))} to {quoted(json.loads(v))}' for k, v in pairs)
+            + f')[language] ?: {quoted(json.loads(greetings.group(2)))}']
+
+
 def generate(core):
     """Render `Languages.kt` from the Swift language content under `core`."""
-    known_fields = struct_fields((core / 'Languages/LanguageModule.swift').read_text())
+    registry_text = (core / 'Languages/LanguageModule.swift').read_text()
+    known_fields = struct_fields(registry_text)
+    default_match = re.search(r'static let defaultID\s*=\s*"([^"]+)"', registry_text)
+    if not default_match:
+        raise SystemExit('LanguageRegistry.defaultID not found in Core/Languages/LanguageModule.swift.')
+    default_id = default_match.group(1)
     simple_fields = [f for f in known_fields if f not in STRUCTURED_FIELDS]
 
     shared = (core / 'Themes.swift').read_text()
@@ -80,7 +102,7 @@ def generate(core):
     val defaultTitle get() = "A little $name"
     val talkTitle get() = "A little everyday $name"
     val settingsTitle get() = "$name · $variety"
-}''', '', 'object LanguageRegistry {', '    const val defaultID = "nb"']
+}''', '', 'object LanguageRegistry {', f'    const val defaultID = {quoted(default_id)}']
     module_names = []
     for path in language_files(core):
         text = path.read_text()
@@ -111,9 +133,9 @@ def generate(core):
         lines += [f'    private val {module_name} = LanguageModule(', ',\n'.join(args), '    )']
     lines += [f'    val all = listOf({", ".join(module_names)})',
               '    fun get(id: String) = all.firstOrNull { it.id == id }', '}', '',
-              'object MeaningLanguages {',
-              '    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Polish", "Arabic", "Ukrainian")',
-              '    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"', '}', '']
+              'object MeaningLanguages {']
+    lines += meaning_languages(registry_text)
+    lines += ['}', '']
     return '\n'.join(lines)
 
 

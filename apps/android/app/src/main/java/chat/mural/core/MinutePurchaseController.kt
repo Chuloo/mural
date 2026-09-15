@@ -13,7 +13,8 @@ import kotlinx.coroutines.sync.withLock
 enum class MinutePurchaseNotice { UNAVAILABLE, SIGN_IN_REQUIRED, PRICE_CHANGED, CANCELED, PENDING, VERIFYING, ADDED, REVERSED, VERIFICATION_FAILED }
 data class MinutePack(val sku: String, val minutes: Int, val formattedPrice: String, val aiValue: AIValueEntitlement? = null)
 data class MinutePurchaseState(val busy: Boolean = false, val available: Boolean = false, val packs: List<MinutePack> = emptyList(),
-    val balance: MinuteBalance? = null, val purchaseInProgress: Boolean = false, val notice: MinutePurchaseNotice? = null)
+    val balance: MinuteBalance? = null, val purchaseInProgress: Boolean = false, val notice: MinutePurchaseNotice? = null,
+    val channel: PurchaseChannel = PurchaseChannel.PLAY)
 
 /** UI state never contains an account bearer, receipt, provider binding or purchase token. */
 class MinutePurchaseController(
