@@ -47,6 +47,9 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.heightIn
@@ -65,6 +68,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -76,6 +81,7 @@ import chat.mural.MuralViewModel
 import chat.mural.R
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
+import kotlin.math.roundToInt
 
 @Composable
 fun TalkScreen(
@@ -104,10 +110,23 @@ fun TalkScreen(
     val scrollPage = LocalDensity.current.fontScale > 1.3f || maxHeight < 480.dp
     val compact = !scrollPage && maxHeight < 620.dp
     val captionWidth = with(LocalDensity.current) { (maxWidth - 56.dp).roundToPx().coerceAtLeast(1) }
-    val longPassage = passage != null && !scrollPage && textMeasurer.measure(
-        caption, style = MaterialTheme.typography.headlineSmall,
-        constraints = Constraints(maxWidth = captionWidth),
-    ).lineCount > 2
+    val captionConstraints = Constraints(maxWidth = captionWidth)
+    val baseStyle = if (passage == null) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineSmall
+    val baseLayout = textMeasurer.measure(caption, style = baseStyle, constraints = captionConstraints)
+    val longPassage = passage != null && !scrollPage && baseLayout.lineCount > 2
+    val targetText = if (passage == null) AnnotatedString(caption)
+        else captionLinks(caption, vm.language.id) { word ->
+            vm.clearLookup(); lookupWord = word; lookupSentence = caption
+            lookup = true; onLookup(word, caption)
+        }
+    val meaningText = when {
+        passage == null -> chat.mural.core.MeaningLanguages.greeting(vm.archive.preferences.meaningLanguage)
+        vm.meaning.isNotBlank() -> vm.meaning
+        vm.translating -> stringResource(R.string.talk_meaning_loading)
+        else -> ""
+    }
+    val meaningStyle = MaterialTheme.typography.bodyLarge
+    val userPassage = vm.session?.passages?.lastOrNull { it.speaker == Speaker.user }
     val readingSpace by animateFloatAsState(
         if (longPassage || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
             vm.language.id == "zh" && chat.mural.core.MandarinPinyin.containsHan(caption))) 1f else 0f, spring(dampingRatio = 1f, stiffness = 260f), label = "passage reading space",
@@ -159,45 +178,31 @@ fun TalkScreen(
             }
         }
         Spacer(Modifier.height(if (compact) 12.dp else 20.dp - 8.dp * readingSpace))
-        Column(
-            // Each language keeps a share of the available space. A single scroller let
-            // long target-language replies push their meaning entirely below the viewport.
-            modifier = (if (scrollPage) Modifier else Modifier.weight(1f))
-                .fillMaxWidth().testTag("conversation-captions"),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        CaptionsLayout(
+            modifier = (if (scrollPage) Modifier else Modifier.weight(1f)).fillMaxWidth().testTag("conversation-captions"),
+            targetText = targetText, targetStyle = baseStyle,
+            meaningText = meaningText, meaningStyle = meaningStyle, textMeasurer = textMeasurer,
         ) {
         Column(
-            modifier = (if (scrollPage) Modifier else Modifier.weight(1f, fill = false).passageScroll(targetScroll))
+            modifier = Modifier.layoutId(TargetSlot)
+                .then(if (scrollPage) Modifier else Modifier.passageScroll(targetScroll))
                 .fillMaxWidth().testTag("target-passage-scroll"),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                if (passage == null) AnnotatedString(caption)
-                else captionLinks(caption, vm.language.id) { word ->
-                    vm.clearLookup(); lookupWord = word; lookupSentence = caption
-                    lookup = true; onLookup(word, caption)
-                },
-                style = if (passage == null) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().testTag("target-caption"),
-            )
+            Text(targetText, style = baseStyle, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().testTag("target-caption"))
             if (vm.language.id == "zh") PinyinHelp(caption)
         }
         if (vm.archive.preferences.meaningVisible) {
             Spacer(Modifier.height(10.dp))
             Column(
-                modifier = (if (scrollPage) Modifier else Modifier.weight(.72f, fill = false).passageScroll(meaningScroll))
+                modifier = Modifier.layoutId(MeaningSlot)
+                    .then(if (scrollPage) Modifier else Modifier.passageScroll(meaningScroll))
                     .fillMaxWidth().testTag("meaning-passage-scroll"),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
             Text(
-                when {
-                    passage == null -> chat.mural.core.MeaningLanguages.greeting(vm.archive.preferences.meaningLanguage)
-                    vm.meaning.isNotBlank() -> vm.meaning
-                    vm.translating -> stringResource(R.string.talk_meaning_loading)
-                    else -> ""
-                },
+                meaningText,
+                style = meaningStyle,
                 color = MuralColors.Secondary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.testTag("meaning-caption"),
@@ -208,11 +213,12 @@ fun TalkScreen(
             }
             }
         }
-        vm.session?.passages?.lastOrNull { it.speaker == Speaker.user }?.let { user ->
-            Row(Modifier.padding(top = 3.dp).testTag("user-caption"), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.history_speaker_you), style = MaterialTheme.typography.labelSmall, color = MuralColors.Secondary)
+        userPassage?.let { user ->
+            Row(Modifier.padding(top = 3.dp).testTag("user-caption"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(R.string.history_speaker_you), style = MaterialTheme.typography.labelSmall, color = MuralColors.Secondary,
+                    modifier = Modifier.alignByBaseline())
                 Text(user.text.takeLast(160), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary,
-                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.alignByBaseline())
             }
         }
         if (vm.session?.topics?.lastOrNull()?.sources?.isNotEmpty() == true) {
@@ -289,6 +295,84 @@ fun TalkScreen(
     if (lookup) WordLookupSheet(lookupWord, lookupSentence, vm.language.id, vm.lookupResult, vm.lookupError, vm.lookupLoading,
         onDismiss = { vm.clearLookup(); lookup = false; lookupWord = "" })
     transcript?.let { TranscriptDialog(vm, it, onDismiss = { transcript = null }) }
+}
+
+private const val TargetSlot = "target-passage"
+private const val MeaningSlot = "meaning-passage"
+
+internal data class PassageHeights(val target: Float, val meaning: Float)
+
+/**
+ * Splits [available] height between the target passage and its meaning: the target keeps its
+ * full height up to [targetCap] and never less than [targetMin] (one line) when that much
+ * exists; the meaning keeps at least its first lines ([meaningPeek]) and scrolls the rest.
+ */
+internal fun passageHeights(
+    available: Float, target: Float, targetCap: Float, targetMin: Float, meaning: Float, meaningPeek: Float,
+): PassageHeights {
+    val room = available.coerceAtLeast(0f)
+    val floor = minOf(targetMin, target, room)
+    val targetHeight = minOf(target, targetCap, maxOf(room - minOf(meaning, meaningPeek), floor))
+    return PassageHeights(targetHeight, minOf(meaning, room - targetHeight))
+}
+
+/**
+ * Stacks the caption block and centres it vertically. Children other than the two passage
+ * slots (spacer, the learner's line, sources) are measured first at their natural
+ * height; the passages share what remains through [passageHeights]. With unbounded height
+ * (the scrolling page) everything simply takes its natural height.
+ */
+@Composable
+private fun CaptionsLayout(
+    modifier: Modifier,
+    targetText: AnnotatedString, targetStyle: TextStyle,
+    meaningText: String, meaningStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    content: @Composable () -> Unit,
+) {
+    Layout(content, modifier) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val target = measurables.first { it.layoutId == TargetSlot }
+        val meaning = measurables.firstOrNull { it.layoutId == MeaningSlot }
+        val placeables: List<Placeable>
+        val height: Int
+        if (!constraints.hasBoundedHeight) {
+            placeables = measurables.map { it.measure(loose) }
+            height = placeables.sumOf { it.height }
+        } else {
+            val fixed = measurables.filter { it !== target && it !== meaning }.associateWith { it.measure(loose) }
+            val textConstraints = Constraints(maxWidth = width)
+            val targetLines = textMeasurer.measure(targetText, targetStyle, constraints = textConstraints)
+            val meaningLines = if (meaning == null) null else textMeasurer.measure(meaningText, meaningStyle, constraints = textConstraints)
+            val fixedHeight = fixed.values.sumOf { it.height }
+            val targetNeeded = target.minIntrinsicHeight(width)
+            val meaningNeeded = meaning?.minIntrinsicHeight(width) ?: 0
+            val meaningPeek = meaningLines?.getLineBottom(minOf(meaningLines.lineCount, 2) - 1) ?: 0f
+            val heights = passageHeights(
+                available = (constraints.maxHeight - fixedHeight).toFloat(),
+                target = targetNeeded.toFloat(),
+                targetCap = targetLines.getLineBottom(minOf(targetLines.lineCount, 6) - 1),
+                targetMin = targetLines.getLineBottom(0),
+                meaning = meaningNeeded.toFloat(),
+                meaningPeek = meaningPeek,
+            )
+            val targetPlaceable = target.measure(loose.copy(maxHeight = heights.target.roundToInt()))
+            val meaningPlaceable = meaning?.measure(loose.copy(maxHeight = heights.meaning.roundToInt()))
+            placeables = measurables.map {
+                when {
+                    it === target -> targetPlaceable
+                    it === meaning -> meaningPlaceable!!
+                    else -> fixed.getValue(it)
+                }
+            }
+            height = constraints.maxHeight
+        }
+        layout(width, height) {
+            var y = ((height - placeables.sumOf { it.height }) / 2).coerceAtLeast(0)
+            placeables.forEach { it.placeRelative((width - it.width) / 2, y); y += it.height }
+        }
+    }
 }
 
 private fun Modifier.passageScroll(state: ScrollState): Modifier = this
