@@ -69,6 +69,11 @@ public enum LearningEngine {
         var capabilityEvidence: [String: Set<String>] = [:]
         var events: [String: [(WordProposal, Date, String)]] = [:]
         let calendar = Calendar(identifier: .gregorian)
+        // Legacy hidden keys carry the meaning as a third segment and predate lemma normalisation; current ids are stored as projected.
+        let hidden = Set(hiddenWords.map { stored -> String in
+            let parts = stored.split(separator: "|", omittingEmptySubsequences: false)
+            return parts.count >= 3 ? WordProposal.key(language: String(parts[0]), lemma: String(parts[1])) : stored
+        })
         for session in sessions.filter({ $0.languageID == languageID }).sorted(by: { $0.startedAt < $1.startedAt }) {
             var seen = Set<String>()
             for raw in session.assessments.sorted(by: { $0.createdAt < $1.createdAt }) {
@@ -85,7 +90,7 @@ public enum LearningEngine {
                     capabilityEvidence[a.capability, default: []].insert("\(calendar.startOfDay(for: a.createdAt))|\(a.context)")
                 }
                 var seenWords = Set<String>()
-                for word in a.words where !hiddenWords.contains(word.key) && seenWords.insert(word.key).inserted {
+                for word in a.words where !hidden.contains(word.key) && seenWords.insert(word.key).inserted {
                     events[word.key, default: []].append((word, a.createdAt, a.context))
                 }
             }

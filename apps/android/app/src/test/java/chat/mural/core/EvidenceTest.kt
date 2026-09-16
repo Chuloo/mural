@@ -51,6 +51,71 @@ class EvidenceTest {
         assertTrue(LearningEngine.project(listOf(s),"es",listOf(a.words.single().key)).words.isEmpty())
         assertEquals(1,LearningEngine.project(listOf(s),"es",listOf("en|la casa|house")).words.size)
     }
+    private fun recordWith(lemma: String, meaning: String, day: Int): SessionRecord {
+        val s = record().copy(startedAt = record().startedAt + day * 86400.0)
+        val a = s.assessments.single(); val w = a.words.single()
+        s.assessments = mutableListOf(a.copy(createdAt = a.createdAt + day * 86400.0, words = listOf(w.copy(lemma = lemma, meaning = meaning))))
+        return s
+    }
+    @Test fun paraphrasedMeaningsShareOneWord() {
+        val sessions = listOf(recordWith("la casa","house",0), recordWith("la casa","a house or home",1), recordWith("la casa","a building where people live",2))
+        val words = LearningEngine.project(sessions,"es").words
+        assertEquals(1, words.size)
+        assertEquals(3, words.single().independentCount)
+        assertEquals("a building where people live", words.single().meaning)
+    }
+    @Test fun leadingArticlesAndCaseDoNotSplitAWord() {
+        val words = LearningEngine.project(listOf(recordWith("la casa","house",0), recordWith("Casa","house",1), recordWith("  la  casa ","house",2)),"es").words
+        assertEquals(listOf("es|casa"), words.map { it.id })
+        assertEquals("  la  casa ", words.single().lemma)
+    }
+    @Test fun wordKeysDropEachLanguagesLeadingArticles() {
+        fun key(language: String, lemma: String) = WordProposal(lemma,"m","f",EvidenceKind.independent,0.9,listOf("x"),"q",language).key
+        assertEquals("en|version", key("en","a version")); assertEquals("en|version", key("en","the version")); assertEquals("en|version", key("en","version"))
+        assertEquals("nb|gå", key("nb","å gå")); assertEquals("nb|tur", key("nb","en tur"))
+        assertEquals("fr|ami", key("fr","l'ami")); assertEquals("fr|ami", key("fr","l’ami")); assertEquals("fr|maison", key("fr","une maison"))
+        assertEquals("de|haus", key("de","das Haus")); assertEquals("it|studente", key("it","lo studente")); assertEquals("pt|pão", key("pt","o pão"))
+        assertEquals("zh|洗澡", key("zh","洗澡"))
+        assertEquals("en|a", key("en","a")); assertEquals("es|el", key("es","el"))
+        assertEquals("en|apple", key("en","apple")); assertEquals("en|another", key("en","another"))
+    }
+    private fun session(language: String, lemma: String, day: Int = 0): SessionRecord {
+        val s = SessionRecord(languageID = language, startedAt = 1e9 + day * 86400.0)
+        s.append(Fragment(id = "t", speaker = Speaker.user, text = lemma, startMS = 5000, endMS = 6000))
+        val p = s.passages.single()
+        s.assessments += Assessment(p.id, p.revisionKey, Outcome.success, 2, "goal", "capability",
+            listOf(WordProposal(lemma, "meaning", lemma, EvidenceKind.independent, 0.95, listOf("t"), lemma, language)), createdAt = s.startedAt)
+        return s
+    }
+    @Test fun hidingAProjectedIdHidesThatWordOnly() {
+        val sessions = listOf(session("pt", "um a um"), session("pt", "um", 1))
+        val ids = LearningEngine.project(sessions, "pt").words.map { it.id }.sorted()
+        assertEquals(listOf("pt|a um", "pt|um"), ids)
+        assertEquals(listOf("pt|um"), LearningEngine.project(sessions, "pt", listOf("pt|a um")).words.map { it.id })
+    }
+    @Test fun wordKeysDropIndefinitePluralsPartitivesAndElidedUn() {
+        fun key(language: String, lemma: String) = wordKey(language, lemma)
+        assertEquals("es|vacaciones", key("es", "unas vacaciones")); assertEquals("es|amigos", key("es", "unos amigos"))
+        assertEquals("pt|férias", key("pt", "umas férias")); assertEquals("pt|amigos", key("pt", "uns amigos"))
+        assertEquals("it|amica", key("it", "un'amica")); assertEquals("it|amica", key("it", "un’amica"))
+        assertEquals("fr|pain", key("fr", "du pain")); assertEquals("fr|confiture", key("fr", "de la confiture"))
+    }
+    @Test fun wordKeysStayComposedAfterLowercasing() {
+        assertEquals(wordKey("en", "ǰ"), wordKey("en", "J̌"))
+        val sessions = listOf(session("en", "J̌"), session("en", "ǰ", 1))
+        assertEquals(1, LearningEngine.project(sessions, "en").words.size)
+        assertTrue(LearningEngine.project(sessions, "en", listOf(wordKey("en", "J̌"))).words.isEmpty())
+    }
+    @Test fun wordKeysTreatEveryUnicodeWhitespaceAlike() {
+        assertEquals("zh|洗澡", wordKey("zh", "洗澡"))
+        assertEquals("en|version", wordKey("en", "a version "))
+    }
+    @Test fun legacyAndCurrentHiddenKeysBothHideTheWord() {
+        val sessions = listOf(recordWith("la casa","house",0), recordWith("casa","a house",1))
+        assertTrue(LearningEngine.project(sessions,"es",listOf("es|la casa|house")).words.isEmpty())
+        assertTrue(LearningEngine.project(sessions,"es",listOf("es|casa")).words.isEmpty())
+        assertEquals(1, LearningEngine.project(sessions,"es",listOf("es|la calle|street")).words.size)
+    }
     @Test fun twoSuccessesRequiredAndBreakdownReducesChallenge() {
         val first = record(); val second = record().copy(startedAt=first.startedAt+1)
         assertEquals(0,LearningEngine.project(listOf(first),"es").challenge)

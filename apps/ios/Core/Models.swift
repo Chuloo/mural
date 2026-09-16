@@ -86,7 +86,19 @@ public struct WordProposal: Codable, Sendable {
         self.lemma = lemma; self.meaning = meaning; self.form = form; self.kind = kind
         self.confidence = confidence; self.sourceIDs = sourceIDs; self.quote = quote; self.language = language
     }
-    public var key: String { language + "|" + lemma.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() + "|" + meaning.lowercased() }
+    public var key: String { Self.key(language: language, lemma: lemma) }
+    /// Groups every observation of one dictionary word: articles, case, spacing and the meaning wording do not split it.
+    public static func key(language: String, lemma: String) -> String {
+        // Lowercasing can break NFC, so compose last.
+        var text = lemma.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ").precomposedStringWithCanonicalMapping
+        for prefix in LanguageRegistry.module(for: language)?.lemmaPrefixes ?? [] {
+            let marker = prefix.hasSuffix("'") || prefix.hasSuffix("’") ? prefix : prefix + " "
+            guard text.hasPrefix(marker) else { continue }
+            let rest = text.dropFirst(marker.count).trimmingCharacters(in: .whitespaces)
+            if !rest.isEmpty { text = rest; break }
+        }
+        return language + "|" + text
+    }
 }
 
 public struct Assessment: Codable, Identifiable, Sendable {
