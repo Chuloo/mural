@@ -162,6 +162,7 @@ final class LanguageTests: XCTestCase {
                 XCTAssertFalse(prompt.contains("no headings or English translation"))
             }
             XCTAssertTrue(TeachingPolicy.assessment(language: language).contains("Use language \(language.id) for target-language evidence"))
+            XCTAssertTrue(TeachingPolicy.assessment(language: language).contains("Reuse one stable sense for the same lemma"))
             XCTAssertTrue(language.themes.allSatisfy { !$0.situation.contains("Norway") && !$0.situation.contains("Norwegian") })
         }
         XCTAssertEqual(LanguageRegistry.module(for: "en")?.greeting, "Hi!")
