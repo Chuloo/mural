@@ -37,7 +37,13 @@ public enum TeachingPolicy {
     public static func redirect(language: LanguageModule) -> String {
         "Return to \(language.name). Briefly restate the last idea in \(language.name) and continue ONLY in \(language.name). The learner may reply in any language; your speech must stay in \(language.name)."
     }
+    public static func supportsSpeechLanguageDetection(language: LanguageModule) -> Bool {
+        // Apple's recognizer can label valid Tagalog as Indonesian above 99% confidence.
+        // Keep explicit target-language prompts, but do not redirect on unreliable labels.
+        language.id != "tl"
+    }
     public static func shouldRedirectSpeech(language: LanguageModule, detectedLanguageID: String, confidence: Double) -> Bool {
+        guard supportsSpeechLanguageDetection(language: language) else { return false }
         let detected = detectedLanguageID.replacingOccurrences(of: "_", with: "-").lowercased()
         // NaturalLanguage reports Chinese script IDs (zh-Hans / zh-Hant).
         // These describe the transcript's script, not a different spoken language.

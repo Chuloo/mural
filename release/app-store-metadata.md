@@ -43,7 +43,7 @@ Choose from 24 themes, from ordering coffee to discussing a film. For something 
 
 Your vocabulary grows from words you use in conversation. Three recall bars reflect repeated practice over time. Each language keeps its own conversations and progress; the bars and ability observations are guidance, not a language qualification.
 
-Practise Norwegian Bokmål, Spanish from Spain, international English, French from France, German, Italian, Brazilian Portuguese or Mandarin with Simplified Chinese and optional pinyin. Your conversations and learning records stay in the app on your device. You can export a backup and import it on another installation.
+Practise Norwegian Bokmål, Spanish from Spain, international English, French from France, German, Italian, Brazilian Portuguese, Mandarin with Simplified Chinese and optional pinyin, or Tagalog (Filipino) from the Philippines. Your conversations and learning records stay in the app on your device. You can export a backup and import it on another installation.
 
 This version requires your own OpenAI API key, API billing and access to the supported models. API usage is billed by OpenAI. Mural has no account requirement or credit purchases in this version. Audio and selected text are sent to OpenAI while you practise; provider retention policies apply. Mural does not save raw audio.
 
@@ -55,7 +55,7 @@ Four 6.9-inch upload PNGs are prepared in [screenshots/en-US](screenshots/en-US/
 
 ## TestFlight beta description
 
-Try Mural, a voice conversation app for language practice. The beta includes Norwegian, Spanish, English, French, German, Italian, Brazilian Portuguese and Mandarin, with meaning subtitles, everyday themes, vocabulary recall bars and local learning backups. Mandarin uses Simplified Chinese with optional pinyin. This build uses your own OpenAI project key and bills API usage to that project. An internet connection is required.
+Try Mural, a voice conversation app for language practice. The beta includes Norwegian, Spanish, English, French, German, Italian, Brazilian Portuguese, Mandarin and Tagalog (Filipino) from the Philippines, with meaning subtitles, everyday themes, vocabulary recall bars and local learning backups. Mandarin uses Simplified Chinese with optional pinyin. This build uses your own OpenAI project key and bills API usage to that project. An internet connection is required.
 
 ## What to test
 

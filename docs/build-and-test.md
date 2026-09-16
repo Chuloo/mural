@@ -12,7 +12,7 @@ xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
   CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
 ```
 
-Create an iPhone 17 simulator in Xcode’s **Devices and Simulators** window. If you name it `iPhone 17`, run UI tests with:
+Create a dedicated iPhone 17 simulator in Xcode’s **Devices and Simulators** window. Most tests use temporary preview storage; the normal-relaunch test also writes language preferences to the simulator's persistent store. If you name it `iPhone 17`, run UI tests with:
 
 ```sh
 xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
@@ -22,7 +22,7 @@ xcodebuild -project apps/ios/Mural.xcodeproj -scheme Mural \
   -parallel-testing-enabled NO test
 ```
 
-The core suite covers evidence validation, transcript revisions, language isolation, recall spacing, archive validation, translation cancellation, and managed-account configuration and security parsing. Native UI tests exercise the screens with in-memory data. Neither suite needs an API key. Configured provider sign-in and account deletion need the separate device checks in [managed accounts](managed-accounts.md).
+The core suite covers evidence validation, transcript revisions, language isolation, recall spacing, archive validation, translation cancellation, and managed-account configuration and security parsing. Native UI tests exercise the screens with synthetic data and verify language selection across relaunch. Neither suite needs an API key. Configured provider sign-in and account deletion need the separate device checks in [managed accounts](managed-accounts.md).
 
 ## Check the Android port and the cross-platform contracts
 
@@ -42,7 +42,7 @@ The last two catch generated language content and a Swift core change without it
 
 ## Preview without saving learning data
 
-In **Product → Scheme → Edit Scheme → Run → Arguments**, add `--preview`. The app opens with temporary storage and skips onboarding. In a Debug build, add `--ended-conversation` to exercise the ended-conversation state. Preview fixtures make no API calls.
+In **Product → Scheme → Edit Scheme → Run → Arguments**, add `--preview`. The app opens with temporary storage and skips onboarding. In a Debug build, add `--ended-conversation` to exercise the ended-conversation state. Preview fixtures make no API calls. Debug `--preview --active-conversation --preview-language=tl` supplies a temporary active conversation for checking the disabled language picker; it opens no microphone or network session. `--preview --ended-conversation --preview-language=tl` supplies the corresponding ended transcript and cached English meaning.
 
 Remove preview arguments before testing normal persistence. For actual speech, [install on an iPhone](run-on-iphone.md) and use the key saved through Settings.
 
@@ -62,7 +62,7 @@ After changing audio, prompts or a language module, check a short conversation o
 
 Debug-only `--verify-audio --verify-language=<language ID>` starts two real voice sessions using the phone’s saved key. `--verify-meaning` adds the translation/reset check. These flags incur API usage, use temporary learning data, and write content-free diagnostics in the app container. Run them only when live testing is intended; they are excluded from Release builds.
 
-For German, Italian, Brazilian Portuguese or Mandarin, `--verify-audio --verify-language-flow --verify-language=<de|it|pt|zh>` runs one live session with a support-language beginner request and a more complex target-language typed reply. It checks received audio, detected target language, meanings, word lookup, supported evidence, archive decoding and switching away and back. The microphone is muted once connected. The report is `Documents/language-verification-<ID>.json`; it contains no transcript, audio or credentials. These synthetic typed turns do not verify recognition of human speech or the quality of corrections and pronunciation. Reopen the app without verification flags to return to its persistent learning record.
+For German, Italian, Brazilian Portuguese, Mandarin or Tagalog, `--verify-audio --verify-language-flow --verify-language=<de|it|pt|zh|tl>` runs one live session with a support-language beginner request and a more complex target-language typed reply. It checks received audio, detected target language, meanings, word lookup, supported evidence, archive decoding and switching away and back. The microphone is muted once connected. The report is `Documents/language-verification-<ID>.json`; it contains no transcript, audio or credentials. These synthetic typed turns do not verify recognition of human speech or the quality of corrections and pronunciation. The report exposes mechanical `flowPassed` separately from `passed`, which additionally requires reliable target-language detection. Tagalog detection is unreliable on the tested Apple recognizer, so `passed` remains false even when the mechanical flow succeeds; its actual detected label/confidence is recorded and `languageQualityReview` remains `pending`. Review Tagalog output with a proficient speaker rather than forcing a passing detector result. Reopen the app without verification flags to return to its persistent learning record.
 
 Record the build, checks and remaining limitations in `verification/validation.md`. Successful API transport does not establish pronunciation quality or teaching effectiveness.
 
