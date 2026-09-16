@@ -63,7 +63,7 @@ import MuralCore
         guard let index = archive.sessions.firstIndex(where: { $0.id == sessionID }),
               let passage = archive.sessions[index].passages.first(where: { $0.id == passageID && $0.speaker == .user }) else { return }
         for (offset, fragment) in passage.fragments.enumerated() {
-            archive.sessions[index].correctFragment(id: fragment.id, text: offset == 0 ? String(text.prefix(10_000)) : "")
+            archive.sessions[index].correctFragment(id: fragment.id, text: offset == 0 ? TextLimits.clampCorrection(text) : "")
         }
         onSessionInvalidation?(sessionID)
         persist()

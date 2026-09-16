@@ -242,20 +242,31 @@ struct TypedReplyView: View {
     @State private var sending = false
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
+    private var canSend: Bool {
+        !sending && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !TextLimits.typedReplyExceedsLimit(text)
+    }
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
             ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Say it your way.").font(.system(.title, design: .rounded, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-                TextField("Reply in \(coordinator.language.name) or another language", text: $text, axis: .vertical).lineLimit(3...6).focused($focused).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 22)).accessibilityIdentifier("typed-reply-input")
+                TextField("Reply in \(coordinator.language.name) or another language", text: Binding(
+                    get: { text },
+                    set: { text = TextLimits.clampTypedReply($0) }
+                ), axis: .vertical).lineLimit(3...6).focused($focused).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 22)).accessibilityIdentifier("typed-reply-input")
                     .onChange(of: text) { _, _ in coordinator.noteTypingActivity() }
+                HStack {
+                    Text("\(text.count)/\(TextLimits.typedReplyCharacters)")
+                        .font(.footnote).foregroundStyle(MuralColor.secondary)
+                    Spacer()
+                }
                 if let error = coordinator.typedReplyError {
                     Text(error).font(.footnote).foregroundStyle(MuralColor.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("typed-reply-error")
                 }
                 Button { sending = true; Task { let ok = await coordinator.sendTyped(text); sending = false; if ok { dismiss() } } } label: {
                     HStack { Text(sending ? "Sending…" : "Send reply").fixedSize(horizontal: false, vertical: true); Spacer(); Image(systemName: "arrow.up") }.padding(18).background(MuralColor.orange, in: Capsule())
-                }.disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("typed-reply-send").id("typed-reply-send")
+                }.disabled(!canSend).accessibilityIdentifier("typed-reply-send").id("typed-reply-send")
                 Spacer()
             }.padding(26).frame(maxWidth: .infinity, alignment: .leading).foregroundStyle(MuralColor.ink)
             }.accessibilityIdentifier("typed-reply-scroll").background(MuralColor.cream)

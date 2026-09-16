@@ -971,7 +971,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun sendTyped(text: String) {
         typedReplyError = null
-        val clean = text.trim().take(2000)
+        val clean = TextLimits.clampTypedReply(text.trim())
         if (clean.isEmpty() || working || state in listOf("connecting", "closing") || !cloudReady()) return
         if (state != "active") {
             if (conversationProvider == ConversationProvider.HOSTED_MINUTES) {
@@ -1080,7 +1080,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val record = archive.sessions.firstOrNull { it.id == sessionID }?.let(::clone) ?: return
         val passage = record.passages.firstOrNull { it.id == passageID && it.speaker == Speaker.user } ?: return
         finalAssessments.cancel(sessionID); hostedFinalAssessmentJobs.remove(sessionID)?.cancel(); generation++; meanings.reset()
-        passage.fragments.forEachIndexed { index, f -> record.correctFragment(f.id, if (index == 0) text.take(10000) else "") }
+        passage.fragments.forEachIndexed { index, f -> record.correctFragment(f.id, if (index == 0) TextLimits.clampCorrection(text) else "") }
         save(record); if (session?.id == record.id) session = record
     }
     fun deleteLearningData() {

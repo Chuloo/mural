@@ -271,13 +271,24 @@ struct EditableTranscriptView: View {
         }.sheet(isPresented: Binding(get: { editingID != nil }, set: { if !$0 { editingID = nil } })) {
             NavigationStack {
                 VStack(alignment: .leading, spacing: 20) {
-                    TextField("What you said", text: $editedText, axis: .vertical).lineLimit(4...10).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
+                    TextField("What you said", text: Binding(
+                        get: { editedText },
+                        set: { editedText = TextLimits.clampCorrection($0) }
+                    ), axis: .vertical).lineLimit(4...10).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
+                    Text("\(editedText.count)/\(TextLimits.correctionCharacters)")
+                        .font(.footnote).foregroundStyle(MuralColor.secondary)
                     Text("Correct a misheard phrase. Learning evidence from the old wording will be removed; the original remains in your backup history.").font(.footnote).foregroundStyle(MuralColor.secondary)
                     Spacer()
                 }.padding(24).background(MuralColor.cream).navigationTitle("What you said").navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { editingID = nil } }
-                        ToolbarItem(placement: .confirmationAction) { Button("Save") { if let id = editingID { store.correctPassage(sessionID: sessionID, passageID: id, text: editedText) }; editingID = nil } }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                guard !TextLimits.correctionExceedsLimit(editedText) else { return }
+                                if let id = editingID { store.correctPassage(sessionID: sessionID, passageID: id, text: editedText) }
+                                editingID = nil
+                            }.disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
                     }
             }.presentationDetents([.medium, .large])
         }

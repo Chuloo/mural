@@ -2,6 +2,16 @@ import XCTest
 @testable import MuralCore
 
 final class LearningTests: XCTestCase {
+    func testTextLimitsMatchSharedCapsAndRefuseSilentOverflow() {
+        XCTAssertEqual(TextLimits.typedReplyCharacters, 2_000)
+        XCTAssertEqual(TextLimits.correctionCharacters, 10_000)
+        let reply = String(repeating: "a", count: 2_001)
+        XCTAssertTrue(TextLimits.typedReplyExceedsLimit(reply))
+        XCTAssertEqual(TextLimits.clampTypedReply(reply).count, 2_000)
+        let correction = String(repeating: "b", count: 10_001)
+        XCTAssertTrue(TextLimits.correctionExceedsLimit(correction))
+        XCTAssertEqual(TextLimits.clampCorrection(correction).count, 10_000)
+    }
     func fixture(day: Double = 0, theme: String = "walk", supported: Bool = false, kind: EvidenceKind = .independent) -> SessionRecord {
         let date = Date(timeIntervalSince1970: 1_780_000_000 + day * 86400)
         var s = SessionRecord(themeID: theme)

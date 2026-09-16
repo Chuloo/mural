@@ -297,6 +297,12 @@ CONSTANTS = [
     ('idle_voice_s', 'scalar',
      ('apps/ios/Core/SessionLimits.swift', r'idleVoiceSeconds: Double = (\d[\d_]*(?:\.\d[\d_]*)?)'),
      ('apps/android/app/src/main/java/chat/mural/core/SessionLimits.kt', r'IDLE_VOICE_SECONDS = (\d[\d_]*(?:\.\d[\d_]*)?)')),
+    ('typed_reply_characters', 'scalar',
+     ('apps/ios/Core/TextLimits.swift', r'typedReplyCharacters = (\d[\d_]*)'),
+     ('apps/android/app/src/main/java/chat/mural/core/TextLimits.kt', r'TYPED_REPLY_CHARACTERS = (\d[\d_]*)')),
+    ('correction_characters', 'scalar',
+     ('apps/ios/Core/TextLimits.swift', r'correctionCharacters = (\d[\d_]*)'),
+     ('apps/android/app/src/main/java/chat/mural/core/TextLimits.kt', r'CORRECTION_CHARACTERS = (\d[\d_]*)')),
 ]
 
 

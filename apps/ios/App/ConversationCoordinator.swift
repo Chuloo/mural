@@ -500,7 +500,8 @@ import MuralCore
         }
         let sessionID = draft.id
         let offset = Int(Date().timeIntervalSince(draft.startedAt) * 1000)
-        let fragment = Fragment(speaker: .user, text: String(clean.prefix(2000)), startMS: offset, endMS: offset + 1,
+        let clamped = TextLimits.clampTypedReply(clean)
+        let fragment = Fragment(speaker: .user, text: clamped, startMS: offset, endMS: offset + 1,
                                 meaningVisible: store.preferences.meaningVisible, typed: true)
         draft.append(fragment)
         activity.learnerEngaged(now: activityNow); inactivitySeconds = nil
@@ -513,7 +514,7 @@ import MuralCore
                 return false
             }
             addUsage(result.usage)
-            guard append("thinking", "The learner typed (data): \(String(clean.prefix(650)))"),
+            guard append("thinking", "The learner typed (data): \(String(clamped.prefix(650)))"),
                   append("commentary", result.text) else {
                 typedReplyError = "Your reply couldn’t be sent. Check your connection and try again."
                 return false

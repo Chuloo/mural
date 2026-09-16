@@ -76,6 +76,7 @@ import chat.mural.MuralViewModel
 import chat.mural.R
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
+import chat.mural.core.TextLimits
 
 @Composable
 fun TalkScreen(
@@ -340,13 +341,14 @@ internal fun TypedReplySheet(languageName: String, working: Boolean, onSend: (St
             }
             Text(stringResource(R.string.talk_typed_reply_subtitle, languageName), color = MuralColors.Secondary,
                 style = MaterialTheme.typography.bodyMedium)
-            MuralTextField(text, { text = it.take(2_000); onTyping() }, modifier = Modifier.fillMaxWidth().testTag("typed-reply-input").focusRequester(focus).onGloballyPositioned {
+            MuralTextField(text, { text = TextLimits.clampTypedReply(it); onTyping() }, modifier = Modifier.fillMaxWidth().testTag("typed-reply-input").focusRequester(focus).onGloballyPositioned {
                     if (!requestedFocus) { requestedFocus = true; focus.requestFocus() }
                 },
                 minLines = 3, maxLines = 6, label = { Text(stringResource(R.string.talk_typed_reply_field_label)) })
+            Text("${text.length}/${TextLimits.TYPED_REPLY_CHARACTERS}", color = MuralColors.Secondary, style = MaterialTheme.typography.bodySmall)
             if (error != null) Text(error, color = MuralColors.Secondary, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("typed-reply-error"))
-            Button(onClick = { onSend(text.trim()) }, enabled = text.isNotBlank() && !working,
+            Button(onClick = { onSend(text.trim()) }, enabled = text.isNotBlank() && !working && !TextLimits.typedReplyExceedsLimit(text),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).bringIntoViewRequester(sendIntoView).testTag("typed-reply-send"), shape = CircleShape) {
                 Text(stringResource(R.string.talk_typed_reply_send_button)); Spacer(Modifier.width(8.dp))
                 MuralIcon(MuralSymbol.ArrowUp, Modifier.size(18.dp))

@@ -5,6 +5,16 @@ import org.junit.Test
 import kotlinx.serialization.json.jsonObject
 
 class CoreTest {
+    @Test fun textLimitsMatchSharedCapsAndRefuseSilentOverflow() {
+        assertEquals(2_000, TextLimits.TYPED_REPLY_CHARACTERS)
+        assertEquals(10_000, TextLimits.CORRECTION_CHARACTERS)
+        val reply = "a".repeat(2_001)
+        assertTrue(TextLimits.typedReplyExceedsLimit(reply))
+        assertEquals(2_000, TextLimits.clampTypedReply(reply).length)
+        val correction = "b".repeat(10_001)
+        assertTrue(TextLimits.correctionExceedsLimit(correction))
+        assertEquals(10_000, TextLimits.clampCorrection(correction).length)
+    }
     private fun evidence(language:String="nb", day:Double=0.0, kind:EvidenceKind=EvidenceKind.independent, supported:Boolean=false, theme:String="walk"):SessionRecord {
         val date=1_780_000_000.0 + day*86400
         val s=SessionRecord(languageID=language,startedAt=date,themeID=theme)

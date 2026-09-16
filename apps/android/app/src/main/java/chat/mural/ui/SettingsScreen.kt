@@ -64,6 +64,7 @@ import chat.mural.core.MeaningLanguages
 import chat.mural.core.Passage
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
+import chat.mural.core.TextLimits
 import chat.mural.core.UsageSummary
 
 @Composable
@@ -378,8 +379,18 @@ private fun CorrectionDialog(passage: Passage, onSave: (String) -> Unit, onDismi
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.history_correction_dialog_title)) },
-        text = { MuralTextField(text, { text = it.take(10_000) }, minLines = 3, maxLines = 9) },
-        confirmButton = { Button(onClick = { onSave(text.trim()) }, enabled = text.isNotBlank()) { Text(stringResource(R.string.common_save)) } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MuralTextField(text, { text = TextLimits.clampCorrection(it) }, minLines = 3, maxLines = 9)
+                Text("${text.length}/${TextLimits.CORRECTION_CHARACTERS}", color = MuralColors.Secondary, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(text.trim()) },
+                enabled = text.isNotBlank() && !TextLimits.correctionExceedsLimit(text),
+            ) { Text(stringResource(R.string.common_save)) }
+        },
         dismissButton = { MuralTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
