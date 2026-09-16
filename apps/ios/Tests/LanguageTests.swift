@@ -11,6 +11,7 @@ final class LanguageTests: XCTestCase {
         archive.preferences.aiConsentVersion = 1
         XCTAssertEqual(try Archive.decode(archive.encoded()).preferences.aiConsentVersion, 1)
     }
+    /// Creates a test session record with sample evidence for the specified language.
     private func evidence(languageID: String, day: Int = 0, supported: Bool = false) -> SessionRecord {
         let date = Date(timeIntervalSince1970: 1_780_000_000 + Double(day) * 86400)
         var session = SessionRecord(languageID: languageID, themeID: "coffee")
