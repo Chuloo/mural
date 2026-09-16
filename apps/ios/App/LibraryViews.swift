@@ -296,7 +296,27 @@ struct SettingsView: View {
     @State private var deleting = false
     @State private var notices = false
     @State private var showingAPIKey = false
+    @State private var endpoint = CustomEndpoint.load()
+    @State private var savedEndpoint = CustomEndpoint.load()
+    @State private var endpointKey = ""
+    @State private var showingEndpoint = false
     private var store: LearningStore { coordinator.store }
+    private func saveEndpoint() {
+        var clean = endpoint
+        let fields: [WritableKeyPath<CustomEndpoint, String>] = [\.baseURL, \.model, \.transcriptionModel, \.speechModel, \.voice]
+        for field in fields { clean[keyPath: field] = clean[keyPath: field].trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard clean.baseURL.isEmpty || clean.url != nil, !clean.enabled || clean.textReady else {
+            message = "Enter an https:// base URL and a chat model."; return
+        }
+        do {
+            // A blank key keeps the saved one; the Keychain value never returns to the view.
+            if !endpointKey.isEmpty { try CredentialStore.save(endpointKey, service: CredentialStore.customEndpoint) }
+            try clean.save(); endpoint = clean; savedEndpoint = clean; endpointKey = ""
+            message = "Endpoint saved."
+        } catch CredentialStore.KeyError.invalid {
+            message = "Enter the API key without spaces or line breaks."
+        } catch { message = error.localizedDescription }
+    }
     private var totalVoiceSeconds: Double { store.sessions.reduce(0) { $0 + $1.voiceSeconds } }
     var body: some View {
         NavigationStack {
@@ -338,9 +358,36 @@ struct SettingsView: View {
                         Text("Your OpenAI account pays for usage. The key stays in this iPhone’s Keychain and is sent only to OpenAI.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     } label: { Label("Use your own API key", systemImage: "key").accessibilityIdentifier("advanced-api-key") }
+                    DisclosureGroup(isExpanded: $showingEndpoint) {
+                        Toggle("Use this endpoint", isOn: $endpoint.enabled).accessibilityIdentifier("endpoint-enabled")
+                        TextField("Base URL, e.g. https://example.com/v1", text: $endpoint.baseURL)
+                            .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("endpoint-url")
+                        SecureField("API key (leave empty to keep the saved key)", text: $endpointKey)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive().accessibilityIdentifier("endpoint-key")
+                        Picker("API style", selection: $endpoint.style) {
+                            Text("Chat Completions").tag(EndpointProtocol.chatCompletions)
+                            Text("Responses").tag(EndpointProtocol.responses)
+                        }
+                        TextField("Chat model", text: $endpoint.model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Transcription model (voice)", text: $endpoint.transcriptionModel).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Speech model (voice)", text: $endpoint.speechModel).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Voice name", text: $endpoint.voice).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save endpoint", action: saveEndpoint).disabled(coordinator.isRunning).accessibilityIdentifier("endpoint-save")
+                        if endpoint != savedEndpoint || !endpointKey.isEmpty {
+                            Text("Unsaved changes. Tap Save endpoint to use them.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                        }
+                        if savedEndpoint != CustomEndpoint() {
+                            Button("Remove endpoint", role: .destructive) {
+                                do { try CustomEndpoint.delete(); endpoint = CustomEndpoint(); savedEndpoint = endpoint; message = "The endpoint has been removed." }
+                                catch { message = error.localizedDescription }
+                            }.disabled(coordinator.isRunning)
+                        }
+                        Text("Use any OpenAI-compatible server instead of OpenAI. Conversations, audio and selected text go to this server, and it bills or limits usage. Voice takes turns: speak, pause, then Mural answers. Web search isn’t available.")
+                            .font(.footnote).foregroundStyle(MuralColor.secondary)
+                    } label: { Label("Custom endpoint", systemImage: "server.rack").accessibilityIdentifier("custom-endpoint") }
                     if let message { Text(message).font(.footnote).foregroundStyle(MuralColor.secondary) }
                 } header: { Text("Advanced") } footer: {
-                    if !hasKey { Text("This version uses your OpenAI API key to start a conversation.") }
+                    if !hasKey && !savedEndpoint.enabled { Text("This version uses your OpenAI API key to start a conversation.") }
                 }
                 Section {
                     Picker("Conversation limit", selection: Binding(get: { store.preferences.sessionMinutes }, set: { value in store.updatePreferences { $0.sessionMinutes = value } })) {
