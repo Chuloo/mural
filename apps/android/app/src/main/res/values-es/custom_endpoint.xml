@@ -10,6 +10,7 @@
     <string name="settings_endpoint_protocol_chat">Chat Completions</string>
     <string name="settings_endpoint_protocol_responses">Responses</string>
     <string name="settings_endpoint_model">Modelo de chat</string>
+    <string name="settings_endpoint_skip_thinking">Omitir el razonamiento del modelo (más rápido; solo vLLM/Qwen)</string>
     <string name="settings_endpoint_transcription_model">Modelo de transcripción (voz)</string>
     <string name="settings_endpoint_speech_model">Modelo de síntesis de voz (voz)</string>
     <string name="settings_endpoint_voice">Nombre de la voz</string>

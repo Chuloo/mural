@@ -148,7 +148,7 @@ import MuralCore
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
         if let pendingTopic { record.topics = [pendingTopic] }
         session = record; store.save(record)
-        let generation = record.id
+        let generation = record.id, languageID = record.languageID
         let learner = store.learner
         // Each new conversation starts fresh; learned vocabulary and difficulty still carry forward.
         let history: [[String: Any]] = []
@@ -157,7 +157,7 @@ import MuralCore
             guard let self else { return }
             do {
                 if self.usesTurns {
-                    try await self.turns.connect(api: self.api) { [weak self] guidance in
+                    try await self.turns.connect(api: self.api, language: languageID) { [weak self] guidance in
                         try await self?.spokenReply(sessionID: generation, instructions: instructions, guidance: guidance) ?? ""
                     }
                 } else {

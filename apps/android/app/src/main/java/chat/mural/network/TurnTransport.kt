@@ -57,9 +57,10 @@ class TurnTransport(context: Context, private val scope: CoroutineScope) : Voice
     @Volatile private var muted = false
     @Volatile private var outputLevel = 0.0
 
-    /** [reply] receives app guidance for this turn and returns the words to speak. Main-thread only. */
+    /** [language] is the learning language for transcription. [reply] receives app guidance for this turn and
+     * returns the words to speak. Main-thread only. */
     @SuppressLint("MissingPermission") // Checked immediately before the recorder is created.
-    fun connect(api: APIClient, reply: suspend (guidance: String) -> String) {
+    fun connect(api: APIClient, language: String, reply: suspend (guidance: String) -> String) {
         disconnect()
         val microphone = LiveTransport.TransportException.Microphone(appContext.getString(R.string.error_transport_microphone))
         if (appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) throw microphone
@@ -77,7 +78,7 @@ class TurnTransport(context: Context, private val scope: CoroutineScope) : Voice
             launch(Dispatchers.IO) { listen(record, queue) }
             onEvent?.invoke(buildJsonObject { put("type", "session.started") })
             listening = true
-            for (item in queue) process(item, api, reply)
+            for (item in queue) process(item, api, language, reply)
         }
         session = job
         job.start()
@@ -113,13 +114,13 @@ class TurnTransport(context: Context, private val scope: CoroutineScope) : Voice
         onLevels?.invoke(0.0, 0.0)
     }
 
-    private suspend fun process(item: Work, api: APIClient, reply: suspend (String) -> String) {
+    private suspend fun process(item: Work, api: APIClient, language: String, reply: suspend (String) -> String) {
         if (item == Work.Reply && !guidance.replyPending) return // A heard turn already answered this request.
         listening = false
         try {
             when (item) {
                 is Work.Heard -> {
-                    val text = api.transcribe(item.wav)
+                    val text = api.transcribe(item.wav, language)
                     if (text.isNotBlank()) {
                         emitTranscript("session.input_transcript.delta", text, item.startMS, item.endMS)
                         speak(api, respond(reply))

@@ -120,14 +120,16 @@ class APIClient internal constructor(
     ): APIResult {
         val endpoint = target()
         return if (endpoint.protocol == EndpointProtocol.CHAT_COMPLETIONS)
-            decodeChatCompletion(postJson(endpoint, "chat/completions", chatBody(endpoint.model, instructions, input, schema)))
+            decodeChatCompletion(postJson(endpoint, "chat/completions", chatBody(endpoint, instructions, input, schema)))
         // Web search is OpenAI's hosted tool; a compatible Responses server may reject it.
         else decodeTeachingResponse(postJson(endpoint, "responses", responsesBody(endpoint.model, instructions, input, schema, search && !endpoint.custom)))
     }
 
     // ponytail: Chat Completions has no standard web search, so `search` is ignored and topics stay unsourced.
-    private fun chatBody(model: String, instructions: String, input: String, schema: JsonObject?) = buildJsonObject {
-        put("model", model)
+    private fun chatBody(endpoint: EndpointTarget, instructions: String, input: String, schema: JsonObject?) = buildJsonObject {
+        put("model", endpoint.model)
+        // vLLM's chat-template switch; OpenAI and some other servers reject unknown fields, so it's opt-in.
+        if (endpoint.skipThinking) put("chat_template_kwargs", buildJsonObject { put("enable_thinking", false) })
         put("messages", buildJsonArray {
             add(buildJsonObject { put("role", "system"); put("content", instructions) })
             add(buildJsonObject { put("role", "user"); put("content", input) })
@@ -170,12 +172,14 @@ class APIClient internal constructor(
             }
         }
 
-    /** Language is auto-detected so learners can answer in any language, as in live voice. */
-    suspend fun transcribe(wav: ByteArray): String {
+    /** [language] is the learning language. Left to auto-detection, Whisper can turn accented Spanish into an
+     * English translation; the cost is that a reply in another language may transcribe poorly. */
+    suspend fun transcribe(wav: ByteArray, language: String): String {
         val endpoint = target()
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("model", endpoint.transcriptionModel)
             .addFormDataPart("response_format", "json")
+            .addFormDataPart("language", if (language == "nb") "no" else language) // Whisper names Norwegian "no".
             .addFormDataPart("file", "speech.wav", wav.toRequestBody(WAV_MEDIA_TYPE))
             .build()
         return execute(endpoint, "audio/transcriptions", body, MAX_RESPONSE_BYTES) { payload ->

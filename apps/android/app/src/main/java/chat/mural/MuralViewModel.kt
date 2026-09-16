@@ -746,7 +746,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         transport = if (turnBased) turnTransport else liveTransport
         connectionJob = viewModelScope.launch {
             try {
-                if (turnBased) turnTransport.connect(api) { guidance -> spokenReply(id, instructions, module, guidance) }
+                if (turnBased) turnTransport.connect(api, module.id) { guidance -> spokenReply(id, instructions, module, guidance) }
                 else liveTransport.connect(if (choice == ConversationProvider.PERSONAL_KEY) api else hostedProvider(id),
                     instructions, history, module.locale)
             } catch (cancelled: CancellationException) {

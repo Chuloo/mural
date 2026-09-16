@@ -355,6 +355,9 @@ private fun EndpointDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
                     draft = draft.copy(protocol = EndpointProtocol.valueOf(it))
                 }
                 field(draft.model, R.string.settings_endpoint_model, "endpoint-model") { draft = draft.copy(model = it) }
+                SettingsSwitch(stringResource(R.string.settings_endpoint_skip_thinking), draft.skipThinking, "endpoint-skip-thinking") {
+                    draft = draft.copy(skipThinking = it)
+                }
                 field(draft.transcriptionModel, R.string.settings_endpoint_transcription_model, "endpoint-transcription-model") { draft = draft.copy(transcriptionModel = it) }
                 field(draft.speechModel, R.string.settings_endpoint_speech_model, "endpoint-speech-model") { draft = draft.copy(speechModel = it) }
                 field(draft.voice, R.string.settings_endpoint_voice, "endpoint-voice") { draft = draft.copy(voice = it) }

@@ -118,7 +118,7 @@ def reply(args, key, instructions, user, schema=None):
 
     body = {"model": args.chat_model, "messages": [{"role": "system", "content": instructions}, {"role": "user", "content": user}]}
     if args.no_thinking:
-        body["chat_template_kwargs"] = {"enable_thinking": False}  # Understood by vLLM-served Qwen models; not yet sent by the app.
+        body["chat_template_kwargs"] = {"enable_thinking": False}  # The app's "Skip model thinking" setting.
     if schema:
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "mural_result", "strict": True, "schema": schema}}
     data = parse_json(post(args.base_url, key, "chat/completions", json.dumps(body).encode(), "application/json", JSON_LIMIT), "the reply")

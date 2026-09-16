@@ -19,6 +19,8 @@ data class CustomEndpoint(
     val transcriptionModel: String = "",
     val speechModel: String = "",
     val voice: String = "",
+    /** Asks reasoning models (e.g. Qwen on vLLM) to answer directly; voice turns can otherwise take half a minute. */
+    val skipThinking: Boolean = false,
 ) {
     val url: HttpUrl? get() = parseBaseUrl(baseUrl)
     val textReady get() = url != null && model.isNotBlank()
@@ -30,7 +32,7 @@ data class CustomEndpoint(
         speechModel = speechModel.trim(), voice = voice.trim())
 
     fun target(key: String?) = EndpointTarget(url ?: throw APIClient.APIException.MissingKey, key, protocol, model.trim(),
-        transcriptionModel.trim(), speechModel.trim(), voice.trim(), custom = true)
+        transcriptionModel.trim(), speechModel.trim(), voice.trim(), skipThinking, custom = true)
 
     companion object {
         /** HTTPS only, without credentials, query or fragment. Always ends in '/' so API paths resolve below it. */
@@ -51,6 +53,7 @@ data class EndpointTarget(
     val transcriptionModel: String = "",
     val speechModel: String = "",
     val voice: String = "",
+    val skipThinking: Boolean = false,
     val custom: Boolean = false,
 ) {
     override fun toString() = "EndpointTarget([redacted])"

@@ -369,6 +369,8 @@ struct SettingsView: View {
                             Text("Responses").tag(EndpointProtocol.responses)
                         }
                         TextField("Chat model", text: $endpoint.model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Toggle("Skip model thinking (faster; vLLM/Qwen only)", isOn: Binding(get: { endpoint.skipThinking == true }, set: { endpoint.skipThinking = $0 }))
+                            .accessibilityIdentifier("endpoint-skip-thinking")
                         TextField("Transcription model (voice)", text: $endpoint.transcriptionModel).textInputAutocapitalization(.never).autocorrectionDisabled()
                         TextField("Speech model (voice)", text: $endpoint.speechModel).textInputAutocapitalization(.never).autocorrectionDisabled()
                         TextField("Voice name", text: $endpoint.voice).textInputAutocapitalization(.never).autocorrectionDisabled()

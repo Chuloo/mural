@@ -20,6 +20,8 @@ struct CustomEndpoint: Codable, Equatable {
     var transcriptionModel = ""
     var speechModel = ""
     var voice = ""
+    /// Asks reasoning models (e.g. Qwen on vLLM) to answer directly. Optional so settings saved before it still decode.
+    var skipThinking: Bool?
 
     var url: URL? { CustomEndpointURL.parse(baseURL) }
     var textReady: Bool { url != nil && !model.isEmpty }
@@ -80,13 +82,15 @@ struct CustomEndpoint: Codable, Equatable {
         }
         return data
     }
-    /// Language is auto-detected so learners can answer in any language, as in live voice.
-    func transcribe(wav: Data) async throws -> String {
+    /// `language` is the learning language. Left to auto-detection, Whisper can turn accented Spanish into an
+    /// English translation; the cost is that a reply in another language may transcribe poorly.
+    func transcribe(wav: Data, language: String) async throws -> String {
         let target = try resolveTarget()
         guard let endpoint = target.endpoint else { throw APIError.invalidResponse }
         let boundary = "mural-" + UUID().uuidString
         var body = Data()
-        for (name, value) in [("model", endpoint.transcriptionModel), ("response_format", "json")] {
+        // Whisper names Norwegian "no".
+        for (name, value) in [("model", endpoint.transcriptionModel), ("response_format", "json"), ("language", language == "nb" ? "no" : language)] {
             body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
         }
         body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"speech.wav\"\r\nContent-Type: audio/wav\r\n\r\n".utf8))
@@ -108,6 +112,8 @@ struct CustomEndpoint: Codable, Equatable {
         if let endpoint = target.endpoint, endpoint.style == .chatCompletions {
             // No standard web search exists in Chat Completions, so `search` is ignored and topics stay unsourced.
             var body: [String: Any] = ["model": endpoint.model, "messages": [["role": "system", "content": instructions], ["role": "user", "content": input]]]
+            // vLLM's chat-template switch; OpenAI and some other servers reject unknown fields, so it's opt-in.
+            if endpoint.skipThinking == true { body["chat_template_kwargs"] = ["enable_thinking": false] }
             if let schema { body["response_format"] = ["type": "json_schema", "json_schema": ["name": "mural_result", "strict": true, "schema": schema]] }
             return try Self.decodeChatCompletion(try await postJSON(target, "chat/completions", body: body))
         }

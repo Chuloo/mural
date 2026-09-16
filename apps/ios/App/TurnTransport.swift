@@ -35,8 +35,8 @@ extension LiveTransport: VoiceTransport {}
     private var startedAt = Date()
     private var ownsAudioActivation = false
 
-    /// `reply` receives app guidance for this turn and returns the words to speak.
-    func connect(api: APIClient, reply: @escaping (String) async throws -> String) async throws {
+    /// `language` is the learning language for transcription. `reply` receives app guidance for this turn and returns the words to speak.
+    func connect(api: APIClient, language: String, reply: @escaping (String) async throws -> String) async throws {
         disconnect()
         guard await AVAudioApplication.requestRecordPermission() else { throw LiveTransport.TransportError.microphone }
         try Task.checkCancellation()
@@ -70,7 +70,7 @@ extension LiveTransport: VoiceTransport {}
             capture.hearing = true
             for await item in stream {
                 guard let self, !Task.isCancelled else { return }
-                await self.process(item, api: api, reply: reply)
+                await self.process(item, api: api, language: language, reply: reply)
             }
         }
     }
@@ -107,13 +107,13 @@ extension LiveTransport: VoiceTransport {}
         onLevels?(0, 0)
     }
 
-    private func process(_ item: Work, api: APIClient, reply: (String) async throws -> String) async {
+    private func process(_ item: Work, api: APIClient, language: String, reply: (String) async throws -> String) async {
         if case .reply = item, !guidance.replyPending { return } // A heard turn already answered this request.
         capture?.hearing = false
         do {
             switch item {
             case .heard(let wav, let start, let end):
-                let text = try await api.transcribe(wav: wav)
+                let text = try await api.transcribe(wav: wav, language: language)
                 guard !text.isEmpty, work != nil else { break }
                 emitTranscript("session.input_transcript.delta", text, start: start, end: end)
                 try await speak(try await respond(reply), api: api)

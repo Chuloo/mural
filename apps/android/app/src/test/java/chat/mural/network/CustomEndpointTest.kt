@@ -17,11 +17,13 @@ class CustomEndpointTest {
     private lateinit var api: APIClient
     private var protocol = EndpointProtocol.CHAT_COMPLETIONS
     private var key: String? = null
+    private var skipThinking = false
 
     @Before fun setup() {
         server = MockWebServer(); server.start()
         api = APIClient({
-            EndpointTarget(server.url("/v1/"), key, protocol, "local-model", "local-whisper", "local-tts", "ef_dora", custom = true)
+            EndpointTarget(server.url("/v1/"), key, protocol, "local-model", "local-whisper", "local-tts", "ef_dora",
+                skipThinking = skipThinking, custom = true)
         }, OkHttpClient.Builder().followRedirects(false).build())
     }
     @After fun teardown() { server.shutdown() }
@@ -94,7 +96,14 @@ class CustomEndpointTest {
         assertEquals(listOf("system" to "policy", "user" to "hello"), messages.map { it["role"]!!.jsonPrimitive.content to it["content"]!!.jsonPrimitive.content })
         assertEquals(schema, body["response_format"]!!.jsonObject["json_schema"]!!.jsonObject["schema"])
         assertNull("compatible servers have no standard web search", body["tools"])
+        assertNull("strict servers reject unknown fields, so thinking stays on by default", body["chat_template_kwargs"])
         assertEquals("Hola", result.text); assertEquals(APIUsage(9, 2), result.usage)
+
+        skipThinking = true
+        server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":"Hola"}}]}"""))
+        api.respond("policy", "hello")
+        val direct = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals(JsonPrimitive(false), direct["chat_template_kwargs"]!!.jsonObject["enable_thinking"])
     }
 
     @Test fun chatRefusalsTruncationAndEmptyRepliesAreNotReplies() = runBlocking {
@@ -121,11 +130,11 @@ class CustomEndpointTest {
     @Test fun audioUsesTranscriptionAndSpeechEndpoints() = runBlocking {
         server.enqueue(MockResponse().setBody("""{"text":" Quiero un café "}"""))
         val wav = Wav.encode(listOf(ShortArray(160) { 900.toShort() }), 16_000)
-        assertEquals("Quiero un café", api.transcribe(wav))
+        assertEquals("Quiero un café", api.transcribe(wav, "nb"))
         val transcription = server.takeRequest().body.readUtf8()
         assertTrue(transcription.contains("name=\"model\"") && transcription.contains("local-whisper"))
         assertTrue(transcription.contains("filename=\"speech.wav\""))
-        assertFalse("language stays auto-detected", transcription.contains("name=\"language\""))
+        assertTrue("the learning language is sent, in Whisper's code", Regex("name=\"language\"(\\r\\n[^\\r\\n]+)*\\r\\n\\r\\nno\\r\\n").containsMatchIn(transcription))
 
         server.enqueue(MockResponse().setBody(Buffer().write(wav)))
         assertArrayEquals(wav, api.speak("Hola"))
