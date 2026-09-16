@@ -49,6 +49,8 @@ final class AdditionalLanguageTests: XCTestCase {
                 XCTAssertFalse(prompt.contains("Bokmål"), id)
             }
             XCTAssertTrue(voice.contains("Speak ONLY \(language.name)."))
+            XCTAssertTrue(voice.contains("Persona and accent:"))
+            XCTAssertTrue(voice.contains(language.variety))
             XCTAssertTrue(voice.contains(language.speechGuidance))
             XCTAssertTrue(voice.contains(language.writingGuidance))
             XCTAssertTrue(assessment.contains(language.lemmaGuidance))
