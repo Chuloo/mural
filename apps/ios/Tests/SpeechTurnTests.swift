@@ -17,8 +17,15 @@ final class SpeechTurnTests: XCTestCase {
         _ = feed(0.08, 10)
         XCTAssertEqual(feed(0.002, 60), .end)
         XCTAssertFalse(detector.active)
+        XCTAssertEqual(detector.silenceMS, SpeechDetector.endSilenceMS)
         _ = feed(0.08, 3)
         XCTAssertEqual(feed(0.002, 60), .discard, "a click is not a turn")
+
+        var limited = SpeechDetector()
+        var last = SpeechDetector.Event.none
+        for _ in 0..<1_503 { last = limited.feed(0.08) }
+        XCTAssertEqual(last, .end, "a turn at the length limit still ends")
+        XCTAssertEqual(limited.silenceMS, 0, "there is no silence to trim when speech hits the limit")
     }
 
     func testGuidanceQueuesOneReplyAndSurvivesAFailedReply() {

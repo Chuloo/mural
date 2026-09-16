@@ -72,6 +72,13 @@ class CustomEndpointTest {
         assertEquals("audio from just before speech is kept", 1.toShort(), voiced.first()[0])
         assertEquals("trailing silence is dropped", 2_000.toShort(), voiced.last()[0])
         assertEquals(TurnCollector.PREROLL_FRAMES + 18, voiced.size)
+        assertEquals(SpeechDetector.END_SILENCE_MS, turn.trailingSilenceMS)
+
+        val limited = TurnCollector(20)
+        var cut: List<ShortArray>? = null
+        repeat(1_503) { limited.feed(frame(2_000), 0.08)?.let { cut = it } }
+        assertEquals("a turn cut at the length limit keeps all its speech", 1_503, checkNotNull(cut).size)
+        assertEquals(0, limited.trailingSilenceMS)
     }
 
     @Test fun chatCompletionsSendsSystemAndUserMessagesWithSchemaAndNoKeyWhenNoneSaved() = runBlocking {

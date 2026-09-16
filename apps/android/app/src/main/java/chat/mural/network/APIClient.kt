@@ -121,7 +121,8 @@ class APIClient internal constructor(
         val endpoint = target()
         return if (endpoint.protocol == EndpointProtocol.CHAT_COMPLETIONS)
             decodeChatCompletion(postJson(endpoint, "chat/completions", chatBody(endpoint.model, instructions, input, schema)))
-        else decodeTeachingResponse(postJson(endpoint, "responses", responsesBody(endpoint.model, instructions, input, schema, search)))
+        // Web search is OpenAI's hosted tool; a compatible Responses server may reject it.
+        else decodeTeachingResponse(postJson(endpoint, "responses", responsesBody(endpoint.model, instructions, input, schema, search && !endpoint.custom)))
     }
 
     // ponytail: Chat Completions has no standard web search, so `search` is ignored and topics stay unsourced.

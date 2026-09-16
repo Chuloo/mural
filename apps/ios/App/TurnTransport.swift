@@ -52,12 +52,12 @@ extension LiveTransport: VoiceTransport {}
         capture.onLevel = { [weak self] level in
             Task { @MainActor in if let self, self.player == nil { self.emitLevels(input: level) } } // Playback reports its own level.
         }
-        capture.onUtterance = { [weak self] samples in
+        capture.onUtterance = { [weak self] samples, trailingSilenceMS in
             let wav = Wav.encode(samples, sampleRate: SpeechCapture.sampleRate)
             let milliseconds = samples.count * 1000 / SpeechCapture.sampleRate
             Task { @MainActor in
                 guard let self, self.work != nil else { return }
-                let end = self.elapsedMS() - SpeechDetector.endSilenceMS
+                let end = self.elapsedMS() - trailingSilenceMS
                 continuation.yield(.heard(wav, start: max(0, end - milliseconds), end: max(0, end)))
             }
         }
@@ -185,7 +185,8 @@ private final class SpeechCapture: @unchecked Sendable {
     var hearing: Bool { get { lock.withLock { _hearing } } set { lock.withLock { _hearing = newValue } } }
     var muted: Bool { get { lock.withLock { _muted } } set { lock.withLock { _muted = newValue } } }
     var onLevel: ((Double) -> Void)?
-    var onUtterance: (([Int16]) -> Void)?
+    /// A finished turn's samples and the trailing silence already trimmed from them.
+    var onUtterance: (([Int16], Int) -> Void)?
     private var detector = SpeechDetector()
     private var pending: [Int16] = []
     private var preroll: [[Int16]] = []
@@ -227,8 +228,9 @@ private final class SpeechCapture: @unchecked Sendable {
             case .start: speech = preroll + [frame]; preroll = []
             case .end:
                 hearing = false
-                // The frame that completes the silence isn't kept, so one fewer silent frame is stored.
-                onUtterance?(speech.dropLast(SpeechDetector.endSilenceMS / 20 - 1).flatMap { $0 })
+                speech.append(frame)
+                let quiet = detector.silenceMS
+                onUtterance?(speech.dropLast(quiet / 20).flatMap { $0 }, quiet)
                 speech = []
             case .discard: speech = []
             }

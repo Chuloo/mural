@@ -166,7 +166,7 @@ class TurnTransport(context: Context, private val scope: CoroutineScope) : Voice
                 val samples = frame.copyOf(read)
                 val level = Wav.level(samples)
                 if (!listening || muted) turn.reset()
-                else turn.feed(samples, level)?.let { voiced -> listening = false; queue.trySend(heard(voiced)) }
+                else turn.feed(samples, level)?.let { voiced -> listening = false; queue.trySend(heard(voiced, turn.trailingSilenceMS)) }
                 if (++frames % LEVEL_FRAMES == 0) emitLevels(queue, if (turn.active) minOf(1.0, level * LEVEL_GAIN) else 0.0)
             }
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -181,8 +181,8 @@ class TurnTransport(context: Context, private val scope: CoroutineScope) : Voice
         }
     }
 
-    private fun heard(voiced: List<ShortArray>): Work.Heard {
-        val end = elapsedMS() - SpeechDetector.END_SILENCE_MS
+    private fun heard(voiced: List<ShortArray>, trailingSilenceMS: Int): Work.Heard {
+        val end = elapsedMS() - trailingSilenceMS
         return Work.Heard(Wav.encode(voiced, SAMPLE_RATE), maxOf(0, end - voiced.size * FRAME_MS), maxOf(0, end))
     }
 
@@ -275,14 +275,18 @@ internal class TurnCollector(private val frameMillis: Int) {
     private val preroll = ArrayDeque<ShortArray>()
     private val speech = mutableListOf<ShortArray>()
     val active get() = detector.active
+    /** Silence trimmed from the last finished turn, for its timing. */
+    val trailingSilenceMS get() = detector.silence
 
     /** Returns a finished turn without its trailing silence, or null while listening continues. */
     fun feed(frame: ShortArray, level: Double): List<ShortArray>? {
         when (detector.feed(level)) {
             SpeechDetector.Event.NONE -> if (detector.active) speech += frame else remember(frame)
             SpeechDetector.Event.START -> { speech.clear(); speech.addAll(preroll); speech += frame; preroll.clear() }
-            // The frame that completes the silence isn't kept, so one fewer silent frame is stored.
-            SpeechDetector.Event.END -> return speech.dropLast(SpeechDetector.END_SILENCE_MS / frameMillis - 1).also { speech.clear() }
+            SpeechDetector.Event.END -> {
+                speech += frame
+                return speech.dropLast(detector.silence / frameMillis).also { speech.clear() }
+            }
             SpeechDetector.Event.DISCARD -> speech.clear()
         }
         return null
@@ -310,7 +314,9 @@ internal class SpeechDetector(private val frameMillis: Int) {
     private var onset = 0
     private var length = 0
     private var voiced = 0
-    private var silence = 0
+    /** Quiet time at the end of the current turn; zero when a turn is cut off at the length limit mid-speech. */
+    var silence = 0
+        private set
 
     fun feed(level: Double): Event {
         val loud = level >= maxOf(MIN_LEVEL, floor * FLOOR_RATIO)

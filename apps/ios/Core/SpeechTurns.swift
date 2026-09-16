@@ -13,8 +13,10 @@ public struct SpeechDetector: Sendable {
     public static let maxUtteranceMS = 30_000
 
     public private(set) var active = false
+    /// Quiet time at the end of the current turn; zero when a turn is cut off at the length limit mid-speech.
+    public private(set) var silenceMS = 0
     private let frameMS: Int
-    private var floor = 0.003, onset = 0, length = 0, voiced = 0, silence = 0
+    private var floor = 0.003, onset = 0, length = 0, voiced = 0
 
     public init(frameMS: Int = 20) { self.frameMS = frameMS }
 
@@ -24,12 +26,12 @@ public struct SpeechDetector: Sendable {
             guard loud else { onset = 0; floor += (level - floor) * Self.floorAdaptation; return .none }
             onset += 1
             guard onset * frameMS >= Self.onsetMS else { return .none }
-            active = true; onset = 0; length = 0; voiced = 0; silence = 0
+            active = true; onset = 0; length = 0; voiced = 0; silenceMS = 0
             return .start
         }
         length += frameMS
-        if loud { voiced += frameMS; silence = 0 } else { silence += frameMS }
-        guard silence >= Self.endSilenceMS || length >= Self.maxUtteranceMS else { return .none }
+        if loud { voiced += frameMS; silenceMS = 0 } else { silenceMS += frameMS }
+        guard silenceMS >= Self.endSilenceMS || length >= Self.maxUtteranceMS else { return .none }
         active = false
         return voiced >= Self.minVoicedMS ? .end : .discard
     }

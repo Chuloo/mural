@@ -370,6 +370,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val message = when {
             // Hosted failures have their own type, so a provider HTTP failure here came from the enabled endpoint.
             endpoint.enabled && e is APIClient.APIException.Http -> app.getString(R.string.error_endpoint_http, e.status)
+            endpoint.enabled && (e is APIClient.APIException.InvalidResponse || e is APIClient.APIException.Incomplete) ->
+                app.getString(R.string.error_endpoint_incomplete)
             res == R.string.error_http_generic && e is APIClient.APIException.Http -> app.getString(res, e.status)
             res != 0 -> app.getString(res)
             e is LiveTransport.TransportException -> e.message ?: app.getString(fallback)

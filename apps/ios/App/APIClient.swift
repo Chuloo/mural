@@ -115,7 +115,8 @@ struct CustomEndpoint: Codable, Equatable {
                                   "input": [["role": "user", "content": input]], "max_output_tokens": schema == nil ? 1400 : 2200,
                                   "reasoning": ["effort": "low"]]
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "mural_result", "strict": true, "schema": schema]] }
-        if search { body["tools"] = [["type": "web_search"]]; body["tool_choice"] = "auto"; body["max_tool_calls"] = 1 }
+        // Web search is OpenAI's hosted tool; a compatible Responses server may reject it.
+        if search && target.endpoint == nil { body["tools"] = [["type": "web_search"]]; body["tool_choice"] = "auto"; body["max_tool_calls"] = 1 }
         let json = try await postJSON(target, "responses", body: body)
         guard json["status"] as? String == "completed" else { throw APIError.incomplete }
         var text = "", sources: [SourceLink] = [], usage = APIUsage()
@@ -165,7 +166,9 @@ struct CustomEndpoint: Codable, Equatable {
             switch self {
             case .endpoint(let status): "Your custom endpoint couldn’t complete the request (HTTP \(status)). Check its settings."
             case .missingKey: "Add your OpenAI key in Settings to begin."
-            case .invalidResponse, .incomplete: "OpenAI returned an incomplete response. Please try again."
+            case .invalidResponse, .incomplete: CustomEndpoint.active == nil
+                ? "OpenAI returned an incomplete response. Please try again."
+                : "Your custom endpoint returned an incomplete or unexpected response. Check its API style and models."
             case .refused: "Mural couldn’t complete that request. Try a different topic."
             case .http(401): "Your OpenAI key wasn’t accepted. Check it in Settings."
             case .http(403), .http(404): "This API key may not have access to the requested model. Check your OpenAI project."

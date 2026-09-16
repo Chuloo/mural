@@ -18,5 +18,6 @@
     <string name="error_endpoint_key_invalid">Introduce la clave de API sin espacios ni saltos de línea.</string>
     <string name="error_endpoint_invalid">Introduce una URL base https:// y un modelo de chat.</string>
     <string name="error_endpoint_voice_missing">Añade en Ajustes un modelo de transcripción, un modelo de síntesis de voz y una voz para tu endpoint personalizado, o escribe tu respuesta.</string>
+    <string name="error_endpoint_incomplete">Tu endpoint personalizado devolvió una respuesta incompleta o inesperada. Revisa el tipo de API y los modelos.</string>
     <string name="error_endpoint_http">Tu endpoint personalizado no pudo completar la solicitud (HTTP %1$d). Revisa su configuración.</string>
 </resources>
