@@ -1,0 +1,25 @@
+{
+  "scope": "Review screenshots of the Talk screen caption layout. The emulator captures come from PlayStoreCaptureTest synthetic Spanish fixtures on a Pixel 6 (411x915dp) API 35 image; the device capture is an English learning session on a 360x804dp phone at density 480. These are not Play listing assets.",
+  "screenshots": [
+    {
+      "file": "caption-layout-2026-09-16/device-360x804dp-long-reply.png",
+      "sha256": "4a6b36c904bfaeae88b69e828274d317da24bfedbb9edecc0cfa2be7cef9cdac",
+      "bytes": 264639
+    },
+    {
+      "file": "caption-layout-2026-09-16/emulator-long-reply-scrolled.png",
+      "sha256": "85f6ee00b23a2d86701e1e23e9d2912756dd117e82b975c2e10d35cda7350065",
+      "bytes": 247485
+    },
+    {
+      "file": "caption-layout-2026-09-16/emulator-long-reply-with-meaning.png",
+      "sha256": "ecf6f01a2a13763d7ed5305f69314fca5081827757bf583ca08505aab956ff9f",
+      "bytes": 252439
+    },
+    {
+      "file": "caption-layout-2026-09-16/emulator-short-reply.png",
+      "sha256": "91bc2b6015a4babc6de8dd49e03eb7c4c09d4d312aa1e24a3f131e898eb84ee9",
+      "bytes": 259515
+    }
+  ]
+}
