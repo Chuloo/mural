@@ -99,6 +99,8 @@ class EvidenceTest {
         assertEquals("pt|férias", key("pt", "umas férias")); assertEquals("pt|amigos", key("pt", "uns amigos"))
         assertEquals("it|amica", key("it", "un'amica")); assertEquals("it|amica", key("it", "un’amica"))
         assertEquals("fr|pain", key("fr", "du pain")); assertEquals("fr|confiture", key("fr", "de la confiture"))
+        assertEquals("de|hund", key("de", "den Hund")); assertEquals("de|kind", key("de", "dem Kind")); assertEquals("de|tages", key("de", "des Tages"))
+        assertEquals("de|freund", key("de", "einen Freund")); assertEquals("de|frau", key("de", "einer Frau"))
     }
     @Test fun wordKeysStayComposedAfterLowercasing() {
         assertEquals(wordKey("en", "ǰ"), wordKey("en", "J̌"))

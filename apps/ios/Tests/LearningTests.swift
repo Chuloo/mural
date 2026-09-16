@@ -263,6 +263,8 @@ final class LearningTests: XCTestCase {
         XCTAssertEqual(key("pt", "umas férias"), "pt|férias"); XCTAssertEqual(key("pt", "uns amigos"), "pt|amigos")
         XCTAssertEqual(key("it", "un'amica"), "it|amica"); XCTAssertEqual(key("it", "un’amica"), "it|amica")
         XCTAssertEqual(key("fr", "du pain"), "fr|pain"); XCTAssertEqual(key("fr", "de la confiture"), "fr|confiture")
+        XCTAssertEqual(key("de", "den Hund"), "de|hund"); XCTAssertEqual(key("de", "dem Kind"), "de|kind"); XCTAssertEqual(key("de", "des Tages"), "de|tages")
+        XCTAssertEqual(key("de", "einen Freund"), "de|freund"); XCTAssertEqual(key("de", "einer Frau"), "de|frau")
     }
     func testWordKeysStayComposedAfterLowercasing() {
         XCTAssertEqual(Array(WordProposal.key(language: "en", lemma: "J\u{030C}").unicodeScalars), Array(WordProposal.key(language: "en", lemma: "\u{01F0}").unicodeScalars))
