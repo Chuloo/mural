@@ -18,14 +18,17 @@ STRUCTURED_FIELDS = ('teachingFocus', 'themeOverrides')
 
 
 def quoted(text):
+    """Escape a string for Kotlin string literal interpolation."""
     return json.dumps(text, ensure_ascii=False).replace('$', r'\$')
 
 
 def swift_strings(text):
+    """Extract all string literals from Swift source text."""
     return [json.loads('"' + value + '"') for value in re.findall(r'"((?:[^"\\]|\\.)*)"', text)]
 
 
 def theme(text):
+    """Parse a Swift ConversationTheme initializer into a Kotlin constructor call."""
     vals = swift_strings(text)
     color = int(re.search(r',\s*(\d+)\s*\)$', text).group(1))
     if len(vals) != 6:
@@ -140,6 +143,7 @@ def generate(core):
 
 
 def main(argv=None):
+    """Entry point for the Android content export script."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--root', type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])

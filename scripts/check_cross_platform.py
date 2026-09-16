@@ -29,10 +29,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def format_failure(check, detail, kotlin_path, kotlin_line, swift_path, swift_line):
+    """Format a cross-platform check failure message with file paths and line numbers."""
     return f"{check}: {detail}. Update {kotlin_path}:{kotlin_line} to match {swift_path}:{swift_line}."
 
 
 def line_of(text, pos):
+    """Return the 1-based line number for the byte offset `pos` in `text`."""
     return text.count('\n', 0, pos) + 1
 
 
@@ -113,6 +115,7 @@ def _dedent_swift_triple(content):
 
 
 def normalize_swift_prompt(literal):
+    """Normalize a Swift string literal prompt by collapsing interpolations to placeholders."""
     if literal.startswith('"""'):
         return _collapse_swift_interp(_dedent_swift_triple(literal[3:-3]))
     return _collapse_swift_interp(literal[1:-1])
@@ -231,6 +234,7 @@ def kotlin_prompts(text):
 
 
 def check_prompts(swift_path, kotlin_path):
+    """Compare teaching prompts between Swift and Kotlin for consistency."""
     swift_text, kotlin_text = swift_path.read_text(encoding='utf-8'), kotlin_path.read_text(encoding='utf-8')
     swift, kotlin = swift_prompts(swift_text), kotlin_prompts(kotlin_text)
     failures = []
@@ -301,10 +305,12 @@ CONSTANTS = [
 
 
 def _parse_number(raw):
+    """Parse a numeric string, removing underscores as thousand separators."""
     return float(raw.replace('_', ''))
 
 
 def _parse_value(raw, kind):
+    """Parse a raw value as either a scalar number or a comma-separated list."""
     if kind == 'list':
         return [_parse_number(x) for x in raw.split(',')]
     return _parse_number(raw)
@@ -324,6 +330,7 @@ def _find(root, relpath, pattern):
 
 
 def check_constants(root, constants=CONSTANTS):
+    """Verify that shared numeric constants match between Swift and Kotlin."""
     failures = []
     for name, kind, (swift_relpath, swift_pattern), (kotlin_relpath, kotlin_pattern) in constants:
         swift_hit = _find(root, swift_relpath, swift_pattern)
@@ -467,6 +474,7 @@ def kotlin_data_class_fields(text, struct_name):
 
 
 def check_archive_fields(swift_path, kotlin_path):
+    """Verify that Swift archive struct fields are present in Kotlin data classes."""
     swift_text, kotlin_text = swift_path.read_text(encoding='utf-8'), kotlin_path.read_text(encoding='utf-8')
     failures = []
     for struct_name in ARCHIVE_STRUCTS:
@@ -527,6 +535,7 @@ def check_archive_fields(swift_path, kotlin_path):
 # --------------------------------------------------------------------------------------
 
 def run_checks(root):
+    """Run all cross-platform consistency checks and return failure messages."""
     failures = []
     failures += check_prompts(root / 'apps/ios/Core/TeachingPolicy.swift',
                                root / 'apps/android/app/src/main/java/chat/mural/core/TeachingPolicy.kt')
@@ -537,6 +546,7 @@ def run_checks(root):
 
 
 def main(argv=None):
+    """Entry point for the cross-platform check script."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', type=pathlib.Path, default=ROOT)
     args = parser.parse_args(argv)
