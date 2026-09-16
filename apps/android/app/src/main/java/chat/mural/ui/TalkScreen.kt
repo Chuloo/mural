@@ -306,6 +306,8 @@ internal data class PassageHeights(val target: Float, val meaning: Float)
  * Splits [available] height between the target passage and its meaning: the target keeps its
  * full height up to [targetCap] and never less than [targetMin] (one line) when that much
  * exists; the meaning keeps at least its first lines ([meaningPeek]) and scrolls the rest.
+ * The caps describe passage text only; callers add any supporting content that must stay
+ * visible (pinyin help, meaning notices) to [targetCap] and [meaningPeek].
  */
 internal fun passageHeights(
     available: Float, target: Float, targetCap: Float, targetMin: Float, meaning: Float, meaningPeek: Float,
@@ -348,14 +350,16 @@ private fun CaptionsLayout(
             val fixedHeight = fixed.values.sumOf { it.height }
             val targetNeeded = target.minIntrinsicHeight(width)
             val meaningNeeded = meaning?.minIntrinsicHeight(width) ?: 0
-            val meaningPeek = meaningLines?.getLineBottom(minOf(meaningLines.lineCount, 2) - 1) ?: 0f
+            // Whatever a slot holds beyond its passage text (pinyin help, meaning notices) stays visible.
+            val targetSupport = (targetNeeded - targetLines.size.height).coerceAtLeast(0)
+            val meaningSupport = (meaningNeeded - (meaningLines?.size?.height ?: 0)).coerceAtLeast(0)
             val heights = passageHeights(
                 available = (constraints.maxHeight - fixedHeight).toFloat(),
                 target = targetNeeded.toFloat(),
-                targetCap = targetLines.getLineBottom(minOf(targetLines.lineCount, 6) - 1),
+                targetCap = targetLines.getLineBottom(minOf(targetLines.lineCount, 6) - 1) + targetSupport,
                 targetMin = targetLines.getLineBottom(0),
                 meaning = meaningNeeded.toFloat(),
-                meaningPeek = meaningPeek,
+                meaningPeek = (meaningLines?.getLineBottom(minOf(meaningLines.lineCount, 2) - 1) ?: 0f) + meaningSupport,
             )
             val targetPlaceable = target.measure(loose.copy(maxHeight = heights.target.roundToInt()))
             val meaningPlaceable = meaning?.measure(loose.copy(maxHeight = heights.meaning.roundToInt()))
