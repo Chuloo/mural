@@ -9,6 +9,7 @@ The API key comes from MURAL_ENDPOINT_KEY or a hidden prompt and is never printe
       --chat-model MODEL --transcription-model MODEL --speech-model MODEL --voice VOICE
 """
 import argparse
+import difflib
 import getpass
 import json
 import os
@@ -22,7 +23,10 @@ import uuid
 
 JSON_LIMIT = 1_048_576   # The app's limits for JSON and audio responses.
 AUDIO_LIMIT = 16_777_216
+APP_TIMEOUT_SECONDS = 60  # The app abandons a request after this long.
 SLOW_REPLY_SECONDS = 6
+# Whisper names Norwegian "no"; every other learning language uses its own code.
+WHISPER_LANGUAGE = {"nb": "no"}
 SAMPLES = {
     "es": ("Spanish", "Hola, me gustaría pedir un café con leche, por favor."),
     "de": ("German", "Hallo, ich hätte gern einen Milchkaffee, bitte."),
@@ -60,15 +64,21 @@ def post(base, key, path, body, content_type, limit):
     if key:
         headers["Authorization"] = "Bearer " + key
     request = urllib.request.Request(base + path, data=body, method="POST", headers=headers)
+    started = time.monotonic()
     try:
-        with OPENER.open(request, timeout=120) as response:
+        with OPENER.open(request, timeout=APP_TIMEOUT_SECONDS) as response:
             data = response.read(limit + 1)
     except urllib.error.HTTPError as error:
         hint = "the app doesn't follow redirects; check the base URL" if 300 <= error.code < 400 else HINTS.get(error.code, "server error")
         detail = error.read(400).decode("utf-8", "replace").strip()
         raise Failure(f"HTTP {error.code}: {hint}" + (f"\n        server said: {detail}" if detail else ""))
     except (urllib.error.URLError, TimeoutError) as error:
-        raise Failure(f"could not reach the server: {getattr(error, 'reason', error)}")
+        reason = getattr(error, "reason", error)
+        if isinstance(reason, TimeoutError):
+            raise Failure(f"no response within {APP_TIMEOUT_SECONDS} s; the app would give up here")
+        raise Failure(f"could not reach the server: {reason}")
+    if time.monotonic() - started > APP_TIMEOUT_SECONDS:
+        raise Failure(f"took {time.monotonic() - started:.0f} s; the app gives up after {APP_TIMEOUT_SECONDS} s")
     if len(data) > limit:
         raise Failure(f"response is larger than the app accepts ({limit} bytes)")
     return data
@@ -107,6 +117,8 @@ def reply(args, key, instructions, user, schema=None):
         return text, ""
 
     body = {"model": args.chat_model, "messages": [{"role": "system", "content": instructions}, {"role": "user", "content": user}]}
+    if args.no_thinking:
+        body["chat_template_kwargs"] = {"enable_thinking": False}  # Understood by vLLM-served Qwen models; not yet sent by the app.
     if schema:
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "mural_result", "strict": True, "schema": schema}}
     data = parse_json(post(args.base_url, key, "chat/completions", json.dumps(body).encode(), "application/json", JSON_LIMIT), "the reply")
@@ -176,10 +188,11 @@ def speak(args, key, text):
     return post(args.base_url, key, "audio/speech", json.dumps(body).encode(), "application/json", AUDIO_LIMIT)
 
 
-def transcribe(args, key, wav):
+def transcribe(args, key, wav, language=None):
     boundary = "mural-" + uuid.uuid4().hex
     body = b""
-    for name, value in (("model", args.transcription_model), ("response_format", "json")):
+    fields = [("model", args.transcription_model), ("response_format", "json")] + ([("language", language)] if language else [])
+    for name, value in fields:
         body += f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
     body += f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n'.encode()
     body += wav + f"\r\n--{boundary}--\r\n".encode()
@@ -187,6 +200,13 @@ def transcribe(args, key, wav):
     if not isinstance(data.get("text"), str):
         raise Failure('no "text" field in the transcription JSON')
     return data["text"].strip()
+
+
+def similarity(said, heard):
+    """Letters only, so punctuation and spacing don't matter; works for scripts without spaces too."""
+    def letters(text):
+        return "".join(ch for ch in text.lower() if ch.isalpha())
+    return difflib.SequenceMatcher(None, letters(said), letters(heard)).ratio()
 
 
 def main():
@@ -199,6 +219,7 @@ def main():
     parser.add_argument("--voice", required=True)
     parser.add_argument("--language", choices=sorted(SAMPLES), default="es", help="learning language to test (default es)")
     parser.add_argument("--save-audio", default="mural-endpoint-check.wav", help="where to save the generated speech")
+    parser.add_argument("--no-thinking", action="store_true", help="ask Qwen models on vLLM to answer without reasoning first")
     args = parser.parse_args()
     sys.stdout.reconfigure(errors="replace")  # Model replies may contain characters a console can't show.
     if not args.base_url.startswith("https://"):
@@ -254,9 +275,20 @@ def main():
     def transcription():
         if "wav" not in audio:
             raise Failure("skipped: needs the speech step to succeed")
-        return f"heard: {transcribe(args, key, audio['wav'])}"
+        hint = WHISPER_LANGUAGE.get(args.language, args.language)
+        lines = [f"said:  {spoken['text']}"]
+        matches = {}
+        for label, code in (("auto-detected", None), (f"language={hint}", hint)):
+            heard = transcribe(args, key, audio["wav"], code)
+            matches[label] = similarity(spoken["text"], heard)
+            lines.append(f"heard ({label}, {matches[label]:.0%} match): {heard}")
+        detail = "\n        ".join(lines)
+        if max(matches.values()) < 0.6:
+            raise Failure(detail + "\n        neither transcript matches what was said; the server may be translating")
+        return detail
 
-    print(f"Checking {args.base_url} for {language} ({args.api_style} API style)\n")
+    print(f"Checking {args.base_url} for {language} ({args.api_style} API style"
+          + (", thinking off" if args.no_thinking else "") + ")\n")
     step("Conversation reply", conversation)
     step("Assessment with JSON schema", assessment)
     step(f"Speech with {args.speech_model} / {args.voice}", speech)
