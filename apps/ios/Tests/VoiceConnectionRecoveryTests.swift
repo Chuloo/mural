@@ -10,11 +10,18 @@ import XCTest
         try await Task.sleep(for: .milliseconds(60))
         XCTAssertEqual(failures, 0)
         recovery.disconnected()
-        try await Task.sleep(for: .milliseconds(70))
+        try await waitUntil { failures == 1 }
         XCTAssertEqual(failures, 1)
         recovery.disconnected()
         try await Task.sleep(for: .milliseconds(60))
         XCTAssertEqual(failures, 1)
+    }
+
+    /// CI runners can run a main-actor timer well after its deadline, so a firing is awaited rather than given fixed slack.
+    private func waitUntil(_ condition: () -> Bool, timeout: Duration = .seconds(2)) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while !condition() && clock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
     }
 
     func testRepeatedDisconnectDoesNotExtendDeadline() async throws {
