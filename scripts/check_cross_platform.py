@@ -231,7 +231,7 @@ def kotlin_prompts(text):
 
 
 def check_prompts(swift_path, kotlin_path):
-    swift_text, kotlin_text = swift_path.read_text(), kotlin_path.read_text()
+    swift_text, kotlin_text = swift_path.read_text(encoding='utf-8'), kotlin_path.read_text(encoding='utf-8')
     swift, kotlin = swift_prompts(swift_text), kotlin_prompts(kotlin_text)
     failures = []
     for name in sorted(set(swift) | set(kotlin)):
@@ -315,7 +315,7 @@ def _find(root, relpath, pattern):
     path = root / relpath
     if not path.exists():
         return f'{relpath} not found'
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     match = re.search(pattern, text)
     if not match:
         return f'pattern not found in {relpath}'
@@ -467,7 +467,7 @@ def kotlin_data_class_fields(text, struct_name):
 
 
 def check_archive_fields(swift_path, kotlin_path):
-    swift_text, kotlin_text = swift_path.read_text(), kotlin_path.read_text()
+    swift_text, kotlin_text = swift_path.read_text(encoding='utf-8'), kotlin_path.read_text(encoding='utf-8')
     failures = []
     for struct_name in ARCHIVE_STRUCTS:
         required = swift_struct_required_fields(swift_text, struct_name)
