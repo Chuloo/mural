@@ -14,6 +14,15 @@ Mural can send conversations to your own OpenAI-compatible server instead of Ope
 - **API key** is optional. When set, it is sent as `Authorization: Bearer …` to that server only, stored encrypted on the device and excluded from backups. Redirects are never followed.
 - The transcription model, speech model and voice are only needed for voice. Without them you can still type replies.
 
+## Check a server before using it
+
+`scripts/check_custom_endpoint.py` sends the same four requests the app sends: a reply, an assessment, speech and a transcription of that speech. It asks for the API key without echoing it, or reads `MURAL_ENDPOINT_KEY`, and saves the generated speech so you can listen to it. It needs Python 3 and nothing else.
+
+```sh
+python scripts/check_custom_endpoint.py --base-url https://example.com/v1 \
+  --chat-model MODEL --transcription-model MODEL --speech-model MODEL --voice VOICE --language es
+```
+
 ## How voice differs from OpenAI voice
 
 - It takes turns. Mural stops listening while it thinks and speaks, so you can't interrupt it. A pause of about 1.2 seconds ends your turn.
