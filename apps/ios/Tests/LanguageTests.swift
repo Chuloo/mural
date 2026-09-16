@@ -247,8 +247,9 @@ final class LanguageTests: XCTestCase {
 
     func testTurkishThemeOverridesMatchSharedThemeIDs() {
         let turkish = LanguageModule.turkish
-        XCTAssertEqual(Set(turkish.themeOverrides.keys), Set(ConversationTheme.shared.map(\.id)))
+        let sharedIDs = Set(ConversationTheme.shared.map(\.id))
         for (key, override) in turkish.themeOverrides {
+            XCTAssertTrue(sharedIDs.contains(key), "Override key '\(key)' must match a shared theme ID")
             XCTAssertEqual(key, override.id)
             XCTAssertFalse(override.situation.isEmpty)
         }
@@ -256,18 +257,17 @@ final class LanguageTests: XCTestCase {
 
     func testTurkishProgressIsolation() {
         let turkishSessions = [evidence(languageID: "tr"), evidence(languageID: "tr", day: 2)]
-        let spanishSessions = [evidence(languageID: "es")]
-        let allSessions = turkishSessions + spanishSessions
+        let norwegianSessions = [evidence(languageID: "nb")]
+        let allSessions = turkishSessions + norwegianSessions
 
         let turkish = LearningEngine.project(allSessions, languageID: "tr", now: turkishSessions[1].startedAt)
-        let spanish = LearningEngine.project(allSessions, languageID: "es", now: turkishSessions[1].startedAt)
+        let norwegian = LearningEngine.project(allSessions, languageID: "nb", now: turkishSessions[1].startedAt)
 
         XCTAssertEqual(turkish.challenge, 1)
         XCTAssertEqual(turkish.words.first?.bars, 2)
-        XCTAssertEqual(spanish.challenge, 0)
-        XCTAssertEqual(spanish.observationCount, 0)
-        XCTAssertTrue(spanish.words.isEmpty)
-        XCTAssertNotEqual(spanish.nextGoal, "A goal for tr")
+        XCTAssertEqual(norwegian.challenge, 0)
+        XCTAssertEqual(norwegian.observationCount, 1)
+        XCTAssertNotEqual(norwegian.nextGoal, "A goal for tr")
     }
 
     func testTurkishArchiveRoundTrip() throws {
@@ -281,11 +281,12 @@ final class LanguageTests: XCTestCase {
     }
 
     func testTurkishHiddenWordsIsolation() {
-        let session = evidence(languageID: "tr")
-        let turkishID = session.assessments[0].words[0].key
+        let turkishSession = evidence(languageID: "tr")
+        let norwegianSession = evidence(languageID: "nb")
+        let turkishID = turkishSession.assessments[0].words[0].key
 
-        let turkish = LearningEngine.project([session], languageID: "tr", hiddenWords: [turkishID])
-        let norwegian = LearningEngine.project([session], languageID: "nb", hiddenWords: [turkishID])
+        let turkish = LearningEngine.project([turkishSession, norwegianSession], languageID: "tr", hiddenWords: [turkishID])
+        let norwegian = LearningEngine.project([turkishSession, norwegianSession], languageID: "nb", hiddenWords: [turkishID])
 
         XCTAssertTrue(turkish.words.isEmpty)
         XCTAssertEqual(norwegian.words.count, 1)

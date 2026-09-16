@@ -5,7 +5,7 @@ extension LanguageModule {
         id: "tr", name: "Turkish", nativeName: "Türkçe", variety: "Turkey", locale: "tr-TR",
         greeting: "Merhaba!", greetingWord: "merhaba",
         speechGuidance: "Use clear, natural Standard Turkish pronunciation. Use 'sen' for friendly conversation and 'siz' when the situation calls for formality. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
-        writingGuidance: "Use standard Turkish spelling with proper İ/i, ş/ş, ç/ç, ğ/ğ, ö/ö, ü/ü characters. Match the register to the situation and accept valid regional usage from the learner.",
+        writingGuidance: "Use standard Turkish spelling with proper I/ı, İ/i, Ş/ş, Ç/ç, Ğ/ğ, Ö/ö, Ü/ü characters. Match the register to the situation and accept valid regional usage from the learner.",
         lemmaGuidance: "Give nouns in their singular form and verbs in the dictionary (mastar) form, for example ev and gelmek. Preserve vowel harmony patterns and meaningful suffixes. Keep compound verbs distinct.",
         teachingFocus: [
             "Greetings, introductions and useful everyday chunks such as benim adım and istiyorum.",
