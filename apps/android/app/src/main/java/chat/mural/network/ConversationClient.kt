@@ -31,6 +31,18 @@ interface LiveSessionProvider {
     suspend fun createLiveSession(request: LiveSessionRequest): LiveSessionConnection
 }
 
+/** The conversation coordinator's view of a voice connection. Callbacks arrive on the coordinator's scope. */
+interface VoiceTransport {
+    var onEvent: ((JsonObject) -> Unit)?
+    var onFailure: ((String) -> Unit)?
+    var onLevels: ((Double, Double) -> Unit)?
+    /** [respond] asks a turn-based engine to speak now; a realtime model decides that itself. */
+    fun send(event: JsonObject, respond: Boolean = false): Boolean
+    fun mute(muted: Boolean)
+    fun close()
+    fun disconnect()
+}
+
 /** Lease metadata is opaque to the native audio layer. It never contains credentials or prompt text. */
 interface LiveSessionLease {
     val sessionID: String

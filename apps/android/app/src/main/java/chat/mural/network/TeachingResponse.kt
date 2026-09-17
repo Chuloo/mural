@@ -31,10 +31,12 @@ internal fun decodeTeachingResponse(response: JsonObject): APIResult {
         }
     }
 
-    if (text.isEmpty()) throw APIClient.APIException.Incomplete
+    // A local reasoning model behind a Responses endpoint can inline its thinking too.
+    val clean = text.toString().replace(THINKING, "").trim()
+    if (clean.isEmpty()) throw APIClient.APIException.Incomplete
     val usage = response["usage"] as? JsonObject
     return APIResult(
-        text = text.toString(),
+        text = clean,
         sources = sources.values.toList(),
         usage = APIUsage(
             input = ((usage?.get("input_tokens") as? JsonPrimitive)?.intOrNull ?: 0).coerceIn(0, 1_000_000_000),
@@ -43,6 +45,25 @@ internal fun decodeTeachingResponse(response: JsonObject): APIResult {
         ),
     )
 }
+
+/** Decodes a Chat Completions reply from an OpenAI-compatible server. These carry no web citations. */
+internal fun decodeChatCompletion(response: JsonObject): APIResult {
+    val choice = response.array("choices").firstOrNull() as? JsonObject ?: throw APIClient.APIException.Incomplete
+    val message = choice["message"] as? JsonObject ?: throw APIClient.APIException.Incomplete
+    if (message.string("refusal") != null || choice.string("finish_reason") == "content_filter") throw APIClient.APIException.Refused
+    if (choice.string("finish_reason") == "length") throw APIClient.APIException.Incomplete
+    // Local reasoning models often inline their thinking; it must never be spoken or stored.
+    val text = message.string("content").orEmpty().replace(THINKING, "").trim()
+    if (text.isEmpty()) throw APIClient.APIException.Incomplete
+    val usage = response["usage"] as? JsonObject
+    return APIResult(text, emptyList(), APIUsage(
+        input = ((usage?.get("prompt_tokens") as? JsonPrimitive)?.intOrNull ?: 0).coerceIn(0, 1_000_000_000),
+        output = ((usage?.get("completion_tokens") as? JsonPrimitive)?.intOrNull ?: 0).coerceIn(0, 1_000_000_000),
+    ))
+}
+
+/** Inline reasoning, including a block the server cut off before its closing tag. */
+private val THINKING = Regex("<think>[\\s\\S]*?(?:</think>|$)")
 
 private fun isSafeSourceUrl(value: String): Boolean = try {
     val uri = URI(value)

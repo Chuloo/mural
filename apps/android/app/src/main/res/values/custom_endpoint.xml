@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_endpoint_title">Custom endpoint</string>
+    <string name="settings_endpoint_off">Off</string>
+    <string name="settings_endpoint_note">Use any OpenAI-compatible server instead of OpenAI. Conversations, audio and selected text go to this server, and it bills or limits usage. Voice takes turns: speak, pause, then Mural answers. Web search isn\'t available.</string>
+    <string name="settings_endpoint_enabled">Use this endpoint</string>
+    <string name="settings_endpoint_url">Base URL, e.g. https://example.com/v1</string>
+    <string name="settings_endpoint_key">API key (leave empty to keep the saved key)</string>
+    <string name="settings_endpoint_protocol">API style</string>
+    <string name="settings_endpoint_protocol_chat">Chat Completions</string>
+    <string name="settings_endpoint_protocol_responses">Responses</string>
+    <string name="settings_endpoint_model">Chat model</string>
+    <string name="settings_endpoint_skip_thinking">Skip model thinking (faster; vLLM/Qwen only)</string>
+    <string name="settings_endpoint_transcription_model">Transcription model (voice)</string>
+    <string name="settings_endpoint_speech_model">Speech model (voice)</string>
+    <string name="settings_endpoint_voice">Voice name</string>
+    <string name="settings_endpoint_remove">Remove endpoint</string>
+    <string name="notice_endpoint_saved">Endpoint saved.</string>
+    <string name="topics_search_endpoint_note">Topic search needs OpenAI\'s web search, which your custom endpoint doesn\'t offer. Choose a theme instead.</string>
+    <string name="settings_usage_footer_endpoint">Your custom endpoint bills or limits usage, so its own dashboard or logs are authoritative. The time limit is local, not a billing cap.</string>
+    <string name="settings_models_footer_endpoint">Voice: %1$s · Teacher: %2$s</string>
+    <string name="settings_data_use_footer_endpoint">Audio and selected text go to your custom endpoint while you practise, under that server\'s retention rules. Raw audio is not saved by Mural.</string>
+    <string name="error_endpoint_key_invalid">Enter the API key without spaces or line breaks.</string>
+    <string name="error_endpoint_invalid">Enter an https:// base URL and a chat model.</string>
+    <string name="error_endpoint_voice_missing">Add a transcription model, speech model and voice for your custom endpoint in Settings to start a conversation.</string>
+    <string name="error_endpoint_reference">Server reference: %1$s</string>
+    <string name="error_endpoint_incomplete">Your custom endpoint returned an incomplete or unexpected response. Check its API style and models.</string>
+    <string name="error_endpoint_http">Your custom endpoint couldn\'t complete the request (HTTP %1$d). Check its settings.</string>
+</resources>

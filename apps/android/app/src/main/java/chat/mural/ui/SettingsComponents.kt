@@ -85,11 +85,15 @@ internal fun SettingsChoiceRow(title: String, value: String, selected: String, o
 }
 
 @Composable
-internal fun SettingsMeaningSwitch(checked: Boolean, onChange: () -> Unit) {
-    Row(Modifier.fillMaxWidth().testTag("settings-meaning-visible")
-        .toggleable(checked, role = Role.Switch, onValueChange = { onChange() }).heightIn(min = 52.dp)
+internal fun SettingsMeaningSwitch(checked: Boolean, onChange: () -> Unit) =
+    SettingsSwitch(stringResource(R.string.settings_meaning_subtitles), checked, "settings-meaning-visible") { onChange() }
+
+@Composable
+internal fun SettingsSwitch(title: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().testTag(tag)
+        .toggleable(checked, role = Role.Switch, onValueChange = onChange).heightIn(min = 52.dp)
         .padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.settings_meaning_subtitles), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Switch(checked, onCheckedChange = null, colors = SwitchDefaults.colors(
             checkedThumbColor = Color.White, checkedTrackColor = MuralColors.Secondary,
             uncheckedThumbColor = Color.White, uncheckedTrackColor = MuralColors.Secondary.copy(alpha = .18f),

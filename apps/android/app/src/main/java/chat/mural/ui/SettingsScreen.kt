@@ -1,6 +1,7 @@
 package chat.mural.ui
 
 import android.view.WindowManager
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -17,6 +18,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -65,12 +68,15 @@ import chat.mural.core.Passage
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.UsageSummary
+import chat.mural.network.CustomEndpoint
+import chat.mural.network.EndpointProtocol
 
 @Composable
 fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Unit, onReviewConsent: () -> Unit,
                    onAccount: (() -> Unit)? = null, onDismiss: () -> Unit = {}) {
     var advanced by rememberSaveable { mutableStateOf(false) }
     var keyDialog by rememberSaveable { mutableStateOf(false) }
+    var endpointDialog by rememberSaveable { mutableStateOf(false) }
     var deleteKey by rememberSaveable { mutableStateOf(false) }
     var deleteAll by rememberSaveable { mutableStateOf(false) }
     var permissionDetails by rememberSaveable { mutableStateOf(false) }
@@ -123,7 +129,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
             item {
                 SettingsGroup(stringResource(R.string.settings_advanced),
-                    if (!vm.hasKey) stringResource(R.string.settings_byok_version_footer) else null) {
+                    if (!vm.personalReady) stringResource(R.string.settings_byok_version_footer) else null) {
                     SettingsRow(stringResource(R.string.settings_use_own_key), symbol = SettingsSymbol.KEY,
                         chevron = !advanced, modifier = Modifier.testTag("advanced-api-key"), onClick = { advanced = !advanced })
                     AnimatedVisibility(advanced, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -145,11 +151,17 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 color = MuralColors.Secondary, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp))
                         }
                     }
+                    SettingsDivider()
+                    SettingsRow(stringResource(R.string.settings_endpoint_title),
+                        vm.endpoint.url?.host?.takeIf { vm.endpoint.enabled } ?: stringResource(R.string.settings_endpoint_off),
+                        enabled = !vm.isRunning, chevron = true, modifier = Modifier.testTag("custom-endpoint"), onClick = { endpointDialog = true })
                 }
             }
             item {
                 val usage = UsageSummary.of(vm.archive.sessions)
-                SettingsGroup(stringResource(R.string.settings_keep_comfortable), stringResource(R.string.settings_usage_footer)) {
+                val custom = vm.endpoint.enabled // OpenAI pricing, billing and data controls don't apply to a custom endpoint.
+                SettingsGroup(stringResource(R.string.settings_keep_comfortable),
+                    stringResource(if (custom) R.string.settings_usage_footer_endpoint else R.string.settings_usage_footer)) {
                     val limits = (listOf(5, 10, 15, 20, 30, 60) + prefs.sessionMinutes).distinct().sorted()
                     SettingsChoiceRow(stringResource(R.string.settings_conversation_limit), stringResource(R.string.settings_limit_minutes, prefs.sessionMinutes),
                         prefs.sessionMinutes.toString(), limits.map { it.toString() to stringResource(R.string.settings_limit_minutes, it) },
@@ -157,12 +169,16 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_voice_time_label), usage.voiceTime)
                     SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_voice_estimate_label), usage.voiceEstimate)
-                    SettingsDivider()
+                    if (!custom) {
+                        SettingsRow(stringResource(R.string.settings_voice_estimate_label), usage.voiceEstimate)
+                        SettingsDivider()
+                    }
                     SettingsRow(stringResource(R.string.settings_search_calls_label), usage.searchCalls.toString())
-                    SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_usage_billing_link), tint = MuralColors.Secondary,
-                        onClick = { open("https://platform.openai.com/usage") })
+                    if (!custom) {
+                        SettingsDivider()
+                        SettingsRow(stringResource(R.string.settings_usage_billing_link), tint = MuralColors.Secondary,
+                            onClick = { open("https://platform.openai.com/usage") })
+                    }
                 }
             }
             item {
@@ -199,12 +215,15 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 SettingsGroup {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.settings_app_version_footer, version), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
-                        Text(stringResource(R.string.settings_models_footer), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
+                        val custom = vm.endpoint.enabled
+                        Text(if (custom) stringResource(R.string.settings_models_footer_endpoint, vm.endpoint.speechModel, vm.endpoint.model)
+                            else stringResource(R.string.settings_models_footer), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
                     }
                     SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_openai_data_controls), tint = MuralColors.Secondary,
+                    if (!vm.endpoint.enabled) SettingsRow(stringResource(R.string.settings_openai_data_controls), tint = MuralColors.Secondary,
                         onClick = { open("https://developers.openai.com/api/docs/guides/your-data") })
-                    Text(stringResource(R.string.settings_data_use_footer), style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(if (vm.endpoint.enabled) R.string.settings_data_use_footer_endpoint else R.string.settings_data_use_footer),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_open_source_notices), chevron = true, onClick = { notices = true })
@@ -214,6 +233,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
     }
 
     if (keyDialog) KeyDialog(vm, onDismiss = { keyDialog = false })
+    if (endpointDialog) EndpointDialog(vm, onDismiss = { endpointDialog = false })
     if (notices) NoticesDialog(onDismiss = { notices = false })
     if (history) SettingsHistorySheet(vm, onDismiss = { history = false }, onSelect = { transcript = it }, onDelete = { deleteSession = it })
     if (permissionDetails) AlertDialog(onDismissRequest = { permissionDetails = false },
@@ -280,13 +300,7 @@ private fun KeyDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
     // Intentionally starts empty even when a key exists; secrets never flow back into Compose state.
     var key by remember { mutableStateOf("") }
     Dialog(onDismissRequest = { key = ""; onDismiss() }) {
-        val view = LocalView.current
-        DisposableEffect(view) {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            val wasSecure = window?.attributes?.flags?.and(WindowManager.LayoutParams.FLAG_SECURE)?.let { it != 0 } ?: false
-            window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            onDispose { if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-        }
+        SecureDialogWindow()
         Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
                 Text(stringResource(R.string.settings_key_dialog_title), style = MaterialTheme.typography.headlineMedium)
@@ -303,6 +317,69 @@ private fun KeyDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     MuralTextButton(onClick = { key = ""; onDismiss() }) { Text(stringResource(R.string.common_cancel)) }
                     Button(onClick = { vm.saveKey(key.trim()); key = ""; onDismiss() }, enabled = key.isNotBlank()) { Text(stringResource(R.string.common_save)) }
+                }
+            }
+        }
+    }
+}
+
+/** Keeps a key field out of screenshots and the recent-apps preview. */
+@Composable
+private fun SecureDialogWindow() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.parent as? DialogWindowProvider)?.window
+        val wasSecure = window?.attributes?.flags?.and(WindowManager.LayoutParams.FLAG_SECURE)?.let { it != 0 } ?: false
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    }
+}
+
+@Composable
+private fun EndpointDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
+    var draft by remember { mutableStateOf(vm.endpoint) }
+    // Like the OpenAI key, a saved key never flows back into Compose state; blank keeps it.
+    var key by remember { mutableStateOf("") }
+    val protocols = listOf(EndpointProtocol.CHAT_COMPLETIONS to stringResource(R.string.settings_endpoint_protocol_chat),
+        EndpointProtocol.RESPONSES to stringResource(R.string.settings_endpoint_protocol_responses))
+    @Composable
+    fun field(value: String, @StringRes label: Int, tag: String, type: KeyboardType = KeyboardType.Text, change: (String) -> Unit) =
+        MuralTextField(value, { change(it.take(500)) }, Modifier.fillMaxWidth().testTag(tag), singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = type, autoCorrectEnabled = false), label = { Text(stringResource(label)) })
+
+    Dialog(onDismissRequest = { key = ""; onDismiss() }) {
+        SecureDialogWindow()
+        Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.settings_endpoint_title), style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(R.string.settings_endpoint_note), color = MuralColors.Secondary)
+                SettingsSwitch(stringResource(R.string.settings_endpoint_enabled), draft.enabled, "endpoint-enabled") { draft = draft.copy(enabled = it) }
+                field(draft.baseUrl, R.string.settings_endpoint_url, "endpoint-url", KeyboardType.Uri) { draft = draft.copy(baseUrl = it) }
+                MuralTextField(key, { key = it.take(500) }, Modifier.fillMaxWidth().testTag("endpoint-key").semantics { password() },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    label = { Text(stringResource(R.string.settings_endpoint_key)) })
+                SettingsChoiceRow(stringResource(R.string.settings_endpoint_protocol), protocols.first { it.first == draft.protocol }.second,
+                    draft.protocol.name, protocols.map { it.first.name to it.second }, "endpoint-protocol") {
+                    draft = draft.copy(protocol = EndpointProtocol.valueOf(it))
+                }
+                field(draft.model, R.string.settings_endpoint_model, "endpoint-model") { draft = draft.copy(model = it) }
+                SettingsSwitch(stringResource(R.string.settings_endpoint_skip_thinking), draft.skipThinking, "endpoint-skip-thinking") {
+                    draft = draft.copy(skipThinking = it)
+                }
+                field(draft.transcriptionModel, R.string.settings_endpoint_transcription_model, "endpoint-transcription-model") { draft = draft.copy(transcriptionModel = it) }
+                field(draft.speechModel, R.string.settings_endpoint_speech_model, "endpoint-speech-model") { draft = draft.copy(speechModel = it) }
+                field(draft.voice, R.string.settings_endpoint_voice, "endpoint-voice") { draft = draft.copy(voice = it) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (vm.endpoint != CustomEndpoint()) MuralTextButton(onClick = { key = ""; vm.deleteEndpoint(); onDismiss() }, Modifier.testTag("endpoint-remove")) {
+                        Text(stringResource(R.string.settings_endpoint_remove), color = MuralColors.Red)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    MuralTextButton(onClick = { key = ""; onDismiss() }) { Text(stringResource(R.string.common_cancel)) }
+                    // A failed save keeps the form open so the draft isn't lost behind the error.
+                    Button(onClick = { if (vm.saveEndpoint(draft, key.trim())) { key = ""; onDismiss() } }, Modifier.testTag("endpoint-save")) {
+                        Text(stringResource(R.string.common_save))
+                    }
                 }
             }
         }

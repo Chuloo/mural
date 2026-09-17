@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_endpoint_title">Endpoint personalizado</string>
+    <string name="settings_endpoint_off">Desactivado</string>
+    <string name="settings_endpoint_note">Usa cualquier servidor compatible con OpenAI en lugar de OpenAI. Las conversaciones, el audio y el texto elegido se envían a este servidor, que factura o limita el uso. La voz va por turnos: hablas, haces una pausa y Mural responde. La búsqueda web no está disponible.</string>
+    <string name="settings_endpoint_enabled">Usar este endpoint</string>
+    <string name="settings_endpoint_url">URL base, p. ej. https://example.com/v1</string>
+    <string name="settings_endpoint_key">Clave de API (déjala vacía para conservar la guardada)</string>
+    <string name="settings_endpoint_protocol">Tipo de API</string>
+    <string name="settings_endpoint_protocol_chat">Chat Completions</string>
+    <string name="settings_endpoint_protocol_responses">Responses</string>
+    <string name="settings_endpoint_model">Modelo de chat</string>
+    <string name="settings_endpoint_skip_thinking">Omitir el razonamiento del modelo (más rápido; solo vLLM/Qwen)</string>
+    <string name="settings_endpoint_transcription_model">Modelo de transcripción (voz)</string>
+    <string name="settings_endpoint_speech_model">Modelo de síntesis de voz (voz)</string>
+    <string name="settings_endpoint_voice">Nombre de la voz</string>
+    <string name="settings_endpoint_remove">Eliminar endpoint</string>
+    <string name="notice_endpoint_saved">Endpoint guardado.</string>
+    <string name="topics_search_endpoint_note">La búsqueda de temas necesita la búsqueda web de OpenAI, que tu endpoint personalizado no ofrece. Elige un tema de la lista.</string>
+    <string name="settings_usage_footer_endpoint">Tu endpoint personalizado factura o limita el uso, así que su propio panel o sus registros son la referencia. La duración orientativa es local, no un tope de gasto.</string>
+    <string name="settings_models_footer_endpoint">Voz: %1$s · Profesor: %2$s</string>
+    <string name="settings_data_use_footer_endpoint">El audio y el texto elegido se envían a tu endpoint personalizado durante la práctica, según las normas de conservación de ese servidor. Mural no guarda audio sin procesar.</string>
+    <string name="error_endpoint_key_invalid">Introduce la clave de API sin espacios ni saltos de línea.</string>
+    <string name="error_endpoint_invalid">Introduce una URL base https:// y un modelo de chat.</string>
+    <string name="error_endpoint_voice_missing">Añade en Ajustes un modelo de transcripción, un modelo de síntesis de voz y una voz para tu endpoint personalizado para empezar una conversación.</string>
+    <string name="error_endpoint_reference">Referencia del servidor: %1$s</string>
+    <string name="error_endpoint_incomplete">Tu endpoint personalizado devolvió una respuesta incompleta o inesperada. Revisa el tipo de API y los modelos.</string>
+    <string name="error_endpoint_http">Tu endpoint personalizado no pudo completar la solicitud (HTTP %1$d). Revisa su configuración.</string>
+</resources>
