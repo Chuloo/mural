@@ -16,6 +16,7 @@
     <string name="settings_endpoint_voice">Nombre de la voz</string>
     <string name="settings_endpoint_remove">Eliminar endpoint</string>
     <string name="notice_endpoint_saved">Endpoint guardado.</string>
+    <string name="topics_search_endpoint_note">La búsqueda de temas necesita la búsqueda web de OpenAI, que tu endpoint personalizado no ofrece. Elige un tema de la lista.</string>
     <string name="settings_usage_footer_endpoint">Tu endpoint personalizado factura o limita el uso, así que su propio panel o sus registros son la referencia. La duración orientativa es local, no un tope de gasto.</string>
     <string name="settings_models_footer_endpoint">Voz: %1$s · Profesor: %2$s</string>
     <string name="settings_data_use_footer_endpoint">El audio y el texto elegido se envían a tu endpoint personalizado durante la práctica, según las normas de conservación de ese servidor. Mural no guarda audio sin procesar.</string>

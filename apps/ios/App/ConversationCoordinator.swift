@@ -140,7 +140,8 @@ import MuralCore
         } else {
             guard CredentialStore.hasKey else { showSettings = true; return }
         }
-        usesTurns = endpoint.enabled
+        let turnBased = endpoint.enabled
+        usesTurns = turnBased
         cancelReset(); meanings.reset()
         error = nil; notice = nil; lastAssessmentKey = ""
         lastLanguageCheck = ""; pendingCommands = [:]
@@ -156,7 +157,10 @@ import MuralCore
         connectionTask = Task { [weak self] in
             guard let self else { return }
             do {
-                if self.usesTurns {
+                // A cancelled start can run after a newer conversation began; it must not reset that conversation's transport.
+                try Task.checkCancellation()
+                guard self.session?.id == generation else { return }
+                if turnBased {
                     try await self.turns.connect(api: self.api, language: languageID) { [weak self] guidance in
                         try await self?.spokenReply(sessionID: generation, instructions: instructions, guidance: guidance) ?? ""
                     }

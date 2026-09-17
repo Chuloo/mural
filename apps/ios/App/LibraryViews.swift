@@ -60,6 +60,8 @@ struct CurrentTopicView: View {
     @State private var brief: TopicBrief?
     @State private var loading = false
     @State private var error: String?
+    /// Topic search relies on OpenAI's web search, which a custom endpoint doesn't have, so every search would fail.
+    private let searchAvailable = CustomEndpoint.active == nil
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -68,7 +70,7 @@ struct CurrentTopicView: View {
                     TextField(coordinator.language.topicPlaceholder, text: $query, axis: .vertical).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
                     Button { find() } label: {
                         HStack { Text(loading ? "Finding something interesting…" : "Find a topic"); Spacer(); if loading { ProgressView() } else { Image(systemName: "sparkle.magnifyingglass") } }.padding(18).background(MuralColor.peach, in: Capsule())
-                    }.disabled(loading || query.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }.disabled(!searchAvailable || loading || query.trimmingCharacters(in: .whitespaces).isEmpty)
                     if let error { Text(error).font(.footnote).foregroundStyle(MuralColor.secondary) }
                     if let brief {
                         Text(.init(brief.text)).font(.body).textSelection(.enabled)
@@ -76,7 +78,9 @@ struct CurrentTopicView: View {
                         Button("Talk about this", systemImage: "waveform") { coordinator.discuss(brief); selected(); dismiss() }
                             .font(.headline).padding(18).frame(maxWidth: .infinity).background(MuralColor.orange, in: Capsule())
                     }
-                    Text("Search uses your OpenAI API account. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                    Text(searchAvailable ? "Search uses your OpenAI API account. Sources stay attached to the topic."
+                         : "Topic search needs OpenAI's web search, which your custom endpoint doesn't offer. Choose a theme instead.")
+                        .font(.footnote).foregroundStyle(MuralColor.secondary)
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }

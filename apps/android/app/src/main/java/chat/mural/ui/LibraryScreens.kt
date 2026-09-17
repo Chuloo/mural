@@ -163,7 +163,8 @@ private fun CurrentTopicDialog(
                     )
                 }
                 item {
-                    Button(onClick = { onFind(query.trim()) }, enabled = query.isNotBlank() && !vm.working, modifier = Modifier.fillMaxWidth()) {
+                    // Topic search relies on OpenAI's web search, which a custom endpoint doesn't have, so it would always fail.
+                    Button(onClick = { onFind(query.trim()) }, enabled = !vm.endpoint.enabled && query.isNotBlank() && !vm.working, modifier = Modifier.fillMaxWidth()) {
                         if (vm.working) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Text(if (vm.working) "  " + stringResource(R.string.topics_finding_button) else stringResource(R.string.topics_find_button))
                     }
@@ -188,7 +189,8 @@ private fun CurrentTopicDialog(
                         ) { Text(stringResource(R.string.topics_talk_about_button)) }
                     }
                 }
-                item { Text(stringResource(R.string.topics_sources_note), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary) }
+                item { Text(stringResource(if (vm.endpoint.enabled) R.string.topics_search_endpoint_note else R.string.topics_sources_note),
+                    style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary) }
                 item { MuralTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.common_close)) } }
             }
         }

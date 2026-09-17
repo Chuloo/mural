@@ -16,6 +16,7 @@
     <string name="settings_endpoint_voice">Voice name</string>
     <string name="settings_endpoint_remove">Remove endpoint</string>
     <string name="notice_endpoint_saved">Endpoint saved.</string>
+    <string name="topics_search_endpoint_note">Topic search needs OpenAI\'s web search, which your custom endpoint doesn\'t offer. Choose a theme instead.</string>
     <string name="settings_usage_footer_endpoint">Your custom endpoint bills or limits usage, so its own dashboard or logs are authoritative. The time limit is local, not a billing cap.</string>
     <string name="settings_models_footer_endpoint">Voice: %1$s · Teacher: %2$s</string>
     <string name="settings_data_use_footer_endpoint">Audio and selected text go to your custom endpoint while you practise, under that server\'s retention rules. Raw audio is not saved by Mural.</string>

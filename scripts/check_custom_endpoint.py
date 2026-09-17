@@ -177,6 +177,44 @@ def assessment_schema(language):
     })
 
 
+def schema_problem(value, schema, path="assessment"):
+    """The first way `value` breaks the JSON schema the app sends, or None.
+    Extra keys are allowed because the apps' decoders ignore them."""
+    kind = schema.get("type")
+    if kind == "object":
+        if not isinstance(value, dict):
+            return f"{path} is not an object"
+        missing = [name for name in schema.get("required", []) if name not in value]
+        if missing:
+            return f"{path} is missing {', '.join(missing)}"
+        for name, field in schema.get("properties", {}).items():
+            problem = schema_problem(value[name], field, f"{path}.{name}") if name in value else None
+            if problem:
+                return problem
+        return None
+    if kind == "array":
+        if not isinstance(value, list):
+            return f"{path} is not a list"
+        if len(value) > schema.get("maxItems", len(value)):
+            return f"{path} has more than {schema['maxItems']} items"
+        for index, item in enumerate(value):
+            problem = schema_problem(item, schema["items"], f"{path}[{index}]")
+            if problem:
+                return problem
+        return None
+    if kind == "string" and not isinstance(value, str):
+        return f"{path} is not a string"
+    if kind == "integer" and (isinstance(value, bool) or not isinstance(value, int)):
+        return f"{path} is not an integer"
+    if kind == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))):
+        return f"{path} is not a number"
+    if "enum" in schema and value not in schema["enum"]:
+        return f"{path} is {value!r}, not one of {', '.join(schema['enum'])}"
+    if ("minimum" in schema and value < schema["minimum"]) or ("maximum" in schema and value > schema["maximum"]):
+        return f"{path} is {value}, outside {schema.get('minimum')} to {schema.get('maximum')}"
+    return None
+
+
 def parse_wav(data):
     """Mirrors the app: 16-bit PCM WAV, mono or stereo, 8-96 kHz, extra chunks skipped."""
     if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
@@ -261,6 +299,10 @@ def main():
         except Failure as failure:
             print(f"FAIL  {name}\n        {failure}")
             results.append((name, False, 0))
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            # A reply with an unexpected nested shape fails this check instead of stopping the remaining ones.
+            print(f"FAIL  {name}\n        the response has a shape the app can't read ({type(error).__name__}: {error})")
+            results.append((name, False, 0))
 
     spoken = {"text": sample}
 
@@ -279,13 +321,10 @@ def main():
             result = json.loads(text)
         except ValueError:
             raise Failure("the model ignored the JSON schema; learning progress would not be recorded")
-        if not isinstance(result, dict):
-            raise Failure("the assessment is not a JSON object; learning progress would not be recorded")
-        missing = {"outcome", "suggestedLevel", "nextGoal", "capability", "words"} - set(result)
-        if missing:
-            raise Failure(f"JSON is missing {sorted(missing)}; learning progress would not be recorded")
-        if not isinstance(result["words"], list):
-            raise Failure('JSON field "words" is not a list; learning progress would not be recorded')
+        # The apps decode assessments into typed models, so any mismatch loses the learning evidence.
+        problem = schema_problem(result, assessment_schema(args.language))
+        if problem:
+            raise Failure(f"{problem}; learning progress would not be recorded")
         return f"outcome={result['outcome']}, level={result['suggestedLevel']}, {len(result['words'])} words logged"
 
     audio = {}
