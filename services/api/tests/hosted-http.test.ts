@@ -21,6 +21,45 @@ test('hosted HTTP routes advertise no usable conversation path without both conf
   }
 });
 
+test('JSON and streaming helpers share the network limit before authentication or provider admission', async () => {
+  for (const trustedProxy of [false, true]) {
+    const account = randomUUID(), session = randomUUID();
+    let authentications = 0, helpers = 0;
+    const db = { query: async () => { authentications++; return { rows: [{ account_id: account }] }; } } as unknown as Database;
+    const proxyToken = randomBytes(32).toString('hex');
+    const app = createApp({ db, auth: {},
+      accounts: trustedProxy ? { admission: { config: { proxyToken, hmacKey: randomBytes(32).toString('hex') } } } as Services['accounts'] : undefined,
+      hosted: { minuteFunded: true } as Services['hosted'],
+      hostedHelpers: { request: async (_account: string, _session: string, _body: unknown, onText?: (text: string) => void) => {
+        helpers++; onText?.('Hello.'); return { text: 'Hello.' };
+      } } as unknown as Services['hostedHelpers'],
+    });
+    const headers = { authorization: `Bearer ${randomBytes(32).toString('base64url')}`,
+      ...(trustedProxy ? { 'x-mural-proxy-token': proxyToken, 'x-mural-client-ip': '198.51.100.10' } : {}) };
+    const request = (index: number) => ({ method: 'POST' as const,
+      url: `/v1/live/sessions/${session}/${index % 2 ? '%68elpers' : 'helpers'}`,
+      headers: { ...headers, accept: index % 2 ? 'text/event-stream' : 'application/json',
+        'x-forwarded-for': `203.0.113.${index % 250 + 1}` }, payload: {} });
+    try {
+      for (let i = 0; i < 120; i++) assert.equal((await app.inject(request(i))).statusCode, 200);
+      assert.equal(authentications, 120); assert.equal(helpers, 120);
+      for (const i of [120, 121]) {
+        const denied = await app.inject(request(i));
+        assert.equal(denied.statusCode, 429);
+        assert.deepEqual(denied.json(), { error: { code: 'rate_limit' } });
+        assert.match(String(denied.headers['content-type']), /^application\/json/);
+      }
+      assert.equal(authentications, 120); assert.equal(helpers, 120);
+      if (trustedProxy) {
+        const forged = await app.inject({ ...request(122), headers: { ...headers, 'x-mural-proxy-token': 'wrong', 'x-mural-client-ip': '198.51.100.11' } });
+        assert.equal(forged.statusCode, 503); assert.equal(authentications, 120);
+        const otherNetwork = await app.inject({ ...request(123), headers: { ...headers, 'x-mural-client-ip': '198.51.100.11' } });
+        assert.equal(otherNetwork.statusCode, 200); assert.equal(helpers, 121);
+      }
+    } finally { await app.close(); }
+  }
+});
+
 const databaseURL = process.env.TEST_DATABASE_URL;
 if (databaseURL && !new URL(databaseURL).pathname.endsWith('_test')) throw new Error('Dedicated test database required.');
 test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and bounds helper bodies', {
