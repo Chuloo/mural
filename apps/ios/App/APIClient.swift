@@ -29,13 +29,17 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw APIError.invalidResponse }
         return json
     }
-    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false) async throws -> APIResult {
+    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false, onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
         var body: [String: Any] = ["model": "gpt-5.6-luna", "store": false, "instructions": instructions,
                                   "input": [["role": "user", "content": input]], "max_output_tokens": schema == nil ? 1400 : 2200,
                                   "reasoning": ["effort": "low"]]
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "mural_result", "strict": true, "schema": schema]] }
         if search { body["tools"] = [["type": "web_search"]]; body["tool_choice"] = "auto"; body["max_tool_calls"] = 1 }
-        let json = try await post("responses", body: body)
+        let json: [String: Any]
+        if let onText {
+            body["stream"] = true
+            json = try await streamResponse(body: body, onText: onText)
+        } else { json = try await post("responses", body: body) }
         guard json["status"] as? String == "completed" else { throw APIError.incomplete }
         var text = "", sources: [SourceLink] = [], usage = APIUsage()
         for item in json["output"] as? [[String: Any]] ?? [] {
@@ -53,6 +57,36 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         if let u = json["usage"] as? [String: Any] { usage.input = u["input_tokens"] as? Int ?? 0; usage.output = u["output_tokens"] as? Int ?? 0 }
         guard !text.isEmpty else { throw APIError.incomplete }
         return APIResult(text: text, sources: sources, usage: usage)
+    }
+    private func streamResponse(body: [String: Any], onText: @MainActor (String) -> Void) async throws -> [String: Any] {
+        guard let key = CredentialStore.read() else { throw APIError.missingKey }
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            var body = Data()
+            for try await byte in bytes { body.append(byte); if body.count >= 16_384 { break } }
+            throw ProviderFailure(status: http.statusCode, body: body, reference: http.value(forHTTPHeaderField: "x-request-id"))
+        }
+        guard http.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("text/event-stream") == true else { throw APIError.invalidResponse }
+        var decoder = ResponseTextStream()
+        do {
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard let update = try decoder.consume(byte: byte) else { continue }
+                switch update {
+                case .text(let value): onText(value)
+                case .completed(let result): return result
+                }
+            }
+        } catch ResponseTextStream.Failure.refused { throw APIError.refused }
+        catch is ResponseTextStream.Failure { throw APIError.incomplete }
+        throw APIError.incomplete
     }
     static func object(_ fields: [String: Any]) -> [String: Any] { ["type": "object", "properties": fields, "required": fields.keys.sorted(), "additionalProperties": false] }
     static let string: [String: Any] = ["type": "string"]

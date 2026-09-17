@@ -23,9 +23,17 @@ data class Fragment(
 data class Passage(val id: String, val speaker: Speaker, val fragments: List<Fragment>) {
     val text get() = join(fragments.map { it.text })
     companion object {
-        /** Join fragment texts. Insert one space only when both sides lack boundary whitespace
-         *  and the next fragment does not start with punctuation (so "Hei" + "!" stays "Hei!"). */
+        /** Preserve word continuations; repair only a clear sentence break. */
         fun join(parts: List<String>): String = parts.fold("") { result, part ->
+            val first = part.takeIf { it.isNotEmpty() }?.codePointAt(0)
+            val last = result.lastOrNull()
+            val word = result.dropLast(1).takeLastWhile { it.isLetter() }
+            val sentenceBreak = first != null && Character.isUpperCase(first) &&
+                (last == '!' || last == '?' || last == '…' || (last == '.' && word.length > 1))
+            result + (if (sentenceBreak) " " else "") + part
+        }
+        // Only for validating learning evidence saved before the caption repair.
+        internal fun legacyJoin(parts: List<String>): String = parts.fold("") { result, part ->
             val first = part.takeIf { it.isNotEmpty() }?.codePointAt(0)
             val last = result.takeIf { it.isNotEmpty() }?.codePointBefore(result.length)
             when {
@@ -91,7 +99,7 @@ data class WordProposal(
 data class Assessment(
     val passageID: String, val revisionKey: String, val outcome: Outcome, var suggestedLevel: Int,
     var nextGoal: String, var capability: String, var words: List<WordProposal>,
-    val createdAt: Double = nowSeconds(), val context: String = "free"
+    val createdAt: Double = nowSeconds(), val context: String = "free", val textAssemblyVersion: Int? = null
 )
 
 @Serializable

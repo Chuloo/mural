@@ -19,6 +19,28 @@ class ConversationProvidersTest {
         HostedConversationBindings.Lease("server-a", teacher, close, status)
     private fun status(state: String) = HostedSessionStatus("server-a", state, 600_000, 1000, 600_000, null)
 
+    @Test fun streamWaitersShareOneFundedRequestAndOnlyOneReceivesUsage() = runTest {
+        var calls = 0; var callback: ((String) -> Unit)? = null
+        val finished = CompletableDeferred<APIResult>()
+        val teacher = object : TeachingClient {
+            override suspend fun respond(instructions: String, input: String, schema: JsonObject?, search: Boolean, purpose: HelperPurpose?): APIResult = error("Must use streaming")
+            override suspend fun streamMeaning(instructions: String, input: String, onText: (String) -> Unit): APIResult {
+                calls++; callback = onText; return finished.await()
+            }
+        }
+        val controller = HostedConversationBindings(backgroundScope)
+        controller.bind("local", "owner", lease(teacher))
+        val firstSeen = mutableListOf<String>(); val secondSeen = mutableListOf<String>()
+        val first = launch { controller.respond("local", HelperPurpose.MEANING, "same", "policy", "input", onText = { firstSeen += it }) }
+        runCurrent(); callback!!("Ho"); first.cancelAndJoin()
+        val second = async { controller.respond("local", HelperPurpose.MEANING, "same", "policy", "input", onText = { secondSeen += it }) }
+        runCurrent(); callback!!("Hola"); finished.complete(response); runCurrent()
+        assertEquals(listOf("Ho"), firstSeen); assertEquals(listOf("Ho", "Hola"), secondSeen)
+        assertEquals(response.usage, second.await().usage)
+        assertEquals(APIUsage(), controller.respond("local", HelperPurpose.MEANING, "same", "policy", "input", onText = {}).usage)
+        assertEquals(1, calls)
+    }
+
     @Test fun selectionNeverFallsBackBetweenPersonalKeyAndHosted() {
         val ready = HostedReadiness("owner", 1, true)
         assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.PERSONAL_KEY, true, HostedReadiness()))

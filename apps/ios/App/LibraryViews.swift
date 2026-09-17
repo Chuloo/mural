@@ -187,7 +187,7 @@ struct TranscriptView: View {
                                 Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
                                     .accessibilityIdentifier(passage.speaker == .user ? "transcript-user-passage" : "transcript-assistant-passage")
                                 if session.languageID == "zh" { PinyinHelp(text: passage.text) }
-                                if let translation = session.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: meaningLanguage)] ?? session.translations[passage.revisionKey] {
+                                if let translation = session.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: meaningLanguage)] ?? session.translations[meaningLanguage + "::" + passage.revisionKey] ?? session.translations[passage.revisionKey] {
                                     Text(translation).font(.subheadline).foregroundStyle(MuralColor.secondary)
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)

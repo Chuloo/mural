@@ -55,12 +55,12 @@ import MuralCore
             guard store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested else { throw AIProcessingConsent.ConsentError.required }
             return try await Self.assess(api: api, snapshot: snapshot, passage: passage)
         }
-        meanings = MeaningController { request in
+        meanings = MeaningController(streaming: { request, onText in
             guard store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested else { throw AIProcessingConsent.ConsentError.required }
             guard let language = LanguageRegistry.module(for: request.learningLanguageID) else { throw ArchiveError.unsupportedLanguage }
-            let result = try await api.respond(instructions: TeachingPolicy.translation(language: language, meaningLanguage: request.meaningLanguage), input: request.translationInput)
+            let result = try await api.respond(instructions: TeachingPolicy.translation(language: language, meaningLanguage: request.meaningLanguage), input: request.translationInput, onText: onText)
             return MeaningResult(text: result.text, inputTokens: result.usage.input, outputTokens: result.usage.output)
-        }
+        })
         meanings.onResult = { [weak self] request, result in
             guard let self, self.session?.id == request.sessionID else { return }
             self.session?.translations[request.cacheKey] = result.text

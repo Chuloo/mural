@@ -45,10 +45,12 @@ public enum LearningEngine {
                   word.confidence.isFinite, word.confidence >= 0.8, word.confidence <= 1,
                   !word.lemma.isEmpty, word.lemma.count < 100, !word.meaning.isEmpty, word.meaning.count < 180,
                   !word.form.isEmpty, !word.quote.isEmpty,
-                  passage.text.localizedCaseInsensitiveContains(word.quote),
+                  (passage.text.localizedCaseInsensitiveContains(word.quote) ||
+                    (proposal.textAssemblyVersion == nil && Passage.legacyJoin(passage.fragments.map(\.text)).localizedCaseInsensitiveContains(word.quote))),
                   word.quote.localizedCaseInsensitiveContains(word.form) else { return nil }
             let refs = Passage.join(passage.fragments.filter { word.sourceIDs.contains($0.id) }.map(\.text))
-            guard refs.localizedCaseInsensitiveContains(word.quote) else { return nil }
+            guard refs.localizedCaseInsensitiveContains(word.quote) ||
+                (proposal.textAssemblyVersion == nil && Passage.legacyJoin(passage.fragments.filter { word.sourceIDs.contains($0.id) }.map(\.text)).localizedCaseInsensitiveContains(word.quote)) else { return nil }
             var result = word
             if result.kind == .independent {
                 // A visible meaning or immediate imitation is supporting evidence, never independent recall.

@@ -26,9 +26,23 @@ public struct Passage: Identifiable, Sendable {
     public var speaker: Speaker
     public var fragments: [Fragment]
     public var text: String { Self.join(fragments.map(\.text)) }
-    /// Join fragment texts. Insert one space only when both sides lack boundary whitespace
-    /// and the next fragment does not start with punctuation (so "Hei" + "!" stays "Hei!").
+    /// Deltas can end inside a word. Preserve them, repairing only a clear sentence break.
     public static func join(_ parts: [String]) -> String {
+        parts.reduce(into: "") { result, part in
+            guard let first = part.first, let last = result.last else { result += part; return }
+            if !last.isWhitespace, !first.isWhitespace, first.isUppercase {
+                let tail = result.drop(while: { $0.isWhitespace })
+                let ending = tail.last
+                let word = tail.dropLast().reversed().prefix(while: { $0.isLetter })
+                if ending == "!" || ending == "?" || ending == "…" || (ending == "." && word.count > 1) {
+                    result += " "
+                }
+            }
+            result += part
+        }
+    }
+    // Existing assessments may quote the old presentation; never use it for new captions.
+    static func legacyJoin(_ parts: [String]) -> String {
         parts.reduce(into: "") { result, part in
             if result.isEmpty { result = part; return }
             guard let last = result.last, let first = part.first else {
@@ -100,10 +114,11 @@ public struct Assessment: Codable, Identifiable, Sendable {
     public var words: [WordProposal]
     public var createdAt: Date
     public var context: String
+    public var textAssemblyVersion: Int?
     public init(passageID: String, revisionKey: String, outcome: Outcome, suggestedLevel: Int, nextGoal: String, capability: String, words: [WordProposal], createdAt: Date = .now, context: String = "free") {
         self.passageID = passageID; self.revisionKey = revisionKey; self.outcome = outcome
         self.suggestedLevel = suggestedLevel; self.nextGoal = nextGoal; self.capability = capability
-        self.words = words; self.createdAt = createdAt; self.context = context
+        self.words = words; self.createdAt = createdAt; self.context = context; self.textAssemblyVersion = 2
     }
 }
 

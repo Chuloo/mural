@@ -200,13 +200,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private var assessmentJob: Job? = null
     private var actionJob: Job? = null
     private val meanings = MeaningController(viewModelScope, canRetryFailure = HostedHelperRetry::canRetryAtBoundary,
-        retryDelay = HostedHelperRetry::automaticDelay) { request ->
+        retryDelay = HostedHelperRetry::automaticDelay, stream = { request, onText -> translateMeaning(request, onText) }) { request -> translateMeaning(request) }
+    private suspend fun translateMeaning(request: MeaningRequest, onText: ((String) -> Unit)? = null): MeaningResult {
         if (archive.preferences.aiConsentVersion != 1) throw IllegalStateException("AI processing consent is required.")
         val module = LanguageRegistry.get(request.learningLanguageID) ?: throw IllegalStateException("Unsupported language.")
         if (request.sessionID in hostedSessionIDs && request.translationInput.toByteArray(Charsets.UTF_8).size > 24_576) throw MeaningInputLimitException()
         val result = teaching(request.sessionID, HelperPurpose.MEANING, request.cacheKey,
-            TeachingPolicy.translation(module, request.meaningLanguage), request.translationInput)
-        MeaningResult(result.text, result.usage.input, result.usage.output)
+            TeachingPolicy.translation(module, request.meaningLanguage), request.translationInput, onText = onText)
+        return MeaningResult(result.text, result.usage.input, result.usage.output)
     }
     private val finalAssessments = FinalAssessmentQueue(viewModelScope) { snapshot, passage -> requestAssessment(snapshot, passage) }
     private val languageDetector = LanguageDetector(application)
@@ -494,13 +495,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The creating session, rather than the currently selected settings option, chooses every helper. */
     private suspend fun teaching(localID: String?, purpose: HelperPurpose, logicalID: String,
-        instructions: String, input: String, schema: JsonObject? = null, search: Boolean = false): APIResult {
+        instructions: String, input: String, schema: JsonObject? = null, search: Boolean = false, onText: ((String) -> Unit)? = null): APIResult {
         if (archive.preferences.aiConsentVersion != 1) throw HostedFailure.Unavailable
         if (localID != null && localID in hostedSessionIDs) {
-            return hostedBindings.respond(localID, purpose, logicalID, instructions, input, schema, search)
+            return hostedBindings.respond(localID, purpose, logicalID, instructions, input, schema, search, onText)
         }
         if (localID == null && conversationProvider == ConversationProvider.HOSTED_MINUTES) throw HostedFailure.Unavailable
-        return api.respond(instructions, input, schema, search, purpose)
+        return if (onText != null && purpose == HelperPurpose.MEANING) api.streamMeaning(instructions, input, onText)
+        else api.respond(instructions, input, schema, search, purpose)
     }
     private fun helperContext(snapshot: SessionRecord, passage: Passage? = null): String =
         if (snapshot.id in hostedSessionIDs) ConversationHistory.helperContext(snapshot, passage)
@@ -899,7 +901,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val result = teaching(snapshot.id, HelperPurpose.ASSESSMENT, passage.revisionKey,
             TeachingPolicy.assessment(module), helperContext(snapshot, passage), assessmentSchema(module.id))
         val decoded = json.decodeFromString<AssessmentResponse>(result.text)
-        val proposal = Assessment(passage.id, passage.revisionKey, decoded.outcome, decoded.suggestedLevel, decoded.nextGoal, decoded.capability, decoded.words, context = snapshot.themeID ?: "free")
+        val proposal = Assessment(passage.id, passage.revisionKey, decoded.outcome, decoded.suggestedLevel, decoded.nextGoal, decoded.capability, decoded.words, context = snapshot.themeID ?: "free", textAssemblyVersion = 2)
         return FinalAssessmentResult(snapshot.id, snapshot.languageID, proposal, result.usage.input, result.usage.output, result.usage.searches)
     }
     /** Hosted finalization awaits the original helper for its remaining lease window, without entering BYOK recovery. */

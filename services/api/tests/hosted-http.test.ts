@@ -38,16 +38,18 @@ test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and
   const status = { sessionID, state: 'incomplete', deadline: new Date().toISOString(), observedMilliseconds: 0,
     reservedMilliseconds: 600_000, chargedMilliseconds: null, billingBasis: 'connected-conversation-time', providerCostNanoUSD: null };
   const calls: string[] = [];
-  let helperFailure: Error | undefined;
+  let helperFailure: Error | undefined, failAfterPartial = false;
   const hosted = { available: true, minuteFunded: true, allows: (id: string) => id === guest,
     current: async (id: string) => { calls.push(`current:${id}`); return { session: id === guest ? status : null }; },
   } as unknown as Services['hosted'];
   const hostedHelpers = { allows: (id: string) => id === guest,
-    request: async (id: string, session: string, raw: unknown) => {
+    request: async (id: string, session: string, raw: unknown, onText?: (text: string) => void) => {
       const body = parseHostedHelperInput(raw);
       if (id !== guest || session !== sessionID) throw new ServiceError('live_session_not_found', 404);
       if (helperFailure) throw helperFailure;
       calls.push(`helper:${id}`);
+      onText?.('Good'); onText?.('Good morning.');
+      if (failAfterPartial) throw new ServiceError('helper_response_uncertain', 502);
       return { requestID: body.requestID, text: 'Good morning.', sources: [], usage: { inputTokens: 2, cachedInputTokens: 0,
         cacheWriteTokens: 0, outputTokens: 2, searchCalls: 0 }, costNanoUSD: '2800', rateVersion: 'fixture' };
     },
@@ -71,7 +73,19 @@ test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and
     const translated = await app.inject({ method: 'POST', url: endpoint, headers, payload: body });
     assert.equal(translated.statusCode, 200); assert.equal(translated.json().text, 'Good morning.');
     assert.equal(calls.filter(call => call.startsWith('helper:')).length, 1);
+    const streamHeaders = { ...headers, accept: 'text/event-stream' };
+    const streamed = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
+    assert.equal(streamed.statusCode, 200); assert.match(String(streamed.headers['content-type']), /^text\/event-stream/);
+    const events = streamed.body.trim().split('\n\n').map(line => JSON.parse(line.slice(6)));
+    assert.deepEqual(events.slice(0, 2), [{ type: 'mural.meaning.delta', delta: 'Good' }, { type: 'mural.meaning.delta', delta: ' morning.' }]);
+    assert.equal(events[2].type, 'mural.meaning.completed'); assert.equal(events[2].result.text, 'Good morning.');
+    failAfterPartial = true;
+    const interrupted = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
+    assert.match(interrupted.body, /mural.meaning.error/); assert.doesNotMatch(interrupted.body, /mural.meaning.completed/);
+    failAfterPartial = false;
     helperFailure = new HelperSessionLimitError(10_001);
+    const streamDenied = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
+    assert.equal(streamDenied.statusCode, 429); assert.equal(streamDenied.json().error.retryable, true);
     const waiting = await app.inject({ method: 'POST', url: endpoint, headers, payload: body });
     assert.equal(waiting.statusCode, 429); assert.equal(waiting.headers['retry-after'], '11');
     assert.deepEqual(waiting.json(), { error: { code: 'helper_session_limit', retryable: true, retryAfterMilliseconds: 10_001 } });

@@ -24,9 +24,9 @@ object LearningEngine {
             if (word.language != session.languageID || word.sourceIDs.isEmpty() || !allowed.containsAll(word.sourceIDs) ||
                 !word.confidence.isFinite() || word.confidence !in 0.8..1.0 || word.lemma.isEmpty() || word.lemma.length>=100 ||
                 word.meaning.isEmpty() || word.meaning.length>=180 || word.form.isEmpty() || word.quote.isEmpty() ||
-                !passage.text.containsCanonical(word.quote) || !word.quote.containsCanonical(word.form)) return@mapNotNull null
+                !(passage.text.containsCanonical(word.quote) || (proposal.textAssemblyVersion == null && Passage.legacyJoin(passage.fragments.map { it.text }).containsCanonical(word.quote))) || !word.quote.containsCanonical(word.form)) return@mapNotNull null
             val refs=Passage.join(passage.fragments.filter { word.sourceIDs.contains(it.id) }.map { it.text })
-            if (!refs.containsCanonical(word.quote)) return@mapNotNull null
+            if (!refs.containsCanonical(word.quote) && !(proposal.textAssemblyVersion == null && Passage.legacyJoin(passage.fragments.filter { word.sourceIDs.contains(it.id) }.map { it.text }).containsCanonical(word.quote))) return@mapNotNull null
             var out=word
             if (out.kind==EvidenceKind.independent) {
                 val modeled=session.passages.any { p -> p.speaker==Speaker.assistant && p.startMS<=passage.startMS && passage.startMS-p.endMS<90000 && p.text.containsCanonical(word.form) }
