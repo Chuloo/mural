@@ -236,6 +236,20 @@ integration('a refund during speech triggers closure and reconciles usage withou
     assert.equal((await f.db.query("SELECT close_reason FROM hosted_sessions WHERE id=$1", [live.sessionID])).rows[0].close_reason, 'funding_reversed');
   } finally { await f.cleanup(); }
 });
+integration('a cancelled context injection during close still drains trusted final usage', async () => {
+  const f = await fixture(2_000_000_000n, 600_000);
+  try {
+    const live = await f.controller.create(f.account, 'closing-context-cancelled', 'v=0', 'fr-FR', undefined, 60_000);
+    await f.controller.close(f.account, live.sessionID);
+    f.send(live.providerSessionID, { type: 'error', error: { type: 'server_error', code: 'context_injection_incomplete' } });
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal((await f.controller.status(f.account, live.sessionID)).state, 'closing');
+    assert.equal((await f.minutes()).reserved_ms, '60000');
+    f.send(live.providerSessionID, { type: 'session.closed', usage: { seconds: 42 } });
+    await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
+    assert.deepEqual(await f.minutes(), { balance_ms: '558000', reserved_ms: '0' });
+  } finally { await f.cleanup(); }
+});
 integration('sideband loss never accepts client usage or releases the reservation on an HTTP hangup alone', async () => {
   const f = await fixture();
   try {

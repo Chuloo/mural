@@ -136,6 +136,9 @@ export class OpenAILiveProvider implements LiveProvider {
         try {
           if (binary) throw new Error();
           const event = JSON.parse(bytes.toString());
+          // GPT-Live rejects queued context when closing begins. This command failure
+          // is not a transport failure: keep the receiver alive for session.closed.
+          if (event.type === 'error' && event.error?.code === 'context_injection_incomplete') return;
           if (event.type === 'error') throw new Error();
           // Reflected audio, transcripts, prompts and session snapshots are discarded here.
           if (event.type !== 'session.usage.updated' && event.type !== 'session.closed') return;
