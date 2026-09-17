@@ -394,8 +394,16 @@ export function createApp(services: Services) {
     if (!services.hosted?.minuteFunded || !services.hostedHelpers) throw new ServiceError('hosted_helpers_not_ready', 503);
     const account = await authenticate(db, request.headers.authorization, true);
     const sessionID = uuid((request.params as { id: string }).id);
-    if (!request.headers.accept?.split(',').some(value => value.trim().split(';')[0] === 'text/event-stream'))
-      return services.hostedHelpers.request(account, sessionID, request.body);
+    // Streaming is explicit opt-in; wildcard clients keep the existing JSON contract.
+    const wantsStream = request.headers.accept?.split(',').some(value => {
+      const [type, ...parameters] = value.split(';').map(part => part.trim());
+      if (type?.toLowerCase() !== 'text/event-stream') return false;
+      const weights = parameters.filter(part => /^q\s*=/i.test(part));
+      if (!weights.length) return true;
+      const quality = weights[0]!.slice(weights[0]!.indexOf('=') + 1).trim();
+      return weights.length === 1 && /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(quality) && Number(quality) > 0;
+    });
+    if (!wantsStream) return services.hostedHelpers.request(account, sessionID, request.body);
     let started = false, previous = '';
     const emit = (event: object) => {
       if (reply.raw.destroyed || reply.raw.writableEnded) return;

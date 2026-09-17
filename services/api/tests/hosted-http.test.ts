@@ -118,6 +118,16 @@ test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and
     const events = streamed.body.trim().split('\n\n').map(line => JSON.parse(line.slice(6)));
     assert.deepEqual(events.slice(0, 2), [{ type: 'mural.meaning.delta', delta: 'Good' }, { type: 'mural.meaning.delta', delta: ' morning.' }]);
     assert.equal(events[2].type, 'mural.meaning.completed'); assert.equal(events[2].result.text, 'Good morning.');
+    for (const accept of ['Text/Event-Stream', 'application/json, TEXT/EVENT-STREAM;Q=0.5', 'text/event-stream;q=1.000']) {
+      const negotiated = await app.inject({ method: 'POST', url: endpoint, headers: { ...headers, accept }, payload: body });
+      assert.equal(negotiated.statusCode, 200); assert.match(String(negotiated.headers['content-type']), /^text\/event-stream/);
+      assert.match(negotiated.body, /mural.meaning.completed/);
+    }
+    for (const accept of ['text/event-stream;q=0', 'text/event-stream;Q=0.000, application/json', 'text/event-stream;q=2', 'text/event-stream;q=invalid', 'application/json', '*/*']) {
+      const negotiated = await app.inject({ method: 'POST', url: endpoint, headers: { ...headers, accept }, payload: body });
+      assert.equal(negotiated.statusCode, 200); assert.match(String(negotiated.headers['content-type']), /^application\/json/);
+      assert.equal(negotiated.json().text, 'Good morning.');
+    }
     failAfterPartial = true;
     const interrupted = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
     assert.match(interrupted.body, /mural.meaning.error/); assert.doesNotMatch(interrupted.body, /mural.meaning.completed/);

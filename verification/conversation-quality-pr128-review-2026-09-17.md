@@ -1,6 +1,6 @@
 # PR #128 review — 17 September 2026
 
-Reviewed the native caption, translation, teaching, saved-evidence, and typed-turn changes and the hosted helper streaming and final-usage changes against main at `60bd6d3`. The reviewed implementation is `e2a11d7`; this review adds a focused HTTP regression test without changing runtime behavior.
+Reviewed the native caption, translation, teaching, saved-evidence, and typed-turn changes and the hosted helper streaming and final-usage changes against main at `60bd6d3`. The reviewed implementation is `e2a11d7`; this review adds focused HTTP regressions and corrects streaming header negotiation.
 
 ## Security alert #59
 
@@ -24,4 +24,6 @@ The changes preserve whole words, show translated meanings earlier, avoid transl
 
 The device evidence supports merging these improvements, with conversation quality tracked as unfinished work. Final Norwegian correction cases passed 6/6; final explicit topic confirmation passed 7/8 languages and failed once in English. Earlier broader trials exposed occasional false corrections, an assumed detail, and learner-text repetition in the Android French typed flow. These are documented behavioral limitations, not a claim that every conversation-quality requirement is complete. The final Android wording was compiled and unit-tested, but its full live language matrix was not repeated.
 
-Native and hosted tests, device coverage, timing samples, and rollback details are recorded in the PR description and the local verification report. The deployed backend runtime is unchanged by this test-only review update; another production deployment is unnecessary.
+Native and hosted tests, device coverage, timing samples, and rollback details are recorded in the PR description and the local verification report. The review also reproduced and fixed mixed-case streaming headers and zero-quality streaming opt-outs. Header regression cases fail before the fix and pass afterward. The matching backend update requires deployment with the existing configuration and a fresh encrypted backup before handover.
+
+Header behavior follows the media-type case and quality-value rules in [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1). Streaming remains explicit opt-in so wildcard clients retain the existing JSON contract.
