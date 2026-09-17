@@ -378,7 +378,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             else -> app.getString(fallback)
         }
         if (e is APIClient.APIException.Http && e.reference != null)
-            return message + "\n\n" + app.getString(R.string.error_provider_reference, e.reference)
+            return message + "\n\n" + app.getString(if (endpoint.enabled) R.string.error_endpoint_reference else R.string.error_provider_reference, e.reference)
         return requestErrorReference(e)?.let { message + "\n\n" + app.getString(R.string.hosted_error_reference, it) } ?: message
     }
     private fun presentError(message: String, needsKeySetup: Boolean = false) {
@@ -635,21 +635,23 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         catch (e: Exception) { presentError(e, R.string.error_key_delete_failed) }
         finally { hasKey = credentials.hasKey }
     }
-    /** A blank [key] keeps the saved one; keys never flow back into Compose state. */
-    fun saveEndpoint(value: CustomEndpoint, key: String) {
-        if (isRunning) return
+    /** A blank [key] keeps the saved one; keys never flow back into Compose state. Returns false when nothing was saved. */
+    fun saveEndpoint(value: CustomEndpoint, key: String): Boolean {
+        if (isRunning) return false
         val clean = value.trimmed()
-        if (!clean.canSave) {
-            presentError(getApplication<Application>().getString(R.string.error_endpoint_invalid)); return
+        if (!clean.canSave(keyEntered = key.isNotBlank())) {
+            presentError(getApplication<Application>().getString(R.string.error_endpoint_invalid)); return false
         }
         try {
             if (key.isNotBlank()) endpoints.credentials.save(key)
             endpoints.save(clean); endpoint = clean
             if (clean.enabled) { selectConversationProvider(ConversationProvider.PERSONAL_KEY); recoverFinalAssessments() }
             notice = getApplication<Application>().getString(R.string.notice_endpoint_saved)
+            return true
         } catch (_: CredentialStore.CredentialException.Invalid) {
             presentError(getApplication<Application>().getString(R.string.error_endpoint_key_invalid))
         } catch (e: Exception) { presentError(e, R.string.error_key_save_failed) }
+        return false
     }
     fun deleteEndpoint() {
         if (isRunning) return

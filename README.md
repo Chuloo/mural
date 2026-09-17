@@ -91,7 +91,7 @@ On iPhone, Mandarin includes optional pinyin in Talk, transcripts and word detai
 
 Mural stores conversations, vocabulary and preferences on your device. There is no Mural cloud sync, analytics SDK or advertising. The optional iPhone account feature stores signup data on the account service; conversations and vocabulary stay local. Your API key is stored in the device’s Keychain, excluded from learning exports, and sent only to OpenAI. A [custom endpoint](docs/custom-endpoints.md) receives the same conversation data instead of OpenAI, and its key is sent only to that server.
 
-During practice, audio, selected conversation text, learning context and requested searches go to OpenAI. Mural does not save raw audio. API requests set `store: false` where supported, but that does not disable all provider retention; OpenAI’s abuse-monitoring rules and your project’s settings still apply. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
+During practice, audio, selected conversation text, learning context and requested searches go to OpenAI, or to your custom endpoint when one is turned on. Mural does not save raw audio. API requests set `store: false` where supported, but that does not disable all provider retention; OpenAI’s abuse-monitoring rules and your project’s settings still apply. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
 
 OpenAI bills your project for voice, text and search. The app’s usage display is an estimate, and its conversation time limit is not a billing cap. Check your OpenAI project’s usage and spending settings.
 

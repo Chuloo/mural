@@ -305,12 +305,14 @@ struct SettingsView: View {
         var clean = endpoint
         let fields: [WritableKeyPath<CustomEndpoint, String>] = [\.baseURL, \.model, \.transcriptionModel, \.speechModel, \.voice]
         for field in fields { clean[keyPath: field] = clean[keyPath: field].trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard clean.baseURL.isEmpty || clean.url != nil, !clean.enabled || clean.textReady else {
+        let key = endpointKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A key saved without a URL would be hidden from the Remove action.
+        guard clean.baseURL.isEmpty || clean.url != nil, !clean.enabled || clean.textReady, key.isEmpty || !clean.baseURL.isEmpty else {
             message = "Enter an https:// base URL and a chat model."; return
         }
         do {
             // A blank key keeps the saved one; the Keychain value never returns to the view.
-            if !endpointKey.isEmpty { try CredentialStore.save(endpointKey, service: CredentialStore.customEndpoint) }
+            if !key.isEmpty { try CredentialStore.save(key, service: CredentialStore.customEndpoint) }
             try clean.save(); endpoint = clean; savedEndpoint = clean; endpointKey = ""
             message = "Endpoint saved."
         } catch CredentialStore.KeyError.invalid {
@@ -375,12 +377,12 @@ struct SettingsView: View {
                         TextField("Speech model (voice)", text: $endpoint.speechModel).textInputAutocapitalization(.never).autocorrectionDisabled()
                         TextField("Voice name", text: $endpoint.voice).textInputAutocapitalization(.never).autocorrectionDisabled()
                         Button("Save endpoint", action: saveEndpoint).disabled(coordinator.isRunning).accessibilityIdentifier("endpoint-save")
-                        if endpoint != savedEndpoint || !endpointKey.isEmpty {
+                        if endpoint != savedEndpoint || !endpointKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text("Unsaved changes. Tap Save endpoint to use them.").font(.footnote).foregroundStyle(MuralColor.secondary)
                         }
                         if savedEndpoint != CustomEndpoint() {
                             Button("Remove endpoint", role: .destructive) {
-                                do { try CustomEndpoint.delete(); endpoint = CustomEndpoint(); savedEndpoint = endpoint; message = "The endpoint has been removed." }
+                                do { try CustomEndpoint.delete(); endpoint = CustomEndpoint(); savedEndpoint = endpoint; endpointKey = ""; message = "The endpoint has been removed." }
                                 catch { message = error.localizedDescription }
                             }.disabled(coordinator.isRunning)
                         }
@@ -396,7 +398,10 @@ struct SettingsView: View {
                         ForEach([5, 10, 15, 20, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
                     }
                     LabeledContent("Recorded voice time", value: "\(Int(totalVoiceSeconds / 60)) min \(Int(totalVoiceSeconds) % 60) sec")
-                    LabeledContent("Voice estimate", value: String(format: "$%.2f USD", totalVoiceSeconds / 60 * 0.05))
+                    // The estimate prices OpenAI voice; a custom endpoint bills or limits usage itself.
+                    if !savedEndpoint.enabled {
+                        LabeledContent("Voice estimate", value: String(format: "$%.2f USD", totalVoiceSeconds / 60 * 0.05))
+                    }
                     LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
                     Link("OpenAI usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
                 } header: { Text("Keep it comfortable") } footer: {

@@ -47,6 +47,14 @@ final class SpeechTurnTests: XCTestCase {
         let next = guidance.begin()
         XCTAssertEqual(next, ["newer"])
         XCTAssertEqual(TurnGuidance.prompt([]), "")
+
+        var repeated = TurnGuidance()
+        _ = repeated.add("check in", respond: true)
+        let sent = repeated.begin()
+        _ = repeated.add("check in", respond: true)
+        repeated.consumed(sent)
+        let remaining = repeated.begin()
+        XCTAssertEqual(remaining, ["check in"], "an identical note added during the reply survives")
     }
 
     func testWavHeaderDescribesSixteenKilohertzMonoPCM() {

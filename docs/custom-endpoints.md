@@ -10,14 +10,14 @@ Mural can send conversations to your own OpenAI-compatible server instead of Ope
 | Voice: hearing you | `POST {base}/audio/transcriptions` | Multipart `file` (16 kHz mono WAV), `model`, `response_format=json`, and `language` set to the learning language (Norwegian is sent as `no`). Must return `{"text": "…"}`. |
 | Voice: speaking | `POST {base}/audio/speech` | JSON `model`, `voice`, `input`, `response_format: "wav"`. Must return 16-bit PCM WAV. |
 
-- **Base URL** must use `https://` and include the version path, for example `https://example.com/v1`. Plain `http://` is refused, so a server on your home network needs HTTPS through a reverse proxy or tunnel.
-- **API key** is optional. When set, it is sent as `Authorization: Bearer …` to that server only, stored encrypted on the device and excluded from backups. Redirects are never followed.
-- The transcription model, speech model and voice are only needed for voice. Without them you can still type replies.
+- **Base URL** must use `https://` and usually ends in a version path, such as `https://example.com/v1`. Plain `http://` is refused, so a server on your home network needs HTTPS through a reverse proxy or tunnel.
+- **API key** is optional, but it can only be saved together with a base URL. When set, it is sent as `Authorization: Bearer …` to that server only, stored encrypted on the device and excluded from backups. Redirects are never followed.
+- Conversations start with voice, so the transcription model, speech model and voice are all needed to start one. The chat model alone still covers meanings and word lookups in past conversations.
 - **Skip model thinking** adds `chat_template_kwargs: {"enable_thinking": false}` to chat requests. Reasoning models such as Qwen on vLLM can otherwise take over 30 seconds per reply, and assessments can exceed the app's 60-second limit. Leave it off for servers that reject unknown fields, such as OpenAI.
 
 ## Check a server before using it
 
-`scripts/check_custom_endpoint.py` sends the same four requests the app sends: a reply, an assessment, speech and a transcription of that speech. It asks for the API key without echoing it, or reads `MURAL_ENDPOINT_KEY`, and saves the generated speech so you can listen to it. It needs Python 3 and nothing else.
+`scripts/check_custom_endpoint.py` runs four checks with the requests the app sends: a reply, an assessment, speech, and a transcription of that speech in the learning language. For comparison it also transcribes the same audio without a language, which doesn't affect the result. It asks for the API key without echoing it, or reads `MURAL_ENDPOINT_KEY`, and saves the generated speech so you can listen to it. It needs Python 3 and nothing else.
 
 ```sh
 python scripts/check_custom_endpoint.py --base-url https://example.com/v1 \
@@ -36,4 +36,4 @@ python scripts/check_custom_endpoint.py --base-url https://example.com/v1 \
 ## Not available with a custom endpoint
 
 - Web search, so **current topics** can't find sourced articles.
-- The voice-time estimate in Settings, which prices OpenAI voice only. Your server's own dashboard or logs are authoritative.
+- The voice-cost estimate in Settings, which prices OpenAI voice only and is hidden while the endpoint is on. Your server's own dashboard or logs are authoritative.

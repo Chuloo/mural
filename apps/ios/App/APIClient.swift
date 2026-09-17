@@ -139,6 +139,9 @@ struct CustomEndpoint: Codable, Equatable {
             }
         }
         if let u = json["usage"] as? [String: Any] { usage.input = u["input_tokens"] as? Int ?? 0; usage.output = u["output_tokens"] as? Int ?? 0 }
+        // A local reasoning model behind a Responses endpoint can inline its thinking too.
+        text = text.replacingOccurrences(of: "<think>[\\s\\S]*?</think>", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw APIError.incomplete }
         return APIResult(text: text, sources: sources, usage: usage)
     }

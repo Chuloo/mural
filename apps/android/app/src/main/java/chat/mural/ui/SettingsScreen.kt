@@ -167,8 +167,11 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_voice_time_label), usage.voiceTime)
                     SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_voice_estimate_label), usage.voiceEstimate)
-                    SettingsDivider()
+                    // The estimate prices OpenAI voice; a custom endpoint bills or limits usage itself.
+                    if (!vm.endpoint.enabled) {
+                        SettingsRow(stringResource(R.string.settings_voice_estimate_label), usage.voiceEstimate)
+                        SettingsDivider()
+                    }
                     SettingsRow(stringResource(R.string.settings_search_calls_label), usage.searchCalls.toString())
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_usage_billing_link), tint = MuralColors.Secondary,
@@ -367,7 +370,8 @@ private fun EndpointDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
                     }
                     Spacer(Modifier.weight(1f))
                     MuralTextButton(onClick = { key = ""; onDismiss() }) { Text(stringResource(R.string.common_cancel)) }
-                    Button(onClick = { vm.saveEndpoint(draft, key.trim()); key = ""; onDismiss() }, Modifier.testTag("endpoint-save")) {
+                    // A failed save keeps the form open so the draft isn't lost behind the error.
+                    Button(onClick = { if (vm.saveEndpoint(draft, key.trim())) { key = ""; onDismiss() } }, Modifier.testTag("endpoint-save")) {
                         Text(stringResource(R.string.common_save))
                     }
                 }

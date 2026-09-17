@@ -18,6 +18,7 @@ import struct
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -94,6 +95,25 @@ def parse_json(data, what):
     return result
 
 
+def strip_thinking(text):
+    """The app removes inline reasoning from both API styles before speaking or storing a reply."""
+    return re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+
+
+def base_url_error(value):
+    """Mirrors the app's rule: HTTPS, a host, and no credentials, query or fragment."""
+    try:
+        url = urllib.parse.urlsplit(value.strip())
+        url.port  # Raises for a malformed port.
+    except ValueError:
+        return "is not a valid URL"
+    if url.scheme != "https" or not url.hostname:
+        return "must be an https:// URL with a host"
+    if url.username or url.password or url.query or url.fragment or value.strip().endswith(("?", "#")):
+        return "must not contain credentials, a query or a fragment"
+    return None
+
+
 def reply(args, key, instructions, user, schema=None):
     """Returns (text, note) using the chosen API style, decoded the way the app decodes it."""
     if args.api_style == "responses":
@@ -105,16 +125,17 @@ def reply(args, key, instructions, user, schema=None):
         data = parse_json(post(args.base_url, key, "responses", json.dumps(body).encode(), "application/json", JSON_LIMIT), "the reply")
         if data.get("status") != "completed":
             raise Failure(f"response status is {data.get('status')!r}, not 'completed'")
-        text = ""
+        raw = ""
         for item in data.get("output") or []:
             for content in item.get("content") or []:
                 if content.get("type") == "refusal":
                     raise Failure("the model refused")
                 if content.get("type") == "output_text":
-                    text += content.get("text") or ""
+                    raw += content.get("text") or ""
+        text = strip_thinking(raw)
         if not text:
-            raise Failure("no output_text in the response")
-        return text, ""
+            raise Failure("no output_text in the response" + (" (the model only produced reasoning)" if "<think>" in raw else ""))
+        return text, "the model reasons before answering, which adds delay to voice turns" if "<think>" in raw else ""
 
     body = {"model": args.chat_model, "messages": [{"role": "system", "content": instructions}, {"role": "user", "content": user}]}
     if args.no_thinking:
@@ -131,7 +152,7 @@ def reply(args, key, instructions, user, schema=None):
     if choice.get("finish_reason") == "length":
         raise Failure("the reply was cut off (finish_reason=length)")
     raw = message.get("content") or ""
-    text = re.sub(r"<think>[\s\S]*?</think>", "", raw).strip()
+    text = strip_thinking(raw)
     thinking = "<think>" in raw or bool(message.get("reasoning_content") or message.get("reasoning"))
     if not text:
         raise Failure("empty reply" + (" (the model only produced reasoning)" if thinking else ""))
@@ -222,9 +243,10 @@ def main():
     parser.add_argument("--no-thinking", action="store_true", help="ask Qwen models on vLLM to answer without reasoning first")
     args = parser.parse_args()
     sys.stdout.reconfigure(errors="replace")  # Model replies may contain characters a console can't show.
-    if not args.base_url.startswith("https://"):
-        sys.exit("FAIL  The app only accepts https:// base URLs.")
-    args.base_url = args.base_url.rstrip("/") + "/"
+    problem = base_url_error(args.base_url)
+    if problem:
+        sys.exit(f"FAIL  The base URL {problem}, so the app wouldn't accept it.")
+    args.base_url = args.base_url.strip().rstrip("/") + "/"
     key = os.environ.get("MURAL_ENDPOINT_KEY") or getpass.getpass("API key (hidden; leave empty for none): ").strip() or None
     language, sample = SAMPLES[args.language]
     results = []
@@ -276,15 +298,17 @@ def main():
         if "wav" not in audio:
             raise Failure("skipped: needs the speech step to succeed")
         hint = WHISPER_LANGUAGE.get(args.language, args.language)
-        lines = [f"said:  {spoken['text']}"]
-        matches = {}
-        for label, code in (("auto-detected", None), (f"language={hint}", hint)):
-            heard = transcribe(args, key, audio["wav"], code)
-            matches[label] = similarity(spoken["text"], heard)
-            lines.append(f"heard ({label}, {matches[label]:.0%} match): {heard}")
+        heard = transcribe(args, key, audio["wav"], hint)  # Exactly what the app sends.
+        match = similarity(spoken["text"], heard)
+        lines = [f"said:  {spoken['text']}", f"heard (language={hint}, as the app asks, {match:.0%} match): {heard}"]
+        try:  # For comparison only: some servers translate when left to auto-detect.
+            auto = transcribe(args, key, audio["wav"])
+            lines.append(f"heard (auto-detected, for comparison, {similarity(spoken['text'], auto):.0%} match): {auto}")
+        except Failure as failure:
+            lines.append(f"auto-detected comparison unavailable: {failure}")
         detail = "\n        ".join(lines)
-        if max(matches.values()) < 0.6:
-            raise Failure(detail + "\n        neither transcript matches what was said; the server may be translating")
+        if match < 0.6:
+            raise Failure(detail + "\n        the transcript doesn't match what was said; the server may be translating or using the wrong language")
         return detail
 
     print(f"Checking {args.base_url} for {language} ({args.api_style} API style"

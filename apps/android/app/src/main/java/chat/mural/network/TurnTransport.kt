@@ -261,7 +261,8 @@ internal class TurnGuidance(private val limit: Int = 12) {
 
     /** Starts a reply. Notes stay until [consumed], so a failed reply keeps its guidance for the next turn. */
     fun begin(): List<String> { replyPending = false; return notes.toList() }
-    fun consumed(used: List<String>) { notes.removeAll(used) }
+    /** Removes one occurrence per used note, so an identical note added during the reply survives. */
+    fun consumed(used: List<String>) { used.forEach { notes.remove(it) } }
     fun clear() { notes.clear(); replyPending = false }
 
     companion object {

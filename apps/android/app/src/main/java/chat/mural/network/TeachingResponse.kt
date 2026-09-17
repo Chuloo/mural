@@ -31,10 +31,12 @@ internal fun decodeTeachingResponse(response: JsonObject): APIResult {
         }
     }
 
-    if (text.isEmpty()) throw APIClient.APIException.Incomplete
+    // A local reasoning model behind a Responses endpoint can inline its thinking too.
+    val clean = text.toString().replace(THINKING, "").trim()
+    if (clean.isEmpty()) throw APIClient.APIException.Incomplete
     val usage = response["usage"] as? JsonObject
     return APIResult(
-        text = text.toString(),
+        text = clean,
         sources = sources.values.toList(),
         usage = APIUsage(
             input = ((usage?.get("input_tokens") as? JsonPrimitive)?.intOrNull ?: 0).coerceIn(0, 1_000_000_000),

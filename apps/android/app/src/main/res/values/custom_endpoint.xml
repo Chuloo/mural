@@ -18,7 +18,8 @@
     <string name="notice_endpoint_saved">Endpoint saved.</string>
     <string name="error_endpoint_key_invalid">Enter the API key without spaces or line breaks.</string>
     <string name="error_endpoint_invalid">Enter an https:// base URL and a chat model.</string>
-    <string name="error_endpoint_voice_missing">Add a transcription model, speech model and voice for your custom endpoint in Settings, or type your reply.</string>
+    <string name="error_endpoint_voice_missing">Add a transcription model, speech model and voice for your custom endpoint in Settings to start a conversation.</string>
+    <string name="error_endpoint_reference">Server reference: %1$s</string>
     <string name="error_endpoint_incomplete">Your custom endpoint returned an incomplete or unexpected response. Check its API style and models.</string>
     <string name="error_endpoint_http">Your custom endpoint couldn\'t complete the request (HTTP %1$d). Check its settings.</string>
 </resources>

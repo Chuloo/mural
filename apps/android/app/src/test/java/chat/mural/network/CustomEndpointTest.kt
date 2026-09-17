@@ -37,12 +37,13 @@ class CustomEndpointTest {
         assertTrue(CustomEndpoint(baseUrl = "https://example.com/v1", model = "m").textReady)
         assertFalse(CustomEndpoint(baseUrl = "https://example.com/v1", model = "m", transcriptionModel = "t", speechModel = "s").voiceReady)
 
-        assertTrue("an empty, disabled endpoint can be saved", CustomEndpoint().canSave)
-        assertFalse(CustomEndpoint(baseUrl = "http://example.com/v1").canSave)
-        assertFalse(CustomEndpoint(enabled = true, baseUrl = "https://example.com/v1").canSave)
+        assertTrue("an empty, disabled endpoint can be saved", CustomEndpoint().canSave(keyEntered = false))
+        assertFalse("a key alone couldn't be removed later", CustomEndpoint().canSave(keyEntered = true))
+        assertFalse(CustomEndpoint(baseUrl = "http://example.com/v1").canSave(keyEntered = false))
+        assertFalse(CustomEndpoint(enabled = true, baseUrl = "https://example.com/v1").canSave(keyEntered = false))
         val trimmed = CustomEndpoint(enabled = true, baseUrl = " https://example.com/v1 ", model = " m ", voice = " v ").trimmed()
         assertEquals(listOf("https://example.com/v1", "m", "v"), listOf(trimmed.baseUrl, trimmed.model, trimmed.voice))
-        assertTrue(trimmed.canSave)
+        assertTrue(trimmed.canSave(keyEntered = true))
     }
 
     @Test fun guidanceQueuesOneReplyAndSurvivesAFailedReply() {
@@ -59,6 +60,13 @@ class CustomEndpointTest {
         guidance.consumed(used)
         assertEquals(listOf("newer"), guidance.begin())
         assertEquals("", TurnGuidance.prompt(emptyList()))
+
+        val repeated = TurnGuidance()
+        repeated.add("check in", respond = true)
+        val sent = repeated.begin()
+        repeated.add("check in", respond = true)
+        repeated.consumed(sent)
+        assertEquals("an identical note added during the reply survives", listOf("check in"), repeated.begin())
     }
 
     @Test fun turnCollectorKeepsTheOnsetAndDropsTrailingSilence() {
@@ -120,8 +128,8 @@ class CustomEndpointTest {
 
     @Test fun responsesProtocolUsesTheConfiguredModel() = runBlocking {
         protocol = EndpointProtocol.RESPONSES
-        server.enqueue(MockResponse().setBody("""{"status":"completed","output":[{"content":[{"type":"output_text","text":"Hola"}]}]}"""))
-        assertEquals("Hola", api.respond("p", "q").text)
+        server.enqueue(MockResponse().setBody("""{"status":"completed","output":[{"content":[{"type":"output_text","text":"<think>plan</think> Hola"}]}]}"""))
+        assertEquals("reasoning is stripped on Responses too", "Hola", api.respond("p", "q").text)
         val request = server.takeRequest()
         assertEquals("/v1/responses", request.path)
         assertEquals("local-model", Json.parseToJsonElement(request.body.readUtf8()).jsonObject["model"]!!.jsonPrimitive.content)

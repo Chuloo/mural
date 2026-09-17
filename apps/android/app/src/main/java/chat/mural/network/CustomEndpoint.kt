@@ -25,8 +25,9 @@ data class CustomEndpoint(
     val url: HttpUrl? get() = parseBaseUrl(baseUrl)
     val textReady get() = url != null && model.isNotBlank()
     val voiceReady get() = textReady && transcriptionModel.isNotBlank() && speechModel.isNotBlank() && voice.isNotBlank()
-    /** A saved URL must be valid, and an enabled endpoint must at least be able to chat. */
-    val canSave get() = (baseUrl.isEmpty() || url != null) && (!enabled || textReady)
+    /** A saved URL must be valid, an enabled endpoint must at least be able to chat, and a key needs a URL
+     * (a key saved alone would be hidden from the Remove action). */
+    fun canSave(keyEntered: Boolean) = (baseUrl.isEmpty() || url != null) && (!enabled || textReady) && (!keyEntered || baseUrl.isNotEmpty())
 
     fun trimmed() = copy(baseUrl = baseUrl.trim(), model = model.trim(), transcriptionModel = transcriptionModel.trim(),
         speechModel = speechModel.trim(), voice = voice.trim())

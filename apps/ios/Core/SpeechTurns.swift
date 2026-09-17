@@ -58,7 +58,10 @@ public struct TurnGuidance: Sendable {
 
     /// Starts a reply. Notes stay until `consumed`, so a failed reply keeps its guidance for the next turn.
     public mutating func begin() -> [String] { replyPending = false; return notes }
-    public mutating func consumed(_ used: [String]) { notes.removeAll { used.contains($0) } }
+    /// Removes one occurrence per used note, so an identical note added during the reply survives.
+    public mutating func consumed(_ used: [String]) {
+        for note in used { if let index = notes.firstIndex(of: note) { notes.remove(at: index) } }
+    }
     public mutating func clear() { notes = []; replyPending = false }
 
     public static func prompt(_ used: [String]) -> String {
