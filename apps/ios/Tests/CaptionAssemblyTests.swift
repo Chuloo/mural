@@ -33,6 +33,16 @@ final class CaptionAssemblyTests: XCTestCase {
             (["今天。", "Hello!"], "今天。Hello!")
         ] { XCTAssertEqual(Passage.join(parts), expected) }
     }
+    func testTypedVoiceReplyUsesProviderTimelineDespiteSlowConnection() {
+        var session = SessionRecord(languageID: "en")
+        session.startedAt = .now.addingTimeInterval(-20)
+        session.append(Fragment(id: "question", speaker: .assistant, text: "What did you do?", startMS: 2000, endMS: 4000))
+        let offset = session.nextTypedVoiceOffsetMS
+        session.append(Fragment(id: "typed", speaker: .user, text: "I went walking.", startMS: offset, endMS: offset + 1, typed: true))
+        session.append(Fragment(id: "reply", speaker: .assistant, text: "Where did you go?", startMS: 8000, endMS: 10000))
+        XCTAssertEqual(session.passages.map(\.id), ["question", "typed", "reply"])
+        XCTAssertEqual(session.passages.map(\.text), ["What did you do?", "I went walking.", "Where did you go?"])
+    }
     func testLegacyLearningEvidenceIsPreservedButNewEvidenceUsesCorrectText() {
         var session = SessionRecord(languageID: "nb")
         session.append(Fragment(id: "a", speaker: .user, text: "Jeg liker fri", startMS: 0, endMS: 100))
@@ -46,6 +56,13 @@ final class CaptionAssemblyTests: XCTestCase {
         XCTAssertEqual(LearningEngine.validate(old, session: session)?.words.count, 1)
         old.textAssemblyVersion = 2
         XCTAssertEqual(LearningEngine.validate(old, session: session)?.words.count, 0)
+        var repaired = old
+        repaired.words[0].quote = "Jeg liker friluftsliv."
+        repaired.words[0].form = "friluftsliv"
+        XCTAssertEqual(LearningEngine.validate(repaired, session: session)?.words.count, 1)
+        repaired.textAssemblyVersion = nil
+        XCTAssertEqual(LearningEngine.validate(repaired, session: session)?.words.count, 0,
+            "A caption repair must not revive previously rejected saved evidence")
         XCTAssertEqual(passage.text, "Jeg liker friluftsliv.")
     }
 }

@@ -499,7 +499,7 @@ import MuralCore
             return false
         }
         let sessionID = draft.id
-        let offset = Int(Date().timeIntervalSince(draft.startedAt) * 1000)
+        let offset = draft.nextTypedVoiceOffsetMS
         let fragment = Fragment(speaker: .user, text: String(clean.prefix(2000)), startMS: offset, endMS: offset + 1,
                                 meaningVisible: store.preferences.meaningVisible, typed: true)
         draft.append(fragment)

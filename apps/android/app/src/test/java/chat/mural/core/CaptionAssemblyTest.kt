@@ -35,6 +35,15 @@ class CaptionAssemblyTest {
         )
         examples.forEach { (parts, expected) -> assertEquals(expected, Passage.join(parts)) }
     }
+    @Test fun typedVoiceReplyUsesProviderTimelineDespiteSlowConnection() {
+        val session = SessionRecord(languageID = "en", startedAt = nowSeconds() - 20)
+        session.append(Fragment(id = "question", speaker = Speaker.assistant, text = "What did you do?", startMS = 2000, endMS = 4000))
+        val offset = session.nextTypedVoiceOffsetMS
+        session.append(Fragment(id = "typed", speaker = Speaker.user, text = "I went walking.", startMS = offset, endMS = offset + 1, typed = true))
+        session.append(Fragment(id = "reply", speaker = Speaker.assistant, text = "Where did you go?", startMS = 8000, endMS = 10000))
+        assertEquals(listOf("question", "typed", "reply"), session.passages.map { it.id })
+        assertEquals(listOf("What did you do?", "I went walking.", "Where did you go?"), session.passages.map { it.text })
+    }
     @Test fun oldEvidenceRemainsValidWhileNewEvidenceMustMatchRepairedText() {
         val session = SessionRecord(languageID = "nb")
         session.append(Fragment(id = "a", speaker = Speaker.user, text = "Jeg liker fri", startMS = 0, endMS = 100))
@@ -45,6 +54,11 @@ class CaptionAssemblyTest {
         val old = Assessment(p.id, p.revisionKey, Outcome.success, 2, "Fortell mer.", "Describes interests", listOf(word))
         assertEquals(1, LearningEngine.validate(old, session)?.words?.size)
         assertEquals(0, LearningEngine.validate(old.copy(textAssemblyVersion = 2), session)?.words?.size)
+        val repaired = old.copy(textAssemblyVersion = 2,
+            words = listOf(word.copy(quote = "Jeg liker friluftsliv.", form = "friluftsliv")))
+        assertEquals(1, LearningEngine.validate(repaired, session)?.words?.size)
+        assertEquals("A caption repair must not revive previously rejected saved evidence", 0,
+            LearningEngine.validate(repaired.copy(textAssemblyVersion = null), session)?.words?.size)
         assertEquals("Jeg liker friluftsliv.", p.text)
     }
 }

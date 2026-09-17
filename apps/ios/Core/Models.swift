@@ -167,6 +167,9 @@ public struct SessionRecord: Codable, Identifiable, Sendable {
         self.title = title ?? LanguageRegistry.module(for: languageID)?.defaultTitle ?? "A conversation"
     }
     public var passages: [Passage] { Transcript.passages(fragments) }
+    // Voice fragments use the provider timeline, which starts after the local connection attempt.
+    // Place typed turns after received speech instead of mixing in the local wall clock.
+    public var nextTypedVoiceOffsetMS: Int { min(fragments.map(\.endMS).max() ?? 0, Int.max - 2) + 1 }
     public mutating func append(_ fragment: Fragment) {
         guard !fragments.contains(where: { $0.id == fragment.id }) else { return }
         fragments.append(fragment)

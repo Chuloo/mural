@@ -126,6 +126,8 @@ data class SessionRecord(
     var outputTokens: Int = 0, var searchCalls: Int = 0, var endReason: String? = null
 ) {
     val passages get() = Transcript.passages(fragments)
+    // Voice captions use the provider timeline, not time since the local connection attempt.
+    val nextTypedVoiceOffsetMS get() = (fragments.maxOfOrNull { it.endMS } ?: 0).coerceAtMost(Int.MAX_VALUE - 2) + 1
     fun append(f: Fragment) { if (fragments.none { it.id == f.id }) { fragments += f; invalidateChangedAssessments() } }
     fun invalidateChangedAssessments() { val current = passages.associate { it.id to it.revisionKey }; assessments.removeAll { current[it.passageID] != it.revisionKey } }
     fun correctFragment(id: String, text: String) {

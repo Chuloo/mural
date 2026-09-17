@@ -982,7 +982,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             newSession(false); state = "active"; startDurationChecks()
         }
         val id = session!!.id; val token = generation
-        val offset = ((nowSeconds() - session!!.startedAt) * 1000).toInt().coerceAtLeast(0)
+        val offset = if (voiceSession) session!!.nextTypedVoiceOffsetMS
+            else ((nowSeconds() - session!!.startedAt) * 1000).toInt().coerceAtLeast(0)
         val fragment = Fragment(speaker = Speaker.user, text = clean, startMS = offset, endMS = offset + 1, meaningVisible = archive.preferences.meaningVisible, typed = true)
         val draft = clone(session!!).also { it.append(fragment) }
         if (voiceSession) { activity.learnerEngaged(activityNow()); inactivitySeconds = null }; working = true
