@@ -90,10 +90,12 @@ public struct MeaningResult: Sendable {
                 guard token == self.generation, !Task.isCancelled, let request = self.desired else { return }
                 self.lastDispatchedAt = .now
                 let translationID = UUID(); self.translationID = translationID
+                // Retain the readable prefix until the next stream has caught up.
+                let minimumPartialLength = self.text.count
                 let result = try await self.translate(request) { [weak self] partial in
                     guard let self, token == self.generation, self.translationID == translationID, !Task.isCancelled,
                           let latest = self.desired, latest.sharesContext(with: request),
-                          latest.text.hasPrefix(request.text), !partial.isEmpty else { return }
+                          latest.text.hasPrefix(request.text), !partial.isEmpty, partial.count >= minimumPartialLength else { return }
                     self.text = partial; self.displayed = request
                 }
                 guard token == self.generation, !Task.isCancelled, let latest = self.desired else { return }

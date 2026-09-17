@@ -57,6 +57,20 @@ class MeaningControllerTest {
         translator.partials[0]("Late text")
         assertEquals("Hello, world.", controller.text); assertFalse(controller.isLoading); assertEquals(1, saved)
     }
+    @Test fun growingMeaningDoesNotFlashBackToItsFirstWord() = runTest {
+        val translator = Translator()
+        val controller = MeaningController(backgroundScope, minimumSpacingMillis = 0, delayMillis = 0, incompleteDelayMillis = 0,
+            now = { testScheduler.currentTime }, stream = translator::stream, translate = translator::translate)
+        controller.update(request("Hei, jeg liker")); runCurrent()
+        translator.succeed("Hello, I like"); runCurrent()
+        controller.update(request("Hei, jeg liker fisk.", revision = 1)); runCurrent()
+        translator.partials[1]("Hello")
+        assertEquals("Hello, I like", controller.text)
+        translator.partials[1]("Hello, I like fish")
+        assertEquals("Hello, I like fish", controller.text)
+        translator.succeed("Hi, I like fish."); runCurrent()
+        assertEquals("Hi, I like fish.", controller.text)
+    }
     @Test fun correctedCaptionAndCachedResultRejectOldStreamCallbacks() = runTest {
         val translator = Translator()
         val controller = MeaningController(backgroundScope, minimumSpacingMillis = 0, delayMillis = 0, incompleteDelayMillis = 0,

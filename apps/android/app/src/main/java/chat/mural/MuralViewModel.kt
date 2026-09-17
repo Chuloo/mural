@@ -942,14 +942,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 updated.assessments.removeAll { it.passageID == valid.passageID }; updated.assessments += valid
                 addUsage(updated, APIUsage(result.inputTokens, result.outputTokens, result.searchCalls)); save(updated)
                 if (session?.id == updated.id) session = clone(updated)
-                if (state == "active" && session?.id == snapshot.id) {
-                    val progress = learner
+                if (state == "active" && session?.id == snapshot.id &&
+                    session?.passages?.lastOrNull { it.speaker == Speaker.user }?.revisionKey == passage.revisionKey) {
+                    // Keep assessment notes in learning records; injecting them during speech can make the voice read them aloud.
                     if (voiceSession && conversationPace.observe(valid, passage, snapshot.languageID)) {
                         command("instructions", conversationPace.instruction)
                     }
-                    val targetLanguage = LanguageRegistry.get(snapshot.languageID)?.name ?: language.name
-                    val revisit = progress.words.filter { it.dueAt < nowSeconds() }.take(3).joinToString(", ") { it.lemma }
-                    command("thinking", "Teaching context, not spoken text: challenge ${progress.challenge}/5 in $targetLanguage. Next goal: ${progress.nextGoal}. Revisit naturally: $revisit.")
                 }
             } catch (_: CancellationException) { } catch (_: Exception) { /* No unverified progress. */ }
         }

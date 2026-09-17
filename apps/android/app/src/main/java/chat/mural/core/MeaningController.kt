@@ -159,10 +159,12 @@ class MeaningController(
                 pendingFailure = null; retryNotBefore = 0
                 translating = true; lastDispatchedAt = now(); dispatched = request
                 val translation = ++nextTranslation; activeTranslation = translation
+                // Retain the readable prefix until the next stream has caught up.
+                val minimumPartialLength = text.length
                 val result = if (stream == null) translate(request) else stream.invoke(request) { partial ->
                     val latest = desired
                     if (token == generation && activeTranslation == translation && latest != null && rendered != latest &&
-                        latest.sharesContext(request) && latest.text.startsWith(request.text) && partial.isNotEmpty()) {
+                        latest.sharesContext(request) && latest.text.startsWith(request.text) && partial.isNotEmpty() && partial.length >= minimumPartialLength) {
                         text = partial; displayed = request; onChange?.invoke()
                     }
                 }

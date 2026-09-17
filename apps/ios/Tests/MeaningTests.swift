@@ -32,6 +32,23 @@ import XCTest
         translator.partials[0]("Late partial")
         XCTAssertEqual(controller.text, "Hello, world."); XCTAssertEqual(saved, 1)
     }
+    func testGrowingMeaningDoesNotFlashBackToItsFirstWord() async {
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, streaming: translator.stream)
+        controller.update(request("Hei, jeg liker"))
+        await waitUntil { translator.partials.count == 1 }
+        translator.succeed("Hello, I like")
+        await waitUntil { !controller.isLoading }
+        controller.update(request("Hei, jeg liker fisk.", revision: 1))
+        await waitUntil { translator.partials.count == 2 }
+        translator.partials[1]("Hello")
+        XCTAssertEqual(controller.text, "Hello, I like")
+        translator.partials[1]("Hello, I like fish")
+        XCTAssertEqual(controller.text, "Hello, I like fish")
+        translator.succeed("Hi, I like fish.")
+        await waitUntil { !controller.isLoading }
+        XCTAssertEqual(controller.text, "Hi, I like fish.")
+    }
     func testCorrectionAndResetRejectLatePartialText() async {
         let translator = Translator()
         let controller = MeaningController(delay: .zero, streaming: translator.stream)

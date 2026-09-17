@@ -431,7 +431,6 @@ import MuralCore
                 try await Task.sleep(for: .seconds(3))
                 guard let self, let snapshot = self.session, let p = snapshot.passages.last(where: { $0.speaker == .user }), p.text.count >= 3,
                       p.revisionKey != self.lastAssessmentKey, self.state == .active else { return }
-                guard let targetLanguage = LanguageRegistry.module(for: snapshot.languageID) else { return }
                 let result = try await Self.assess(api: self.api, snapshot: snapshot, passage: p)
                 guard !Task.isCancelled, self.state == .active, self.session?.id == snapshot.id, self.userPassage?.revisionKey == p.revisionKey,
                       let current = self.session else { return }
@@ -439,11 +438,10 @@ import MuralCore
                 self.session?.assessments.removeAll { $0.passageID == p.id }; self.session?.assessments.append(validated)
                 self.lastAssessmentKey = p.revisionKey
                 self.addUsage(APIUsage(input: result.inputTokens, output: result.outputTokens, searches: result.searchCalls)); self.save()
-                let learner = self.store.learner
+                // Keep assessment notes in learning records; injecting them during speech can make the voice read them aloud.
                 if self.conversationPace.observe(validated, passage: p, languageID: snapshot.languageID) {
                     self.append("instructions", self.conversationPace.instruction)
                 }
-                self.append("thinking", "Teaching context, not spoken text: challenge \(learner.challenge)/5 in \(targetLanguage.name). Next goal: \(learner.nextGoal). Revisit naturally: \(learner.words.filter { $0.dueAt < .now }.prefix(3).map(\.lemma).joined(separator: ", ")).")
             } catch is CancellationError { }
             catch let error as URLError where error.code == .cancelled { }
             catch {
