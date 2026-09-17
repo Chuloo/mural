@@ -35,10 +35,10 @@ class EvidenceTest {
         }
         assertNull(LearningEngine.validate(a.copy(revisionKey="old"),s))
     }
-    @Test fun quoteAcrossBareFragmentBoundaryIsKept() {
+    @Test fun quoteAcrossProviderWordBoundaryIsKept() {
         val session = SessionRecord(languageID = "es")
         session.append(Fragment(id="f1",speaker=Speaker.user,text="Me gusta",startMS=0,endMS=500))
-        session.append(Fragment(id="f2",speaker=Speaker.user,text="el café",startMS=600,endMS=1200))
+        session.append(Fragment(id="f2",speaker=Speaker.user,text=" el café",startMS=600,endMS=1200))
         val passage = session.passages.single()
         assertEquals("Me gusta el café", passage.text)
         session.assessments += Assessment(passage.id, passage.revisionKey, Outcome.success, 1, "Sigue.", "Expresses liking",

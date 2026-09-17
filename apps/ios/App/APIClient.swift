@@ -121,7 +121,7 @@ struct CustomEndpoint: Codable, Equatable {
         let body: [String: Any] = ["model": endpoint.speechModel, "voice": endpoint.voice, "input": text, "response_format": "wav"]
         return try await send(target, "audio/speech", body: try JSONSerialization.data(withJSONObject: body), contentType: "application/json", limit: Self.audioLimit)
     }
-    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false) async throws -> APIResult {
+    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false, onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
         let target = try resolveTarget()
         if let endpoint = target.endpoint, endpoint.style == .chatCompletions {
             // No standard web search exists in Chat Completions, so `search` is ignored and topics stay unsourced.
@@ -129,7 +129,9 @@ struct CustomEndpoint: Codable, Equatable {
             // vLLM's chat-template switch; OpenAI and some other servers reject unknown fields, so it's opt-in.
             if endpoint.skipThinking == true { body["chat_template_kwargs"] = ["enable_thinking": false] }
             if let schema { body["response_format"] = ["type": "json_schema", "json_schema": ["name": "mural_result", "strict": true, "schema": schema]] }
-            return try Self.decodeChatCompletion(try await postJSON(target, "chat/completions", body: body))
+            let result = try Self.decodeChatCompletion(try await postJSON(target, "chat/completions", body: body))
+            onText?(result.text) // A custom endpoint answers in one piece.
+            return result
         }
         var body: [String: Any] = ["model": target.endpoint?.model ?? "gpt-5.6-luna", "store": false, "instructions": instructions,
                                   "input": [["role": "user", "content": input]], "max_output_tokens": schema == nil ? 1400 : 2200,
@@ -137,7 +139,12 @@ struct CustomEndpoint: Codable, Equatable {
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "mural_result", "strict": true, "schema": schema]] }
         // Web search is OpenAI's hosted tool; a compatible Responses server may reject it.
         if search && target.endpoint == nil { body["tools"] = [["type": "web_search"]]; body["tool_choice"] = "auto"; body["max_tool_calls"] = 1 }
-        let json = try await postJSON(target, "responses", body: body)
+        let json: [String: Any]
+        // OpenAI streams meanings as they arrive; a custom Responses server answers in one piece.
+        if let onText, target.endpoint == nil {
+            body["stream"] = true
+            json = try await streamResponse(target, body: body, onText: onText)
+        } else { json = try await postJSON(target, "responses", body: body) }
         guard json["status"] as? String == "completed" else { throw APIError.incomplete }
         var text = "", sources: [SourceLink] = [], usage = APIUsage()
         for item in json["output"] as? [[String: Any]] ?? [] {
@@ -157,6 +164,7 @@ struct CustomEndpoint: Codable, Equatable {
         text = text.replacingOccurrences(of: Self.thinking, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw APIError.incomplete }
+        if target.endpoint != nil { onText?(text) }
         return APIResult(text: text, sources: sources, usage: usage)
     }
     /// Inline reasoning, including a block the server cut off before its closing tag.
@@ -173,6 +181,36 @@ struct CustomEndpoint: Codable, Equatable {
         guard !text.isEmpty else { throw APIError.incomplete }
         let usage = json["usage"] as? [String: Any]
         return APIResult(text: text, sources: [], usage: APIUsage(input: usage?["prompt_tokens"] as? Int ?? 0, output: usage?["completion_tokens"] as? Int ?? 0))
+    }
+    private func streamResponse(_ target: Target, body: [String: Any], onText: @MainActor (String) -> Void) async throws -> [String: Any] {
+        guard let key = target.key, let url = URL(string: "responses", relativeTo: target.base)?.absoluteURL else { throw APIError.missingKey }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            var body = Data()
+            for try await byte in bytes { body.append(byte); if body.count >= 16_384 { break } }
+            throw ProviderFailure(status: http.statusCode, body: body, reference: http.value(forHTTPHeaderField: "x-request-id"))
+        }
+        guard http.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("text/event-stream") == true else { throw APIError.invalidResponse }
+        var decoder = ResponseTextStream()
+        do {
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard let update = try decoder.consume(byte: byte) else { continue }
+                switch update {
+                case .text(let value): onText(value)
+                case .completed(let result): return result
+                }
+            }
+        } catch ResponseTextStream.Failure.refused { throw APIError.refused }
+        catch is ResponseTextStream.Failure { throw APIError.incomplete }
+        throw APIError.incomplete
     }
     static func object(_ fields: [String: Any]) -> [String: Any] { ["type": "object", "properties": fields, "required": fields.keys.sorted(), "additionalProperties": false] }
     static let string: [String: Any] = ["type": "string"]

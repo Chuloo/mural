@@ -21,6 +21,45 @@ test('hosted HTTP routes advertise no usable conversation path without both conf
   }
 });
 
+test('JSON and streaming helpers share the network limit before authentication or provider admission', async () => {
+  for (const trustedProxy of [false, true]) {
+    const account = randomUUID(), session = randomUUID();
+    let authentications = 0, helpers = 0;
+    const db = { query: async () => { authentications++; return { rows: [{ account_id: account }] }; } } as unknown as Database;
+    const proxyToken = randomBytes(32).toString('hex');
+    const app = createApp({ db, auth: {},
+      accounts: trustedProxy ? { admission: { config: { proxyToken, hmacKey: randomBytes(32).toString('hex') } } } as Services['accounts'] : undefined,
+      hosted: { minuteFunded: true } as Services['hosted'],
+      hostedHelpers: { request: async (_account: string, _session: string, _body: unknown, onText?: (text: string) => void) => {
+        helpers++; onText?.('Hello.'); return { text: 'Hello.' };
+      } } as unknown as Services['hostedHelpers'],
+    });
+    const headers = { authorization: `Bearer ${randomBytes(32).toString('base64url')}`,
+      ...(trustedProxy ? { 'x-mural-proxy-token': proxyToken, 'x-mural-client-ip': '198.51.100.10' } : {}) };
+    const request = (index: number) => ({ method: 'POST' as const,
+      url: `/v1/live/sessions/${session}/${index % 2 ? '%68elpers' : 'helpers'}`,
+      headers: { ...headers, accept: index % 2 ? 'text/event-stream' : 'application/json',
+        'x-forwarded-for': `203.0.113.${index % 250 + 1}` }, payload: {} });
+    try {
+      for (let i = 0; i < 120; i++) assert.equal((await app.inject(request(i))).statusCode, 200);
+      assert.equal(authentications, 120); assert.equal(helpers, 120);
+      for (const i of [120, 121]) {
+        const denied = await app.inject(request(i));
+        assert.equal(denied.statusCode, 429);
+        assert.deepEqual(denied.json(), { error: { code: 'rate_limit' } });
+        assert.match(String(denied.headers['content-type']), /^application\/json/);
+      }
+      assert.equal(authentications, 120); assert.equal(helpers, 120);
+      if (trustedProxy) {
+        const forged = await app.inject({ ...request(122), headers: { ...headers, 'x-mural-proxy-token': 'wrong', 'x-mural-client-ip': '198.51.100.11' } });
+        assert.equal(forged.statusCode, 503); assert.equal(authentications, 120);
+        const otherNetwork = await app.inject({ ...request(123), headers: { ...headers, 'x-mural-client-ip': '198.51.100.11' } });
+        assert.equal(otherNetwork.statusCode, 200); assert.equal(helpers, 121);
+      }
+    } finally { await app.close(); }
+  }
+});
+
 const databaseURL = process.env.TEST_DATABASE_URL;
 if (databaseURL && !new URL(databaseURL).pathname.endsWith('_test')) throw new Error('Dedicated test database required.');
 test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and bounds helper bodies', {
@@ -38,16 +77,18 @@ test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and
   const status = { sessionID, state: 'incomplete', deadline: new Date().toISOString(), observedMilliseconds: 0,
     reservedMilliseconds: 600_000, chargedMilliseconds: null, billingBasis: 'connected-conversation-time', providerCostNanoUSD: null };
   const calls: string[] = [];
-  let helperFailure: Error | undefined;
+  let helperFailure: Error | undefined, failAfterPartial = false;
   const hosted = { available: true, minuteFunded: true, allows: (id: string) => id === guest,
     current: async (id: string) => { calls.push(`current:${id}`); return { session: id === guest ? status : null }; },
   } as unknown as Services['hosted'];
   const hostedHelpers = { allows: (id: string) => id === guest,
-    request: async (id: string, session: string, raw: unknown) => {
+    request: async (id: string, session: string, raw: unknown, onText?: (text: string) => void) => {
       const body = parseHostedHelperInput(raw);
       if (id !== guest || session !== sessionID) throw new ServiceError('live_session_not_found', 404);
       if (helperFailure) throw helperFailure;
       calls.push(`helper:${id}`);
+      onText?.('Good'); onText?.('Good morning.');
+      if (failAfterPartial) throw new ServiceError('helper_response_uncertain', 502);
       return { requestID: body.requestID, text: 'Good morning.', sources: [], usage: { inputTokens: 2, cachedInputTokens: 0,
         cacheWriteTokens: 0, outputTokens: 2, searchCalls: 0 }, costNanoUSD: '2800', rateVersion: 'fixture' };
     },
@@ -71,7 +112,29 @@ test('hosted HTTP authenticates guest ownership, recovers uncertain sessions and
     const translated = await app.inject({ method: 'POST', url: endpoint, headers, payload: body });
     assert.equal(translated.statusCode, 200); assert.equal(translated.json().text, 'Good morning.');
     assert.equal(calls.filter(call => call.startsWith('helper:')).length, 1);
+    const streamHeaders = { ...headers, accept: 'text/event-stream' };
+    const streamed = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
+    assert.equal(streamed.statusCode, 200); assert.match(String(streamed.headers['content-type']), /^text\/event-stream/);
+    const events = streamed.body.trim().split('\n\n').map(line => JSON.parse(line.slice(6)));
+    assert.deepEqual(events.slice(0, 2), [{ type: 'mural.meaning.delta', delta: 'Good' }, { type: 'mural.meaning.delta', delta: ' morning.' }]);
+    assert.equal(events[2].type, 'mural.meaning.completed'); assert.equal(events[2].result.text, 'Good morning.');
+    for (const accept of ['Text/Event-Stream', 'application/json, TEXT/EVENT-STREAM;Q=0.5', 'text/event-stream;q=1.000']) {
+      const negotiated = await app.inject({ method: 'POST', url: endpoint, headers: { ...headers, accept }, payload: body });
+      assert.equal(negotiated.statusCode, 200); assert.match(String(negotiated.headers['content-type']), /^text\/event-stream/);
+      assert.match(negotiated.body, /mural.meaning.completed/);
+    }
+    for (const accept of ['text/event-stream;q=0', 'text/event-stream;Q=0.000, application/json', 'text/event-stream;q=2', 'text/event-stream;q=invalid', 'application/json', '*/*']) {
+      const negotiated = await app.inject({ method: 'POST', url: endpoint, headers: { ...headers, accept }, payload: body });
+      assert.equal(negotiated.statusCode, 200); assert.match(String(negotiated.headers['content-type']), /^application\/json/);
+      assert.equal(negotiated.json().text, 'Good morning.');
+    }
+    failAfterPartial = true;
+    const interrupted = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
+    assert.match(interrupted.body, /mural.meaning.error/); assert.doesNotMatch(interrupted.body, /mural.meaning.completed/);
+    failAfterPartial = false;
     helperFailure = new HelperSessionLimitError(10_001);
+    const streamDenied = await app.inject({ method: 'POST', url: endpoint, headers: streamHeaders, payload: body });
+    assert.equal(streamDenied.statusCode, 429); assert.equal(streamDenied.json().error.retryable, true);
     const waiting = await app.inject({ method: 'POST', url: endpoint, headers, payload: body });
     assert.equal(waiting.statusCode, 429); assert.equal(waiting.headers['retry-after'], '11');
     assert.deepEqual(waiting.json(), { error: { code: 'helper_session_limit', retryable: true, retryAfterMilliseconds: 10_001 } });

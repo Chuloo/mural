@@ -139,6 +139,8 @@ class HostedAPIClient internal constructor(
             override suspend fun respond(instructions: String, input: String, schema: JsonObject?, search: Boolean,
                 purpose: HelperPurpose?): APIResult = helper(owner.accountID, sessionID, instructions, input, schema, search,
                     purpose ?: throw HostedFailure.InvalidRequest)
+            override suspend fun streamMeaning(instructions: String, input: String, onText: (String) -> Unit): APIResult =
+                helper(owner.accountID, sessionID, instructions, input, null, false, HelperPurpose.MEANING, onText)
         }
         suspend fun status(): HostedSessionStatus = request("GET", "sessions/$sessionID", authorization(owner.accountID)) {
             parseStatus(it, sessionID)
@@ -152,15 +154,15 @@ class HostedAPIClient internal constructor(
     }
 
     private suspend fun helper(accountID: String, sessionID: String, instructions: String, input: String,
-        schema: JsonObject?, search: Boolean, purpose: HelperPurpose): APIResult = try {
-        performHelper(accountID, sessionID, instructions, input, schema, search, purpose)
+        schema: JsonObject?, search: Boolean, purpose: HelperPurpose, onText: ((String) -> Unit)? = null): APIResult = try {
+        performHelper(accountID, sessionID, instructions, input, schema, search, purpose, onText)
     } catch (failure: Exception) {
         if (BuildConfig.DEBUG) HostedHelperDiagnostics.report(purpose, failure)
         throw failure
     }
 
     private suspend fun performHelper(accountID: String, sessionID: String, instructions: String, input: String,
-        schema: JsonObject?, search: Boolean, purpose: HelperPurpose): APIResult {
+        schema: JsonObject?, search: Boolean, purpose: HelperPurpose, onText: ((String) -> Unit)?): APIResult {
         if (!validText(instructions, 16_384) || !validText(input, 24_576) ||
             (search && purpose !in listOf(HelperPurpose.DELEGATION, HelperPurpose.TOPIC)) ||
             ((schema != null) != (purpose == HelperPurpose.ASSESSMENT)) || (schema?.toString()?.utf8Size() ?: 0) > 12_288)
@@ -171,7 +173,7 @@ class HostedAPIClient internal constructor(
             schema?.let { put("schema", it) }; put("search", search)
         }
         if (body.toString().utf8Size() > 65_536) throw HostedFailure.InvalidRequest
-        return request("POST", "sessions/$sessionID/helpers", authorization(accountID), body) { result ->
+        fun decode(result: JsonObject): APIResult {
             if (result["requestID"] != JsonPrimitive(id)) throw HostedFailure.InvalidResponse
             val text = result.string("text")?.takeIf { it.isNotBlank() } ?: throw HostedFailure.InvalidResponse
             val usage = result["usage"] as? JsonObject ?: throw HostedFailure.InvalidResponse
@@ -190,8 +192,42 @@ class HostedAPIClient internal constructor(
             }.filter { it.safeUrl() != null }.distinctBy { it.url }
             if (result.string("costNanoUSD")?.matches(Regex("[0-9]{1,30}")) != true || result.string("rateVersion").isNullOrBlank())
                 throw HostedFailure.InvalidResponse
-            APIResult(text, sources, APIUsage(inputTokens, outputTokens, searches))
+            return APIResult(text, sources, APIUsage(inputTokens, outputTokens, searches))
         }
+        val account = authorization(accountID)
+        if (onText == null) return request("POST", "sessions/$sessionID/helpers", account, body, transform = ::decode)
+        val request = Request.Builder().url(origin.newBuilder().addPathSegments("v1/live/sessions/$sessionID/helpers").build())
+            .header("Authorization", "Bearer ${account.accessToken}").header("Accept", "text/event-stream")
+            .header("Cache-Control", "no-store").post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        val callbacks = currentCoroutineContext().minusKey(Job)
+        return try {
+            streamingResponse(client, request) { response ->
+                if (response.code != 200) throw httpFailure(response)
+                // An older compatible server may return the normal JSON response to this same request.
+                if (response.header("Content-Type")?.startsWith("text/event-stream", ignoreCase = true) != true) {
+                    val result = decode(json.parseToJsonElement(readBounded(response)).jsonObject)
+                    withContext(callbacks) { onText(result.text) }
+                    result
+                } else {
+                    var text = ""
+                    val completed = readTextEvents(response) { event ->
+                        when (event["type"]?.jsonPrimitive?.contentOrNull) {
+                            "mural.meaning.delta" -> {
+                                text += event["delta"]?.jsonPrimitive?.contentOrNull ?: throw HostedFailure.InvalidResponse
+                                if (text.toByteArray(Charsets.UTF_8).size > 65_536) throw HostedFailure.InvalidResponse
+                                withContext(callbacks) { onText(text) }; null
+                            }
+                            "mural.meaning.completed" -> event["result"] as? JsonObject ?: throw HostedFailure.InvalidResponse
+                            "mural.meaning.error" -> throw HostedFailure.Unconfirmed
+                            else -> null
+                        }
+                    }
+                    decode(completed)
+                }
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: HostedFailure) { throw failure }
+        catch (_: Exception) { throw HostedFailure.Unconfirmed }
     }
 
     private suspend fun authorization(expectedAccount: String? = null): AccountSession {
@@ -221,13 +257,7 @@ class HostedAPIClient internal constructor(
                     try {
                         val result = response.use {
                             if (it.code != 200) {
-                                val error = runCatching { json.parseToJsonElement(readBounded(it)).jsonObject["error"] as? JsonObject }.getOrNull()
-                                val code = safeErrorCode(error?.string("code"))
-                                val retryable = (error?.get("retryable") as? JsonPrimitive)?.takeUnless { value -> value.isString }?.booleanOrNull
-                                val wait = (error?.get("retryAfterMilliseconds") as? JsonPrimitive)?.takeUnless { value -> value.isString }
-                                    ?.longOrNull?.takeIf { value -> value in 1000..60_000 }
-                                throw HostedFailure.Http(it.code, code, retryable, wait,
-                                    safeRequestErrorReference(it.header("X-Mural-Error-Reference")))
+                                throw httpFailure(it)
                             }
                             transform(json.parseToJsonElement(readBounded(it)).jsonObject)
                         }
@@ -239,6 +269,15 @@ class HostedAPIClient internal constructor(
                 }
             })
         }
+    }
+
+    private fun httpFailure(response: Response): HostedFailure.Http {
+        val error = runCatching { json.parseToJsonElement(readBounded(response)).jsonObject["error"] as? JsonObject }.getOrNull()
+        val code = safeErrorCode(error?.string("code"))
+        val retryable = (error?.get("retryable") as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
+        val wait = (error?.get("retryAfterMilliseconds") as? JsonPrimitive)?.takeUnless { it.isString }
+            ?.longOrNull?.takeIf { it in 1000..60_000 }
+        return HostedFailure.Http(response.code, code, retryable, wait, safeRequestErrorReference(response.header("X-Mural-Error-Reference")))
     }
 
     private fun readBounded(response: Response): String {

@@ -15,6 +15,11 @@ enum class HelperPurpose(val wireValue: String) {
 interface TeachingClient {
     suspend fun respond(instructions: String, input: String, schema: JsonObject? = null,
         search: Boolean = false, purpose: HelperPurpose? = null): APIResult
+    suspend fun streamMeaning(instructions: String, input: String, onText: (String) -> Unit): APIResult {
+        val result = respond(instructions, input, purpose = HelperPurpose.MEANING)
+        onText(result.text)
+        return result
+    }
 }
 
 data class LiveSessionRequest(val sdp: String, val instructions: String, val history: JsonArray = JsonArray(emptyList()),

@@ -24,8 +24,8 @@ const response = (extra: Record<string, unknown> = {}) => ({ id: `resp_${randomU
 class FakeResponses implements HostedResponsesTransport {
   calls: HostedResponsesRequest[] = [];
   signals: AbortSignal[] = [];
-  handler: (body: HostedResponsesRequest, signal: AbortSignal) => Promise<unknown> = async () => response();
-  send(body: HostedResponsesRequest, signal: AbortSignal) { this.calls.push(body); this.signals.push(signal); return this.handler(body, signal); }
+  handler: (body: HostedResponsesRequest, signal: AbortSignal, onText?: (text: string) => void) => Promise<unknown> = async () => response();
+  send(body: HostedResponsesRequest, signal: AbortSignal, onText?: (text: string) => void) { this.calls.push(body); this.signals.push(signal); return this.handler(body, signal, onText); }
 }
 const unused = {} as Database;
 
@@ -100,6 +100,30 @@ async function waitFor(check: () => boolean | Promise<boolean>) {
   const until = Date.now() + 2000;
   while (!(await check())) { if (Date.now() > until) throw new Error('Test condition timed out.'); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
+
+integration('streamed meaning reserves before deltas and settles once after terminal usage', async () => {
+  const f = await seed(), request = input(), seen: string[] = [];
+  f.transport.handler = async (body, _signal, onText) => {
+    assert.equal(body.stream, true);
+    assert.equal((await db!.query('SELECT state FROM hosted_helper_requests')).rows[0].state, 'pending');
+    onText?.('Private'); onText?.('Private generated meaning.');
+    return response();
+  };
+  const result = await f.controller().request(f.account, f.sessionID, request, text => seen.push(text));
+  assert.deepEqual(seen, ['Private', 'Private generated meaning.']);
+  assert.equal(result.costNanoUSD, '65900');
+  assert.deepEqual((await db!.query('SELECT state,cost_nano FROM hosted_helper_requests')).rows, [{ state: 'settled', cost_nano: '65900' }]);
+  await assert.rejects(f.controller().request(f.account, f.sessionID, request, () => {}), { code: 'helper_request_already_attempted' });
+  assert.equal(f.transport.calls.length, 1);
+});
+integration('lost stream completion is uncertain and cannot be automatically charged again', async () => {
+  const f = await seed(), request = input();
+  f.transport.handler = async (_body, _signal, onText) => { onText?.('Partial'); throw new Error('disconnected'); };
+  await assert.rejects(f.controller().request(f.account, f.sessionID, request, () => {}), { code: 'helper_response_uncertain' });
+  await assert.rejects(f.controller().request(f.account, f.sessionID, request, () => {}), { code: 'helper_request_already_attempted' });
+  assert.equal(f.transport.calls.length, 1);
+  assert.equal((await db!.query('SELECT state FROM hosted_helper_requests')).rows[0].state, 'uncertain');
+});
 
 integration('helper funding and one-shot attempt are committed before the provider call, with no content stored', async () => {
   const f = await seed();

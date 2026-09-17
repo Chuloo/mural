@@ -8,6 +8,20 @@ const key = 'synthetic-provider-key-for-local-transport-test';
 const body = () => hostedHelperBody(parseHostedHelperInput({ requestID: randomUUID(), purpose: 'meaning',
   instructions: 'Explain the meaning in the selected subtitle language.', input: 'Buenos días.' }));
 
+test('streaming uses one provider request and returns terminal usage after partial text', async () => {
+  let attempts = 0; const seen: string[] = [];
+  const result = { status: 'completed', usage: { input_tokens: 12, output_tokens: 7 } };
+  const transport = new OpenAIHostedResponses(key, (async (_url, init) => {
+    attempts++;
+    assert.equal(new Headers(init?.headers).get('accept'), 'text/event-stream');
+    assert.equal(JSON.parse(init?.body as string).stream, true);
+    return new Response(`data: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'Hello' })}\n\n` +
+      `data: ${JSON.stringify({ type: 'response.completed', response: result })}\n\n`, { headers: { 'content-type': 'text/event-stream' } });
+  }) as typeof fetch);
+  assert.deepEqual(await transport.send({ ...body(), stream: true }, new AbortController().signal, text => seen.push(text)), result);
+  assert.equal(attempts, 1); assert.deepEqual(seen, ['Hello']);
+});
+
 test('helper transport pins the provider destination and forwards cancellation without retries', async () => {
   const controller = new AbortController(); let attempts = 0;
   const transport = new OpenAIHostedResponses(key, (async (url, init) => {
