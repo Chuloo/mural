@@ -6,9 +6,13 @@
     <string name="settings_language_footer">Each language keeps its own words and progress. Mural finds your pace through conversation.</string>
     <string name="settings_language_running_footer">End this conversation to switch languages. Each language keeps its own words and progress.</string>
     <string name="settings_advanced">Advanced</string>
+    <string name="settings_ai_provider">AI provider</string>
     <string name="settings_use_own_key">Use your own API key</string>
     <string name="settings_byok_version_footer">An optional way to use Mural. OpenAI bills usage on your own key directly to you.</string>
+    <string name="settings_google_byok_version_footer">An optional way to use Mural. Google AI Studio bills usage on your own key directly to you.</string>
     <string name="settings_key_owner_footer">Your OpenAI account pays for usage. The key stays encrypted on this phone and is sent only to OpenAI.</string>
+    <string name="settings_open_google_api_keys">Open Google AI Studio keys</string>
+    <string name="settings_google_key_owner_footer">Your Google AI Studio account pays for usage. The key stays encrypted on this phone and is sent only to Google.</string>
     <string name="settings_keep_comfortable">Keep it comfortable</string>
     <string name="settings_limit_minutes">%1$d minutes</string>
 </resources>

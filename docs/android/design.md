@@ -4,7 +4,7 @@
 
 Mural keeps two native clients: SwiftUI and SwiftData in `apps/ios/`, and Kotlin with Jetpack Compose in `apps/android/`. The API lives in `services/api/`. Shared fixtures and contracts keep learning data compatible while each app retains its platform audio, accessibility and animation tools.
 
-The Android client keeps the eight language modules, the 24 themes and their cultural variants, WebRTC voice, written replies, meanings, word lookup, current topics with sources, history, corrections, vocabulary and learning projection. It adds written conversation without the microphone permission. Android account and minute-purchase integration is in progress. The public hosted conversation service remains disabled; no cloud learning sync is planned.
+The Android client keeps the nine language modules, the 24 themes and their cultural variants, OpenAI WebRTC or Google AI Studio Live voice, written replies, meanings, word lookup, current topics with sources, history, corrections, vocabulary and learning projection. It adds written conversation without the microphone permission. Android account and minute-purchase integration is in progress. The public hosted conversation service remains disabled; no cloud learning sync is planned.
 
 ## Visual system
 
@@ -16,7 +16,7 @@ The orb has a smooth twelve-point outline, warm blended color, a feathered shado
 
 Both onboarding steps use dropdown menus over a softly moving warm background. Continue stays at the bottom; content can scroll at larger text sizes. Reply entry opens in a rounded sheet with keyboard padding and a visible send action. Search, settings and other input fields share the same rounded surfaces and warm focus color.
 
-Caption taps open a cream bottom sheet with the selected word, its original sentence and an automatic contextual explanation, following the iOS lookup flow. All eight languages use this interaction. The sentence stays fixed while the conversation advances; closing the sheet cancels its request. Lookup has its own loading state so another helper cannot leave the sheet empty or have its work cancelled by dismissal.
+Caption taps open a cream bottom sheet with the selected word, its original sentence and an automatic contextual explanation, following the iOS lookup flow. All nine languages use this interaction. The sentence stays fixed while the conversation advances; closing the sheet cancels its request. Lookup has its own loading state so another helper cannot leave the sheet empty or have its work cancelled by dismissal.
 
 Mandarin keeps the inline Show/Hide pinyin control between the Chinese caption and the English meaning. The Chinese passage and its reading scroll together; the meaning retains its own visible area. Small screens and large system text use a scrolling page. Source characters and caption tap boundaries remain independent of pronunciation phrases.
 
@@ -25,7 +25,7 @@ Pinyin uses the MIT-licensed [phrase-pinyin-data](https://github.com/mozillazg/p
 ## Components
 
 - `core/`: serializable models, the v1/v2 archive, language modules, evidence rules, teaching policy, `MeaningController`, `FinalAssessmentQueue`, session limits and usage summary. No Android dependencies, so it runs in JVM tests.
-- `network/`: direct HTTPS client for OpenAI, AES-GCM credentials protected by Android Keystore, native WebRTC transport and the platform language detector.
+- `network/`: direct HTTPS clients for OpenAI and Google AI Studio, AES-GCM credentials protected by Android Keystore, native WebRTC/Live transports and the platform language detector.
 - `LearningRepository`: private `learning.json` written with `AtomicFile`. It never contains the API key.
 - `MuralViewModel`: conversation state, duration and inactivity limits, cancellation, assessments, meanings and persistence. Isolated copies prevent a late response from changing another conversation.
 - `ui/` and `MainActivity`: Compose screens, explicit consent, system permissions, export and import through the Android document picker, and accessibility. Copy lives in `res/values` (English) and `res/values-es` (Spanish).
@@ -51,7 +51,7 @@ The iPhone JSON archive (`schemaVersion` 2) and the v1 Norwegian migration are p
 
 The microphone works only in the foreground. Ending the conversation, losing audio focus, leaving the app or cancelling the connection releases audio and WebRTC. Only the permissions Mural needs are requested, and no recordings are stored. System backups and device transfers exclude the archive and credentials; learners move their learning through explicit export.
 
-The repository protocol is unchanged: OpenAI `POST /v1/live/sessions` with `gpt-live-1`, voice `marin` and the `oai-events` channel, and helper operations through `POST /v1/responses` with `gpt-5.6-luna`. The key is entered on the device, never in code. There is no shared key, no required Mural server and no paid call in automated tests.
+The OpenAI protocol remains available: `POST /v1/live/sessions` with `gpt-live-1`, voice `marin` and the `oai-events` channel, and helper operations through `POST /v1/responses` with `gpt-5.6-luna`. Google AI Studio uses `gemini-3.8-live` over its Live WebSocket and `gemma-4-31b-it:generateContent` for helper operations. The key is entered on the device, never in code. There is no shared key, no required Mural server and no paid call in automated tests.
 
 ## Keeping both clients in sync
 

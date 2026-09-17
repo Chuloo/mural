@@ -104,7 +104,7 @@ data class SourceLink(val title: String, val url: String) {
 @Serializable
 data class TopicBrief(
     val id: String = UUID.randomUUID().toString(), val languageID: String, var query: String,
-    var text: String, var sources: List<SourceLink>, val retrievedAt: Double = nowSeconds()
+    var text: String, var sources: List<SourceLink>, var searchEntryPointHTML: String? = null, val retrievedAt: Double = nowSeconds()
 ) { val isFresh get() = nowSeconds() - retrievedAt < 6 * 3600 }
 
 @Serializable

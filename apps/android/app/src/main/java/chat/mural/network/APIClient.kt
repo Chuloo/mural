@@ -10,9 +10,13 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -28,17 +32,28 @@ import okhttp3.Response
 import okio.Buffer
 
 data class APIUsage(val input: Int = 0, val output: Int = 0, val searches: Int = 0)
-data class APIResult(val text: String, val sources: List<SourceLink>, val usage: APIUsage)
+data class APIResult(
+    val text: String,
+    val sources: List<SourceLink>,
+    val usage: APIUsage,
+    val searchEntryPointHTML: String? = null,
+)
 
 class APIClient private constructor(
-    private val readCredential: () -> String?,
+    private val readCredential: (AIProvider) -> String?,
     private val client: OkHttpClient = defaultClient(),
     private val baseUrl: HttpUrl = API_BASE_URL,
+    private val googleBaseUrl: HttpUrl = GOOGLE_API_BASE_URL,
 ) : TeachingClient, LiveSessionProvider {
-    constructor(credentials: CredentialStore) : this(credentials::read)
+    constructor(credentials: CredentialStore) : this({ provider -> credentials.read(provider) })
+
+    var provider: AIProvider = AIProvider.OPENAI
 
     internal constructor(key: String?, client: OkHttpClient, baseUrl: HttpUrl) :
         this({ key }, client, baseUrl)
+
+    internal constructor(key: String?, client: OkHttpClient, baseUrl: HttpUrl, googleBaseUrl: HttpUrl) :
+        this({ key }, client, baseUrl, googleBaseUrl)
 
     override suspend fun createLiveSession(request: LiveSessionRequest): LiveSessionConnection {
         val result = post("live/sessions", buildJsonObject {
@@ -61,46 +76,8 @@ class APIClient private constructor(
         if (!VALID_PATH.matches(path) || path.contains("..") || path.startsWith('/')) {
             throw APIException.InvalidResponse
         }
-        val key = readCredential() ?: throw APIException.MissingKey
-        val request = Request.Builder()
-            .url(baseUrl.newBuilder().addPathSegments(path).build())
-            .header("Authorization", "Bearer $key")
-            .header("Content-Type", JSON_MEDIA_TYPE.toString())
-            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
-            .build()
-
-        // Parse on OkHttp's worker while the continuation remains cancellable.
-        // Cancellation closes a response even if the peer stalls halfway through its body.
-        return suspendCancellableCoroutine { continuation ->
-            val call = client.newCall(request)
-            continuation.invokeOnCancellation { call.cancel() }
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, error: IOException) {
-                    if (continuation.isActive) continuation.resumeWithException(error)
-                }
-                override fun onResponse(call: Call, response: Response) {
-                    try {
-                        val value = response.use {
-                            if (it.code !in 200..299) {
-                                val errorCode = runCatching {
-                                    val payload = it.peekBody(16_385).string()
-                                    if (payload.toByteArray(Charsets.UTF_8).size > 16_384) null else
-                                        (JSON.parseToJsonElement(payload).jsonObject["error"] as? JsonObject)
-                                            ?.get("code")?.jsonPrimitive?.contentOrNull
-                                }.getOrNull()
-                                throw APIException.Http(it.code, errorCode, it.header("x-request-id"))
-                            }
-                            val payload = it.readBoundedBody()
-                            try { JSON.parseToJsonElement(payload).jsonObject }
-                            catch (_: Exception) { throw APIException.InvalidResponse }
-                        }
-                        if (continuation.isActive) continuation.resume(value)
-                    } catch (error: Exception) {
-                        if (continuation.isActive) continuation.resumeWithException(error)
-                    }
-                }
-            })
-        }
+        val key = readCredential(AIProvider.OPENAI) ?: throw APIException.MissingKey
+        return directPost(baseUrl.newBuilder().addPathSegments(path).build(), key, body, "OpenAI")
     }
 
     override suspend fun respond(
@@ -110,6 +87,9 @@ class APIClient private constructor(
         search: Boolean,
         purpose: HelperPurpose?,
     ): APIResult {
+        if (provider == AIProvider.GOOGLE_AI_STUDIO) {
+            return geminiRespond(instructions, input, schema, search)
+        }
         val body = buildJsonObject {
             put("model", "gpt-5.6-luna")
             put("store", false)
@@ -143,6 +123,107 @@ class APIClient private constructor(
         return decodeTeachingResponse(response)
     }
 
+    private suspend fun geminiRespond(instructions: String, input: String, schema: JsonObject?, search: Boolean): APIResult {
+        val key = readCredential(AIProvider.GOOGLE_AI_STUDIO) ?: throw APIException.MissingKey
+        val body = buildJsonObject {
+            put("systemInstruction", buildJsonObject { put("parts", buildJsonArray { add(buildJsonObject { put("text", instructions) }) }) })
+            put("contents", buildJsonArray { add(buildJsonObject {
+                put("role", "user")
+                put("parts", buildJsonArray { add(buildJsonObject { put("text", input) }) })
+            }) })
+            put("generationConfig", buildJsonObject {
+                put("maxOutputTokens", if (schema == null) 1_400 else 2_200)
+                if (schema != null) {
+                    put("responseMimeType", "application/json")
+                    put("responseJsonSchema", geminiCompatibleSchema(schema))
+                }
+            })
+            if (search) put("tools", buildJsonArray { add(buildJsonObject { put("googleSearch", buildJsonObject { }) }) })
+        }
+        val path = "models/${AIProvider.GOOGLE_AI_STUDIO.helperModel}:generateContent"
+        val response = directPost(googleBaseUrl.newBuilder().addPathSegments(path).build(), key, body, "Google AI Studio", google = true)
+        val candidate = response["candidates"]?.jsonArray?.firstOrNull()?.jsonObject ?: throw APIException.InvalidResponse
+        val text = buildString {
+            val parts = candidate["content"]?.jsonObject?.get("parts")?.jsonArray ?: JsonArray(emptyList())
+            for (part in parts) append(part.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty())
+        }
+        if (text.isEmpty()) throw APIException.Incomplete
+        val grounding = candidate["groundingMetadata"]?.jsonObject
+        val sources = linkedMapOf<String, SourceLink>()
+        val chunks = grounding?.get("groundingChunks")?.jsonArray ?: JsonArray(emptyList())
+        for (chunk in chunks) {
+            val web = chunk.jsonObject["web"]?.jsonObject ?: continue
+            val url = web["uri"]?.jsonPrimitive?.contentOrNull ?: continue
+            if (SourceLink("Source", url).safeUrl() != null) sources.putIfAbsent(url, SourceLink(web["title"]?.jsonPrimitive?.contentOrNull ?: "Source", url))
+        }
+        val searchQueries = grounding?.get("webSearchQueries")?.jsonArray
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
+            ?.distinct()
+            ?.size ?: 0
+        val searchEntryPointHtml = grounding?.get("searchEntryPoint")?.jsonObject
+            ?.get("renderedContent")?.jsonPrimitive?.contentOrNull?.take(32_000)
+        val usage = response["usageMetadata"]?.jsonObject
+        return APIResult(
+            text = text,
+            sources = sources.values.toList(),
+            searchEntryPointHTML = searchEntryPointHtml,
+            usage = APIUsage(
+                input = usage?.get("promptTokenCount")?.jsonPrimitive?.intOrNull ?: 0,
+                output = usage?.get("candidatesTokenCount")?.jsonPrimitive?.intOrNull ?: 0,
+                searches = if (search) searchQueries.takeIf { it > 0 } ?: if (sources.isNotEmpty()) 1 else 0 else 0,
+            ),
+        )
+    }
+
+    private fun geminiCompatibleSchema(value: JsonElement): JsonElement = when (value) {
+        is JsonObject -> JsonObject(value
+            .filterKeys { it != "additionalProperties" }
+            .mapValues { (_, nested) -> geminiCompatibleSchema(nested) })
+        is JsonArray -> JsonArray(value.map(::geminiCompatibleSchema))
+        else -> value
+    }
+
+    private suspend fun directPost(url: HttpUrl, key: String, body: JsonObject, providerName: String, google: Boolean = false): JsonObject {
+        val builder = Request.Builder()
+            .url(url)
+            .header("Content-Type", JSON_MEDIA_TYPE.toString())
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+        if (google) builder.header("x-goog-api-key", key) else builder.header("Authorization", "Bearer $key")
+        val request = builder.build()
+        // Parse on OkHttp's worker while the continuation remains cancellable.
+        // Cancellation closes a response even if the peer stalls halfway through its body.
+        return suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, error: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(error)
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        val value = response.use {
+                            if (it.code !in 200..299) {
+                                val errorCode = runCatching {
+                                    val payload = it.peekBody(16_385).string()
+                                    if (payload.toByteArray(Charsets.UTF_8).size > 16_384) null else
+                                        (JSON.parseToJsonElement(payload).jsonObject["error"] as? JsonObject)
+                                            ?.get("code")?.jsonPrimitive?.contentOrNull
+                                }.getOrNull()
+                                throw APIException.Http(it.code, errorCode, it.header("x-request-id"), providerName)
+                            }
+                            val payload = it.readBoundedBody()
+                            try { JSON.parseToJsonElement(payload).jsonObject }
+                            catch (_: Exception) { throw APIException.InvalidResponse }
+                        }
+                        if (continuation.isActive) continuation.resume(value)
+                    } catch (error: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(error)
+                    }
+                }
+            })
+        }
+    }
+
     private fun Response.readBoundedBody(): String {
         val responseBody = body ?: throw APIException.InvalidResponse
         if (responseBody.contentLength() > MAX_RESPONSE_BYTES) throw APIException.InvalidResponse
@@ -159,22 +240,22 @@ class APIClient private constructor(
     }
 
     sealed class APIException(message: String, cause: Throwable? = null) : IOException(message, cause) {
-        data object MissingKey : APIException("Add your OpenAI key in Settings to begin.")
-        data object InvalidResponse : APIException("OpenAI returned an incomplete response. Please try again.")
-        data object Incomplete : APIException("OpenAI returned an incomplete response. Please try again.")
+        data object MissingKey : APIException("Add your selected AI provider key in Settings to begin.")
+        data object InvalidResponse : APIException("The AI provider returned an incomplete response. Please try again.")
+        data object Incomplete : APIException("The AI provider returned an incomplete response. Please try again.")
         data object Refused : APIException("Mural couldn't complete that request. Try a different topic.")
-        class Http(val status: Int, code: String? = null, reference: String? = null) : APIException(messageFor(status)) {
+        class Http(val status: Int, code: String? = null, reference: String? = null, providerName: String = "OpenAI") : APIException(messageFor(status, providerName)) {
             val code = ProviderFailureKind.safeCode(code)
             val reference = ProviderFailureKind.safeReference(reference)
             val kind get() = ProviderFailureKind.classify(status, code)
         }
 
         companion object {
-            private fun messageFor(status: Int): String = when (status) {
-                401 -> "Your OpenAI key wasn't accepted. Check it in Settings."
-                403, 404 -> "This API key may not have access to the requested model. Check your OpenAI project."
-                429 -> "OpenAI's usage or rate limit was reached. Check your project billing and limits."
-                else -> "OpenAI couldn't complete the request (HTTP $status). Please try again."
+            private fun messageFor(status: Int, providerName: String): String = when (status) {
+                401 -> "Your $providerName key wasn't accepted. Check it in Settings."
+                403, 404 -> "This API key may not have access to the requested model. Check your $providerName project."
+                429 -> "$providerName's usage or rate limit was reached. Check your project billing and limits."
+                else -> "$providerName couldn't complete the request (HTTP $status). Please try again."
             }
         }
     }
@@ -184,6 +265,12 @@ class APIClient private constructor(
             .scheme("https")
             .host("api.openai.com")
             .addPathSegment("v1")
+            .addPathSegment("")
+            .build()
+        private val GOOGLE_API_BASE_URL = HttpUrl.Builder()
+            .scheme("https")
+            .host("generativelanguage.googleapis.com")
+            .addPathSegment("v1beta")
             .addPathSegment("")
             .build()
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()

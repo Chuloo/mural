@@ -17,9 +17,11 @@ public struct ProviderFailure: LocalizedError, Sendable {
     public let status: Int
     public let code: String?
     public let reference: String?
+    public let providerName: String
     public var kind: ProviderFailureKind { .classify(status: status, code: code) }
-    public init(status: Int, body: Data = Data(), reference: String? = nil) {
+    public init(status: Int, body: Data = Data(), reference: String? = nil, providerName: String = "OpenAI") {
         self.status = status
+        self.providerName = providerName
         let json = body.count <= 16_384 ? (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] : nil
         let code = (json?["error"] as? [String: Any])?["code"] as? String
         self.code = Self.safeCode(code)
@@ -36,14 +38,14 @@ public struct ProviderFailure: LocalizedError, Sendable {
     }
     public var errorDescription: String? {
         let message: String = switch kind {
-        case .authentication: "Your OpenAI key wasn’t accepted. Check it in Settings."
-        case .modelAccess: "This API key may not have access to the requested model. Check your OpenAI project."
-        case .quota: "Your OpenAI project has no available API credit. Check its billing and usage limit before trying again."
-        case .rateLimit: "OpenAI is limiting requests. Wait briefly and try again. If this continues, check your project’s billing and limits."
+        case .authentication: "Your \(providerName) key wasn’t accepted. Check it in Settings."
+        case .modelAccess: "This API key may not have access to the requested model. Check your \(providerName) project."
+        case .quota: "Your \(providerName) project has no available API credit. Check its billing and usage limit before trying again."
+        case .rateLimit: "\(providerName) is limiting requests. Wait briefly and try again. If this continues, check your project’s billing and limits."
         case .unavailable: "The voice or teaching service is temporarily unavailable. Please try again shortly."
         case .invalidRequest: "The service could not accept this request. If this continues, contact support."
         case .unknown: "The service could not complete this request. Please try again later."
         }
-        return reference.map { message + "\n\nOpenAI reference: " + $0 } ?? message
+        return reference.map { message + "\n\n\(providerName) reference: " + $0 } ?? message
     }
 }

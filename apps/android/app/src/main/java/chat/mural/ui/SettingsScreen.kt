@@ -65,6 +65,7 @@ import chat.mural.core.Passage
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.UsageSummary
+import chat.mural.network.AIProvider
 
 @Composable
 fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Unit, onReviewConsent: () -> Unit,
@@ -123,7 +124,12 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
             item {
                 SettingsGroup(stringResource(R.string.settings_advanced),
-                    if (!vm.hasKey) stringResource(R.string.settings_byok_version_footer) else null) {
+                    if (!vm.hasKey) stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_byok_version_footer else R.string.settings_google_byok_version_footer) else null) {
+                    SettingsChoiceRow(stringResource(R.string.settings_ai_provider), vm.aiProvider.displayName, vm.aiProvider.name,
+                        AIProvider.entries.map { it.name to it.displayName }, "settings-ai-provider", !vm.isRunning) { selected ->
+                        vm.selectAIProvider(AIProvider.entries.first { it.name == selected })
+                    }
+                    SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_use_own_key), symbol = SettingsSymbol.KEY,
                         chevron = !advanced, modifier = Modifier.testTag("advanced-api-key"), onClick = { advanced = !advanced })
                     AnimatedVisibility(advanced, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -134,14 +140,14 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                             SettingsRow(stringResource(if (vm.hasKey) R.string.settings_replace_key else R.string.settings_save_key),
                                 enabled = !vm.isRunning, tint = MuralColors.Secondary, chevron = true, onClick = { keyDialog = true })
                             SettingsDivider()
-                            SettingsRow(stringResource(R.string.settings_open_api_keys), tint = MuralColors.Secondary,
-                                onClick = { open("https://platform.openai.com/api-keys") })
+                            SettingsRow(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_open_api_keys else R.string.settings_open_google_api_keys), tint = MuralColors.Secondary,
+                                onClick = { open(vm.aiProvider.keyUrl) })
                             if (vm.hasKey) {
                                 SettingsDivider()
                                 SettingsRow(stringResource(R.string.settings_remove_key), enabled = !vm.isRunning,
                                     tint = MuralColors.Red, onClick = { deleteKey = true })
                             }
-                            Text(stringResource(R.string.settings_key_owner_footer), style = MaterialTheme.typography.bodySmall,
+                            Text(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_key_owner_footer else R.string.settings_google_key_owner_footer), style = MaterialTheme.typography.bodySmall,
                                 color = MuralColors.Secondary, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp))
                         }
                     }
@@ -149,7 +155,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
             item {
                 val usage = UsageSummary.of(vm.archive.sessions)
-                SettingsGroup(stringResource(R.string.settings_keep_comfortable), stringResource(R.string.settings_usage_footer)) {
+                SettingsGroup(stringResource(R.string.settings_keep_comfortable), stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_usage_footer else R.string.settings_google_usage_footer)) {
                     val limits = (listOf(5, 10, 15, 20, 30, 60) + prefs.sessionMinutes).distinct().sorted()
                     SettingsChoiceRow(stringResource(R.string.settings_conversation_limit), stringResource(R.string.settings_limit_minutes, prefs.sessionMinutes),
                         prefs.sessionMinutes.toString(), limits.map { it.toString() to stringResource(R.string.settings_limit_minutes, it) },
@@ -161,8 +167,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_search_calls_label), usage.searchCalls.toString())
                     SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_usage_billing_link), tint = MuralColors.Secondary,
-                        onClick = { open("https://platform.openai.com/usage") })
+                    SettingsRow(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_usage_billing_link else R.string.settings_google_usage_billing_link), tint = MuralColors.Secondary,
+                        onClick = { open(vm.aiProvider.usageUrl) })
                 }
             }
             item {
@@ -199,12 +205,12 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 SettingsGroup {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.settings_app_version_footer, version), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
-                        Text(stringResource(R.string.settings_models_footer), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
+                        Text(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_models_footer else R.string.settings_google_models_footer), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
                     }
                     SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_openai_data_controls), tint = MuralColors.Secondary,
-                        onClick = { open("https://developers.openai.com/api/docs/guides/your-data") })
-                    Text(stringResource(R.string.settings_data_use_footer), style = MaterialTheme.typography.bodySmall,
+                    SettingsRow(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_openai_data_controls else R.string.settings_google_data_controls), tint = MuralColors.Secondary,
+                        onClick = { open(vm.aiProvider.dataControlsUrl) })
+                    Text(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_data_use_footer else R.string.settings_google_data_use_footer), style = MaterialTheme.typography.bodySmall,
                         color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_open_source_notices), chevron = true, onClick = { notices = true })
@@ -289,7 +295,7 @@ private fun KeyDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
         }
         Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-                Text(stringResource(R.string.settings_key_dialog_title), style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_key_dialog_title else R.string.settings_google_key_dialog_title), style = MaterialTheme.typography.headlineMedium)
                 Text(stringResource(R.string.settings_key_dialog_note), color = MuralColors.Secondary)
                 MuralTextField(
                     key,
@@ -355,6 +361,9 @@ fun TranscriptDialog(vm: MuralViewModel, session: SessionRecord, onDismiss: () -
                         if (liveSession.languageID == "zh") PinyinHelp(passage.text)
                         if (passage.speaker == Speaker.user && !vm.isRunning) MuralTextButton(onClick = { correcting = passage }) { Text(stringResource(R.string.history_edit_passage_button)) }
                     }
+                }
+                liveSession.topics.mapNotNull { it.searchEntryPointHTML?.takeIf { html -> html.isNotBlank() } }.firstOrNull()?.let { html ->
+                    item { GoogleSearchSuggestions(html) }
                 }
                 liveSession.topics.flatMap { it.sources }.filter { it.safeUrl() != null }.takeIf { it.isNotEmpty() }?.let { sources ->
                     item { Text(stringResource(R.string.history_saved_sources), fontWeight = FontWeight.SemiBold) }

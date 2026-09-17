@@ -1,5 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
+import WebKit
 import MuralCore
 
 struct ThemesView: View {
@@ -72,11 +74,11 @@ struct CurrentTopicView: View {
                     if let error { Text(error).font(.footnote).foregroundStyle(MuralColor.secondary) }
                     if let brief {
                         Text(.init(brief.text)).font(.body).textSelection(.enabled)
-                        SourcesView(sources: brief.sources, date: brief.retrievedAt)
+                        SourcesView(sources: brief.sources, date: brief.retrievedAt, searchEntryPointHTML: brief.searchEntryPointHTML)
                         Button("Talk about this", systemImage: "waveform") { coordinator.discuss(brief); selected(); dismiss() }
                             .font(.headline).padding(18).frame(maxWidth: .infinity).background(MuralColor.orange, in: Capsule())
                     }
-                    Text("Search uses your OpenAI API account. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                    Text("Search uses your \(coordinator.aiProvider.title) account. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -164,10 +166,53 @@ struct WordDetailView: View {
 struct SourcesView: View {
     var sources: [SourceLink]
     var date: Date
+    var searchEntryPointHTML: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let searchEntryPointHTML, !searchEntryPointHTML.isEmpty {
+                Text("Google Search suggestions").font(.caption).foregroundStyle(MuralColor.secondary)
+                GoogleSearchSuggestionsView(html: searchEntryPointHTML).frame(height: 100).clipShape(RoundedRectangle(cornerRadius: 14))
+            }
             Text("Sources · \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(MuralColor.secondary)
             ForEach(sources) { source in if let url = source.safeURL { Link(destination: url) { Label(source.title, systemImage: "arrow.up.right").font(.subheadline) } } }
+        }
+    }
+}
+
+struct GoogleSearchSuggestionsView: UIViewRepresentable {
+    let html: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.preferences.javaScriptEnabled = false
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.isOpaque = false
+        view.backgroundColor = .clear
+        view.scrollView.isScrollEnabled = false
+        view.navigationDelegate = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: WKWebView, context: Context) {
+        guard view.accessibilityValue != html else { return }
+        view.accessibilityValue = html
+        let policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">"
+        view.loadHTMLString(policy + html, baseURL: URL(string: "https://www.google.com"))
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard action.navigationType == .linkActivated,
+                  let url = action.request.url,
+                  url.scheme == "https",
+                  url.host != nil else {
+                decisionHandler(.cancel)
+                return
+            }
+            UIApplication.shared.open(url)
+            decisionHandler(.cancel)
         }
     }
 }
@@ -192,7 +237,7 @@ struct TranscriptView: View {
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        ForEach(session.topics) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt) }
+                        ForEach(session.topics) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt, searchEntryPointHTML: topic.searchEntryPointHTML) }
                         if session.fragments.isEmpty && session.topics.isEmpty { Text("Your conversation will appear here.").foregroundStyle(MuralColor.secondary) }
                     } else { Text("Start a conversation and your words will appear here.") }
                 }.padding(26)
@@ -263,7 +308,7 @@ struct EditableTranscriptView: View {
                             if session?.languageID == "zh" { PinyinHelp(text: passage.text) }
                         }
                     }
-                    ForEach(session?.topics ?? []) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt) }
+                    ForEach(session?.topics ?? []) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt, searchEntryPointHTML: topic.searchEntryPointHTML) }
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .navigationTitle("Our conversation").navigationBarTitleDisplayMode(.inline)
@@ -320,28 +365,35 @@ struct SettingsView: View {
                     }
                 }
                 Section {
+                    Picker("AI provider", selection: Binding(get: { coordinator.aiProvider }, set: { provider in
+                        coordinator.selectAIProvider(provider)
+                        key = ""
+                        hasKey = CredentialStore.hasKey(for: provider)
+                    })) {
+                        ForEach(AIProvider.allCases) { provider in Text(provider.title).tag(provider) }
+                    }.disabled(coordinator.isRunning)
                     DisclosureGroup(isExpanded: $showingAPIKey) {
                         if hasKey { Label("Your key is saved on this iPhone", systemImage: "checkmark.shield") }
-                        SecureField(hasKey ? "Replace OpenAI key" : "OpenAI API key", text: $key)
+                        SecureField(hasKey ? "Replace \(coordinator.aiProvider.title) key" : coordinator.aiProvider.keyPlaceholder, text: $key)
                             .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive().accessibilityIdentifier("api-key")
                         Button(hasKey ? "Save replacement key" : "Save key") {
-                            do { try CredentialStore.save(key); key = ""; hasKey = true; message = "Saved securely. Start a conversation to connect." }
+                            do { try CredentialStore.save(key, for: coordinator.aiProvider); key = ""; hasKey = true; message = "Saved securely. Start a conversation to connect." }
                             catch { message = error.localizedDescription }
                         }.disabled(key.isEmpty || coordinator.isRunning)
-                        Link("Open OpenAI API keys", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                        Link("Open \(coordinator.aiProvider.title) keys", destination: coordinator.aiProvider.keyURL)
                         if hasKey {
                             Button("Remove key", role: .destructive) {
-                                do { try CredentialStore.delete(); hasKey = false; message = "Your key has been removed." }
+                                do { try CredentialStore.delete(for: coordinator.aiProvider); hasKey = false; message = "Your key has been removed." }
                                 catch { message = error.localizedDescription }
                             }.disabled(coordinator.isRunning)
                         }
-                        Text("Your OpenAI account pays for usage. The key stays in this iPhone’s Keychain and is sent only to OpenAI.")
+                        Text(coordinator.aiProvider.keyHelp)
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     } label: { Label("Use your own API key", systemImage: "key").accessibilityIdentifier("advanced-api-key") }
                     if let message { Text(message).font(.footnote).foregroundStyle(MuralColor.secondary) }
                 } header: { Text("Advanced") } footer: {
-                    if !hasKey { Text("This version uses your OpenAI API key to start a conversation.") }
-                }
+                    if !hasKey { Text("Add a \(coordinator.aiProvider.title) API key to start a conversation.") }
+                }.onAppear { hasKey = CredentialStore.hasKey(for: coordinator.aiProvider) }
                 Section {
                     Picker("Conversation limit", selection: Binding(get: { store.preferences.sessionMinutes }, set: { value in store.updatePreferences { $0.sessionMinutes = value } })) {
                         ForEach([5, 10, 15, 20, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
@@ -349,9 +401,13 @@ struct SettingsView: View {
                     LabeledContent("Recorded voice time", value: "\(Int(totalVoiceSeconds / 60)) min \(Int(totalVoiceSeconds) % 60) sec")
                     LabeledContent("Voice estimate", value: String(format: "$%.2f USD", totalVoiceSeconds / 60 * 0.05))
                     LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
-                    Link("OpenAI usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
+                    Link("\(coordinator.aiProvider.title) usage and billing", destination: coordinator.aiProvider.usageURL)
                 } header: { Text("Keep it comfortable") } footer: {
-                    Text("Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
+                    if coordinator.aiProvider == .openAI {
+                        Text("Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
+                    } else {
+                        Text("Google AI Studio pricing and usage vary by model and project. Check your Google AI Studio dashboard; the time limit is local, not a billing cap.")
+                    }
                 }
                 Section {
                     Button("Export learning backup", systemImage: "square.and.arrow.up") {
@@ -372,9 +428,9 @@ struct SettingsView: View {
                 } header: { Text("Help and privacy") }
                 Section {
                     Text("Mural 0.1 · Personal build").font(.footnote)
-                    Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
-                    Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
-                    Text("Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.").font(.footnote)
+                    Text("Voice: \(coordinator.aiProvider.liveModel) · Teacher: \(coordinator.aiProvider.helperModel)").font(.footnote)
+                    Link("\(coordinator.aiProvider.title) data controls", destination: coordinator.aiProvider.dataControlsURL)
+                    Text("Audio and selected text go to \(coordinator.aiProvider.title) while you practise. Provider retention and abuse-monitoring policies may apply. Raw audio is not saved by Mural.").font(.footnote)
                     Button("Open-source notices") { notices = true }
                 }
             }.scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.secondary)
