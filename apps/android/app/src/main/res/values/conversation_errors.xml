@@ -1,10 +1,10 @@
 <resources>
-    <string name="error_provider_quota">Your OpenAI project has no available API credit. Check its billing and usage limit before trying again.</string>
+    <string name="error_provider_quota">Your AI provider project has no available API credit. Check its billing and usage limit before trying again.</string>
     <string name="error_provider_unavailable">The voice or teaching service is temporarily unavailable. Please try again shortly.</string>
     <string name="error_provider_request">The service could not accept this request. If this continues, contact support.</string>
     <string name="error_request_timeout">The request took too long. Check your connection and try again.</string>
     <string name="error_request_connection">Mural could not connect. Check your internet connection and try again.</string>
-    <string name="error_provider_reference">OpenAI reference: %1$s</string>
+    <string name="error_provider_reference">Provider reference: %1$s</string>
     <string name="hosted_help_busy">Another explanation is still being prepared. Wait a moment, then try again.</string>
     <string name="hosted_help_funding">There is not enough available balance for this explanation. Check your balance in Account.</string>
     <string name="hosted_balance_checking">Mural is still checking your balance after an earlier request. Please try again shortly.</string>

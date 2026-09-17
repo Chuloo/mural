@@ -17,9 +17,9 @@
     <string name="error_local_history_unavailable">The local history couldn\'t be opened. It won\'t be overwritten. Keep the app\'s data and check the file before continuing.</string>
     <string name="error_save_progress_failed">Progress couldn\'t be saved. Export a backup before closing the app.</string>
     <string name="error_resolve_local_history_first">Resolve the local history error first.</string>
-    <string name="error_accept_ai_consent">Accept OpenAI use in Settings before you begin.</string>
-    <string name="error_missing_key">Add your OpenAI key in Settings to begin.</string>
-    <string name="error_key_invalid">Enter a valid OpenAI API key.</string>
+    <string name="error_accept_ai_consent">Accept AI provider use in Settings before you begin.</string>
+    <string name="error_missing_key">Add your selected AI provider key in Settings to begin.</string>
+    <string name="error_key_invalid">Enter a valid key for the selected AI provider.</string>
     <string name="error_key_save">The key couldn\'t be saved securely on this device.</string>
     <string name="error_key_save_failed">The key couldn\'t be saved.</string>
     <string name="error_key_remove">The key couldn\'t be removed. Unlock this device and try again.</string>
@@ -31,12 +31,12 @@
     <string name="error_find_topic_failed">The topic couldn\'t be found.</string>
     <string name="error_topic_unsourced">The search didn\'t return verifiable sources. Try a more specific topic.</string>
     <string name="error_import_failed">Import failed. Check the file is a Mural backup, matches supported languages, and is under 30 MB.</string>
-    <string name="error_incomplete_response">OpenAI returned an incomplete response. Please try again.</string>
+    <string name="error_incomplete_response">The AI provider returned an incomplete response. Please try again.</string>
     <string name="error_request_refused">Mural couldn\'t complete that request. Try a different topic.</string>
-    <string name="error_http_401">Your OpenAI key wasn\'t accepted. Check it in Settings.</string>
-    <string name="error_http_403_404">This API key may not have access to the requested model. Check your OpenAI project.</string>
-    <string name="error_http_429">OpenAI is limiting requests. Wait briefly and try again. If this continues, check your project’s billing and limits.</string>
-    <string name="error_http_generic">OpenAI couldn\'t complete the request (HTTP %1$d). Please try again.</string>
+    <string name="error_http_401">Your AI provider key wasn\'t accepted. Check it in Settings.</string>
+    <string name="error_http_403_404">This API key may not have access to the requested model. Check your provider project.</string>
+    <string name="error_http_429">The AI provider is limiting requests. Wait briefly and try again. If this continues, check your project’s billing and limits.</string>
+    <string name="error_http_generic">The AI provider couldn\'t complete the request (HTTP %1$d). Please try again.</string>
     <string name="error_backup_too_large">The backup exceeds the 30 MB limit.</string>
     <string name="error_file_open_failed">The selected file couldn\'t be opened.</string>
     <string name="error_transport_microphone">Allow microphone access in Android Settings to start a conversation.</string>
@@ -118,6 +118,7 @@
     <string name="topics_find_button">Find a topic</string>
     <string name="topics_finding_button">Finding something interesting…</string>
     <string name="topics_sources_heading">Sources</string>
+    <string name="topics_google_search_suggestions">Google Search suggestions</string>
     <string name="topics_talk_about_button">Talk about this</string>
     <string name="topics_sources_note">Sources stay attached to the topic.</string>
     <string name="topics_current_theme_subtitle">From the world today</string>
@@ -178,10 +179,12 @@
     <string name="settings_search_calls_label">Search calls recorded</string>
     <string name="settings_usage_billing_link">OpenAI usage and billing</string>
     <string name="settings_usage_footer">Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.</string>
+    <string name="settings_google_usage_billing_link">Google AI Studio usage and billing</string>
+    <string name="settings_google_usage_footer">Google AI Studio pricing and usage vary by model and project. Check your Google AI Studio dashboard; the time limit is local, not a billing cap.</string>
     <string name="settings_section_ai_permission">AI permission</string>
     <string name="settings_ai_consent_accepted">Accepted for this version</string>
     <string name="settings_ai_consent_not_accepted">Not accepted</string>
-    <string name="settings_ai_permission_summary">With permission, Mural sends audio and the text you choose to OpenAI. You can use your history and words without granting it.</string>
+    <string name="settings_ai_permission_summary">With permission, Mural sends audio and the text you choose to the selected AI provider. You can use your history and words without granting it.</string>
     <string name="settings_revoke_consent_button">Withdraw permission</string>
     <string name="settings_review_consent_button">Review and accept</string>
     <string name="settings_section_your_data">Your words belong to you</string>
@@ -191,13 +194,16 @@
     <string name="settings_delete_all_data">Delete all conversations and learning</string>
     <string name="settings_section_help_privacy">Help and privacy</string>
     <string name="settings_openai_data_controls">OpenAI data controls</string>
+    <string name="settings_google_data_controls">Google AI Studio usage policies</string>
     <string name="settings_open_source_notices">Open-source notices</string>
     <string name="settings_data_use_footer">Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.</string>
+    <string name="settings_google_data_use_footer">Audio and selected text go to Google AI Studio while you practise. Provider retention and abuse-monitoring policies may apply. Raw audio is not saved by Mural.</string>
     <string name="settings_app_version_footer">Mural %1$s · Android</string>
     <string name="settings_corrections_label">Corrections</string>
     <string name="settings_corrections_value">Gently, as we talk</string>
     <string name="settings_open_api_keys">Open OpenAI API keys</string>
     <string name="settings_models_footer">Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna</string>
+    <string name="settings_google_models_footer">Voice: Gemini 3.8 Live · Teacher: Gemma 4 31B IT</string>
     <string name="settings_delete_key_confirm_title">Delete the saved key?</string>
     <string name="settings_delete_key_confirm_message">You\'ll need another key to use AI features again.</string>
     <string name="settings_delete_all_confirm_title">Delete all learning data on this device?</string>
@@ -206,6 +212,7 @@
     <string name="settings_revoke_consent_confirm_title">Withdraw AI permission?</string>
     <string name="settings_revoke_consent_confirm_message">Conversations, searches, and online meanings will be turned off. Your local history stays available.</string>
     <string name="settings_key_dialog_title">OpenAI API key</string>
+    <string name="settings_google_key_dialog_title">Google AI Studio API key</string>
     <string name="settings_key_dialog_note">Stored encrypted by Android and never included in backups.</string>
     <string name="settings_key_dialog_field_label">New key</string>
     <string name="settings_backup_exported_toast">Backup exported</string>
@@ -237,7 +244,7 @@
 
     <!-- AI consent -->
     <string name="consent_title">Before we talk.</string>
-    <string name="consent_ai_summary">With your permission, Mural sends audio and selected text to OpenAI to provide conversations and meanings. Provider retention rules apply.</string>
+    <string name="consent_ai_summary">With your permission, Mural sends audio and selected text to the selected AI provider to provide conversations and meanings. Provider retention rules apply.</string>
     <string name="consent_local_storage_note">Your learning record is stored on this device. Mural does not save raw audio. You can keep browsing your saved words and conversations without agreeing.</string>
     <string name="consent_privacy_policy_link">Privacy policy</string>
     <string name="consent_agree_button">Agree and continue</string>

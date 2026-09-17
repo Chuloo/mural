@@ -11,11 +11,11 @@
 
 Mural is a native iPhone and Android app for learning through conversation. Speak to a warm, animated orb, follow the meaning when you need it, and practise words again in later conversations. Mural adjusts the challenge from the evidence in your replies.
 
-Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. Learning records stay on your device. This version connects directly to OpenAI using your own API key. It needs an internet connection, but no Mural account or running Mac.
+Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. Learning records stay on your device. This version connects directly to OpenAI or Google AI Studio using your own API key. It needs an internet connection, but no Mural account or running Mac.
 
 ## Android
 
-A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same eight language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and uses your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
+A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same nine language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and supports OpenAI or Google AI Studio keys stored with Android Keystore. The iPhone client remains available below.
 
 See the [Android installation/build guide](docs/run-on-android.md) and [Android verification record](verification/android-validation.md). Build a personal-install APK with Java 17 and Android SDK 36:
 
@@ -26,7 +26,7 @@ cd apps/android
 
 ## Get started
 
-You need a Mac with Xcode 26 or later, an iPhone running iOS 26.1 or later, an Apple Account, and an OpenAI API project with billing and access to GPT-Live-1 and GPT-5.6 Luna. A ChatGPT subscription does not provide API credit.
+You need a Mac with Xcode 26 or later, an iPhone running iOS 26.1 or later, an Apple Account, and either an OpenAI API project with billing or a Google AI Studio API key. A ChatGPT subscription does not provide API credit.
 
 ### Install with a local AI agent
 
@@ -49,8 +49,8 @@ Detect my connected iPhone, build with the configured signing team, install
 Mural and launch it. Tell me when I need to unlock the phone, trust this Mac
 or the developer profile, enable Developer Mode, or approve a system prompt.
 
-I will choose my learning and subtitle languages, then enter my own OpenAI
-API key in Settings > Advanced > Use your own API key. Do not ask me to paste
+I will choose my learning and subtitle languages, then choose OpenAI or Google AI Studio
+and enter its API key in Settings > Advanced > Use your own API key. Do not ask me to paste
 the key into chat, read it from Keychain, or put it in source files or logs.
 Leave managed accounts, hosted trials and purchases disabled.
 
@@ -67,7 +67,7 @@ Updating an earlier checkout? The iPhone project now lives in `apps/ios/`. Befor
 3. Select the **Mural** target, open **Signing & Capabilities**, enable automatic signing, and choose your team. For your own fork, replace the bundle identifier with a unique value such as `com.yourname.mural`. Keep that value stable for later updates.
 4. Connect and unlock your iPhone. Trust the Mac if prompted. Turn on **Settings → Privacy & Security → Developer Mode** on the phone, restart, and confirm the setting.
 5. Select **Mural** as the scheme and your iPhone as the destination, then click **Run**. If iOS asks you to trust the developer, do so in **Settings → General → VPN & Device Management**.
-6. Choose your learning and subtitle languages in the welcome screens. In **Settings → Advanced → Use your own API key**, save your own OpenAI project key. Start a conversation and allow microphone access.
+6. Choose your learning and subtitle languages in the welcome screens. In **Settings → Advanced → Use your own API key**, choose OpenAI or Google AI Studio and save that provider’s key. Start a conversation and allow microphone access.
 
 You should hear Mural greet you in your chosen language. You can now disconnect your phone from the Mac and use Wi-Fi or cellular.
 
@@ -83,17 +83,17 @@ A free Personal Team can run the app on your own phone; TestFlight and App Store
 - **A fresh start:** the Talk screen returns to its greeting 15 seconds after a conversation ends. Tap **New conversation** to reset immediately. Your saved conversations and learning remain.
 - **Local records:** export or import a JSON learning backup, delete a conversation, or delete all learning data from Settings.
 
-The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Spanish from Spain, international English, French from France, German from Germany, Italian from Italy, Brazilian Portuguese and Standard Mandarin with Simplified Chinese. Each language has its own conversation themes, teaching guidance and progress. Valid regional alternatives are accepted.
+The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Spanish from Spain, international English, French from France, German from Germany, Italian, Brazilian Portuguese, Standard Mandarin with Simplified Chinese, and Thai. Each language has its own conversation themes, teaching guidance and progress. Valid regional alternatives are accepted.
 
 On iPhone, Mandarin includes optional pinyin in Talk, transcripts and word details. Chinese word lookup uses word boundaries, and the original characters remain available for copying from transcripts. Pinyin uses system dictionary readings; names, ambiguous words and tone changes in connected speech still need listening checks. Voice accent and teaching guidance are model instructions, and fluent-speaker review is still needed before making pronunciation or learning-effectiveness claims.
 
 ## Privacy and API costs
 
-Mural stores conversations, vocabulary and preferences on your device. There is no Mural cloud sync, analytics SDK or advertising. The optional iPhone account feature stores signup data on the account service; conversations and vocabulary stay local. Your API key is stored in the device’s Keychain, excluded from learning exports, and sent only to OpenAI.
+Mural stores conversations, vocabulary and preferences on your device. There is no Mural cloud sync, analytics SDK or advertising. The optional iPhone account feature stores signup data on the account service; conversations and vocabulary stay local. The selected provider’s API key is stored in the device’s Keychain, excluded from learning exports, and sent only to that provider.
 
-During practice, audio, selected conversation text, learning context and requested searches go to OpenAI. Mural does not save raw audio. API requests set `store: false` where supported, but that does not disable all provider retention; OpenAI’s abuse-monitoring rules and your project’s settings still apply. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
+During practice, audio, selected conversation text, learning context and requested searches go to the selected provider. Mural does not save raw audio. OpenAI requests set `store: false`; Google requests use Google AI Studio’s `generateContent` and Live API directly. Provider retention, abuse-monitoring and project settings still apply. See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data) and [Google’s Gemini API privacy guidance](https://ai.google.dev/gemini-api/docs/usage-policies).
 
-OpenAI bills your project for voice, text and search. The app’s usage display is an estimate, and its conversation time limit is not a billing cap. Check your OpenAI project’s usage and spending settings.
+The provider bills your project for voice, text and search. The app’s usage display is an estimate, and its conversation time limit is not a billing cap. Check the selected provider’s usage and spending settings.
 
 ## Planned public service
 

@@ -201,11 +201,31 @@ object LanguageRegistry {
             "cabin" to ConversationTheme("cabin", "周末出游", "A change of scene", "mountain.2", "Local life", "一起设想一个周末旅行，选择城市、海边或乡村，讨论实际安排和喜欢做的事情。", 2),
             "traditions" to ConversationTheme("traditions", "日常习俗", "Small customs, big stories", "flag", "Local life", "用普通话聊日常习俗和节日。比较学习者熟悉的地方，避免把任何一种习惯说成所有人的共同体验。", 2))
     )
-    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin)
+    private val thai = LanguageModule(
+        id = "th",
+        name = "Thai",
+        nativeName = "ภาษาไทย",
+        variety = "Thailand",
+        locale = "th-TH",
+        greeting = "สวัสดี!",
+        greetingWord = "สวัสดี",
+        speechGuidance = "Use clear, natural Central Thai pronunciation. Treat tones, vowel length, final consonants and polite particles as meaningful when they affect understanding. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
+        writingGuidance = "Use natural modern Thai with Thai script and appropriate spacing between phrases. Keep polite particles and pronouns natural to the learner’s context. Do not append transliteration or translations to ordinary spoken replies; explain pronunciation briefly only when asked.",
+        lemmaGuidance = "Give vocabulary in natural Thai script and preserve the exact observed form and quote. Prefer useful dictionary forms or everyday chunks, and include polite particles only when they are part of the meaningful expression. Do not infer tone or pronunciation accuracy from typed text alone.",
+        topicPlaceholder = "อาหาร การเดินทาง เพลง ชีวิตประจำวัน…",
+        lookupUnavailableReply = "ตอนนี้ฉันยังตรวจสอบเรื่องนี้ไม่ได้ ถ้าคุณต้องการ เราคุยเกี่ยวกับภาพรวมของหัวข้อนี้ก่อนได้นะ",
+        teachingFocus = listOf("Greetings, introductions, names, polite particles and useful everyday chunks such as ผมชื่อ and ฉันอยากได้.", "Everyday questions, classifiers, numbers, food and short present-time exchanges.", "Connected stories, completed actions, time expressions and familiar situations.", "Reasons and opinions, comparisons, requests and natural linking phrases.", "Nuance, conditionals, register, particles and regional variation.", "Flexible advanced discussion with precise, natural Thai and context-appropriate politeness."),
+        themeOverrides = mapOf("coffee" to ConversationTheme("coffee", "ดื่มกาแฟกันไหม", "Something warm, please", "cup.and.saucer", "Everyday", "Meet in a neighbourhood café in Thailand. Order a drink and chat in Thai, following the learner’s interests.", 0),
+            "groceries" to ConversationTheme("groceries", "ไปตลาดกัน", "Find something good", "basket", "Everyday", "Shop for everyday ingredients at a Thai market or supermarket. Practise quantities, prices and polite questions while respecting regional food vocabulary.", 2),
+            "travel" to ConversationTheme("travel", "สถานีต่อไป", "A ticket to somewhere", "tram", "Everyday", "Plan an imagined trip in Thailand. Discuss transport, directions and tickets without inventing current schedules.", 1),
+            "cabin" to ConversationTheme("cabin", "เที่ยวสุดสัปดาห์", "A change of scene", "mountain.2", "Local life", "Imagine a weekend away in a city, by the sea or in the countryside. Discuss practical plans and things the learner enjoys.", 2),
+            "traditions" to ConversationTheme("traditions", "เรื่องเล็ก ๆ ในชีวิตประจำวัน", "Small customs, big stories", "flag", "Local life", "Talk in Thai about everyday customs and festivals. Compare experiences without treating any habit as universal.", 2))
+    )
+    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin, thai)
     fun get(id: String) = all.firstOrNull { it.id == id }
 }
 
 object MeaningLanguages {
-    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian")
-    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"
+    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Thai", "Polish", "Arabic", "Ukrainian")
+    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Thai" to "สวัสดี!", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"
 }

@@ -9,7 +9,7 @@
 <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
 <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 <key>LSRequiresIPhoneOS</key><true/>
-<key>NSMicrophoneUsageDescription</key><string>Mural listens while you practise speaking. Your voice is sent to OpenAI during a conversation.</string>
+<key>NSMicrophoneUsageDescription</key><string>Mural listens while you practise speaking. Your voice is sent to the AI provider you select during a conversation.</string>
 <key>UIUserInterfaceStyle</key><string>Light</string>
 <key>UILaunchScreen</key><dict/>
 <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>

@@ -1,5 +1,10 @@
 package chat.mural.ui
 
+import android.graphics.Color
+import android.net.Uri
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,6 +59,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import chat.mural.MuralViewModel
 import chat.mural.R
@@ -170,6 +176,9 @@ private fun CurrentTopicDialog(
                 }
                 vm.topicResult?.let { brief ->
                     item { Text(inlineMarkdown(brief.text), style = MaterialTheme.typography.bodyLarge) }
+                    brief.searchEntryPointHTML?.takeIf { it.isNotBlank() }?.let { html ->
+                        item { GoogleSearchSuggestions(html) }
+                    }
                     if (brief.sources.isNotEmpty()) {
                         item { Text(stringResource(R.string.topics_sources_heading), fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() }) }
                         items(brief.sources.filter { it.safeUrl() != null }) { source ->
@@ -192,6 +201,38 @@ private fun CurrentTopicDialog(
                 item { MuralTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.common_close)) } }
             }
         }
+    }
+}
+
+@Composable
+internal fun GoogleSearchSuggestions(html: String) {
+    val uriHandler = LocalUriHandler.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.topics_google_search_suggestions), style = MaterialTheme.typography.labelMedium, color = MuralColors.Secondary)
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    setBackgroundColor(Color.TRANSPARENT)
+                    settings.javaScriptEnabled = false
+                    settings.domStorageEnabled = false
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                            val uri: Uri = request.url
+                            if (uri.scheme == "https" && !uri.host.isNullOrBlank()) uriHandler.openUri(uri.toString())
+                            return true
+                        }
+                    }
+                }
+            },
+            update = { view ->
+                if (view.tag != html) {
+                    view.tag = html
+                    val policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">"
+                    view.loadDataWithBaseURL("https://www.google.com/", policy + html, "text/html", "UTF-8", null)
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(104.dp),
+        )
     }
 }
 
