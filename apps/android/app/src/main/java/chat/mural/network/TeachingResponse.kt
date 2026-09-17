@@ -62,7 +62,8 @@ internal fun decodeChatCompletion(response: JsonObject): APIResult {
     ))
 }
 
-private val THINKING = Regex("<think>[\\s\\S]*?</think>")
+/** Inline reasoning, including a block the server cut off before its closing tag. */
+private val THINKING = Regex("<think>[\\s\\S]*?(?:</think>|$)")
 
 private fun isSafeSourceUrl(value: String): Boolean = try {
     val uri = URI(value)

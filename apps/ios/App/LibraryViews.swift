@@ -403,9 +403,15 @@ struct SettingsView: View {
                         LabeledContent("Voice estimate", value: String(format: "$%.2f USD", totalVoiceSeconds / 60 * 0.05))
                     }
                     LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
-                    Link("OpenAI usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
+                    if !savedEndpoint.enabled {
+                        Link("OpenAI usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
+                    }
                 } header: { Text("Keep it comfortable") } footer: {
-                    Text("Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
+                    if savedEndpoint.enabled {
+                        Text("Your custom endpoint bills or limits usage, so its own dashboard or logs are authoritative. The time limit is local, not a billing cap.")
+                    } else {
+                        Text("Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
+                    }
                 }
                 Section {
                     Button("Export learning backup", systemImage: "square.and.arrow.up") {
@@ -426,9 +432,14 @@ struct SettingsView: View {
                 } header: { Text("Help and privacy") }
                 Section {
                     Text("Mural 0.1 · Personal build").font(.footnote)
-                    Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
-                    Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
-                    Text("Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.").font(.footnote)
+                    if savedEndpoint.enabled {
+                        Text("Voice: \(savedEndpoint.speechModel) · Teacher: \(savedEndpoint.model)").font(.footnote)
+                        Text("Audio and selected text go to your custom endpoint while you practise, under that server's retention rules. Raw audio is not saved by Mural.").font(.footnote)
+                    } else {
+                        Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
+                        Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                        Text("Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.").font(.footnote)
+                    }
                     Button("Open-source notices") { notices = true }
                 }
             }.scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.secondary)

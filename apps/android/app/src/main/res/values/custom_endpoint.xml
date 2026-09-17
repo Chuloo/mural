@@ -16,6 +16,9 @@
     <string name="settings_endpoint_voice">Voice name</string>
     <string name="settings_endpoint_remove">Remove endpoint</string>
     <string name="notice_endpoint_saved">Endpoint saved.</string>
+    <string name="settings_usage_footer_endpoint">Your custom endpoint bills or limits usage, so its own dashboard or logs are authoritative. The time limit is local, not a billing cap.</string>
+    <string name="settings_models_footer_endpoint">Voice: %1$s · Teacher: %2$s</string>
+    <string name="settings_data_use_footer_endpoint">Audio and selected text go to your custom endpoint while you practise, under that server\'s retention rules. Raw audio is not saved by Mural.</string>
     <string name="error_endpoint_key_invalid">Enter the API key without spaces or line breaks.</string>
     <string name="error_endpoint_invalid">Enter an https:// base URL and a chat model.</string>
     <string name="error_endpoint_voice_missing">Add a transcription model, speech model and voice for your custom endpoint in Settings to start a conversation.</string>

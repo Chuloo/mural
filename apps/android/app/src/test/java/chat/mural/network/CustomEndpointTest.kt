@@ -86,8 +86,8 @@ class CustomEndpointTest {
 
         val limited = TurnCollector(20)
         var cut: List<ShortArray>? = null
-        repeat(1_503) { limited.feed(frame(2_000), 0.08)?.let { cut = it } }
-        assertEquals("a turn cut at the length limit keeps all its speech", 1_503, checkNotNull(cut).size)
+        repeat(1_500) { limited.feed(frame(2_000), 0.08)?.let { cut = it } }
+        assertEquals("a turn cut at the length limit keeps all its speech", 1_500, checkNotNull(cut).size)
         assertEquals(0, limited.trailingSilenceMS)
     }
 
@@ -180,5 +180,8 @@ class CustomEndpointTest {
 
         feed(0.08, 3)
         assertEquals("a click is not a turn", SpeechDetector.Event.DISCARD, feed(0.002, 60).last())
+
+        feed(0.08, 13)
+        assertEquals("a 260 ms \"sí\" counts its onset and isn't discarded", SpeechDetector.Event.END, feed(0.002, 60).last())
     }
 }

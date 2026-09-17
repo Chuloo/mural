@@ -21,9 +21,13 @@ final class SpeechTurnTests: XCTestCase {
         _ = feed(0.08, 3)
         XCTAssertEqual(feed(0.002, 60), .discard, "a click is not a turn")
 
+        _ = feed(0.08, 3)
+        _ = feed(0.08, 10)
+        XCTAssertEqual(feed(0.002, 60), .end, "a 260 ms \"sí\" counts its onset and isn't discarded")
+
         var limited = SpeechDetector()
         var last = SpeechDetector.Event.none
-        for _ in 0..<1_503 { last = limited.feed(0.08) }
+        for _ in 0..<1_500 { last = limited.feed(0.08) }
         XCTAssertEqual(last, .end, "a turn at the length limit still ends")
         XCTAssertEqual(limited.silenceMS, 0, "there is no silence to trim when speech hits the limit")
     }

@@ -65,17 +65,31 @@ struct CustomEndpoint: Codable, Equatable {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw APIError.invalidResponse }
         return json
     }
-    private func send(_ target: Target, _ path: String, body: Data, contentType: String) async throws -> Data {
+    /// The same limits as Android: a faulty server can't exhaust memory with an endless JSON or audio body.
+    static let jsonLimit = 1_048_576, audioLimit = 16_777_216, errorBodyLimit = 16_384
+    private func send(_ target: Target, _ path: String, body: Data, contentType: String, limit: Int = APIClient.jsonLimit) async throws -> Data {
         guard let url = URL(string: path, relativeTo: target.base)?.absoluteURL else { throw APIError.invalidResponse }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         if let key = target.key { request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization") }
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        let (data, response) = try await session.data(for: request)
-        try Task.checkCancellation()
+        let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
+        let succeeded = (200..<300).contains(http.statusCode)
+        // Error bodies only supply a short error code, so they're read no further than that.
+        let cap = succeeded ? limit : Self.errorBodyLimit
+        if succeeded && http.expectedContentLength > Int64(cap) { throw APIError.invalidResponse }
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < cap else {
+                if succeeded { throw APIError.invalidResponse }
+                break
+            }
+            data.append(byte)
+        }
+        try Task.checkCancellation()
+        guard succeeded else {
             // OpenAI failures name OpenAI and its billing; a custom server's failure must not.
             if target.endpoint != nil { throw APIError.endpoint(http.statusCode) }
             throw ProviderFailure(status: http.statusCode, body: data, reference: http.value(forHTTPHeaderField: "x-request-id"))
@@ -105,7 +119,7 @@ struct CustomEndpoint: Codable, Equatable {
         let target = try resolveTarget()
         guard let endpoint = target.endpoint else { throw APIError.invalidResponse }
         let body: [String: Any] = ["model": endpoint.speechModel, "voice": endpoint.voice, "input": text, "response_format": "wav"]
-        return try await send(target, "audio/speech", body: try JSONSerialization.data(withJSONObject: body), contentType: "application/json")
+        return try await send(target, "audio/speech", body: try JSONSerialization.data(withJSONObject: body), contentType: "application/json", limit: Self.audioLimit)
     }
     func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false) async throws -> APIResult {
         let target = try resolveTarget()
@@ -140,11 +154,13 @@ struct CustomEndpoint: Codable, Equatable {
         }
         if let u = json["usage"] as? [String: Any] { usage.input = u["input_tokens"] as? Int ?? 0; usage.output = u["output_tokens"] as? Int ?? 0 }
         // A local reasoning model behind a Responses endpoint can inline its thinking too.
-        text = text.replacingOccurrences(of: "<think>[\\s\\S]*?</think>", with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: Self.thinking, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw APIError.incomplete }
         return APIResult(text: text, sources: sources, usage: usage)
     }
+    /// Inline reasoning, including a block the server cut off before its closing tag.
+    static let thinking = "<think>[\\s\\S]*?(?:</think>|$)"
     /// Compatible servers carry no web citations. Local reasoning models may inline thinking, which is never spoken or stored.
     static func decodeChatCompletion(_ json: [String: Any]) throws -> APIResult {
         guard let choice = (json["choices"] as? [[String: Any]])?.first, let message = choice["message"] as? [String: Any] else { throw APIError.incomplete }
@@ -152,7 +168,7 @@ struct CustomEndpoint: Codable, Equatable {
         if message["refusal"] is String || finish == "content_filter" { throw APIError.refused }
         if finish == "length" { throw APIError.incomplete }
         let text = (message["content"] as? String ?? "")
-            .replacingOccurrences(of: "<think>[\\s\\S]*?</think>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: Self.thinking, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw APIError.incomplete }
         let usage = json["usage"] as? [String: Any]

@@ -26,7 +26,9 @@ public struct SpeechDetector: Sendable {
             guard loud else { onset = 0; floor += (level - floor) * Self.floorAdaptation; return .none }
             onset += 1
             guard onset * frameMS >= Self.onsetMS else { return .none }
-            active = true; onset = 0; length = 0; voiced = 0; silenceMS = 0
+            // The onset frames are speech too; without them a short "sí" would be discarded as a click.
+            let onsetDuration = onset * frameMS
+            active = true; onset = 0; length = onsetDuration; voiced = onsetDuration; silenceMS = 0
             return .start
         }
         length += frameMS

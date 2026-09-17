@@ -159,7 +159,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
             item {
                 val usage = UsageSummary.of(vm.archive.sessions)
-                SettingsGroup(stringResource(R.string.settings_keep_comfortable), stringResource(R.string.settings_usage_footer)) {
+                val custom = vm.endpoint.enabled // OpenAI pricing, billing and data controls don't apply to a custom endpoint.
+                SettingsGroup(stringResource(R.string.settings_keep_comfortable),
+                    stringResource(if (custom) R.string.settings_usage_footer_endpoint else R.string.settings_usage_footer)) {
                     val limits = (listOf(5, 10, 15, 20, 30, 60) + prefs.sessionMinutes).distinct().sorted()
                     SettingsChoiceRow(stringResource(R.string.settings_conversation_limit), stringResource(R.string.settings_limit_minutes, prefs.sessionMinutes),
                         prefs.sessionMinutes.toString(), limits.map { it.toString() to stringResource(R.string.settings_limit_minutes, it) },
@@ -167,15 +169,16 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_voice_time_label), usage.voiceTime)
                     SettingsDivider()
-                    // The estimate prices OpenAI voice; a custom endpoint bills or limits usage itself.
-                    if (!vm.endpoint.enabled) {
+                    if (!custom) {
                         SettingsRow(stringResource(R.string.settings_voice_estimate_label), usage.voiceEstimate)
                         SettingsDivider()
                     }
                     SettingsRow(stringResource(R.string.settings_search_calls_label), usage.searchCalls.toString())
-                    SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_usage_billing_link), tint = MuralColors.Secondary,
-                        onClick = { open("https://platform.openai.com/usage") })
+                    if (!custom) {
+                        SettingsDivider()
+                        SettingsRow(stringResource(R.string.settings_usage_billing_link), tint = MuralColors.Secondary,
+                            onClick = { open("https://platform.openai.com/usage") })
+                    }
                 }
             }
             item {
@@ -212,12 +215,15 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 SettingsGroup {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.settings_app_version_footer, version), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
-                        Text(stringResource(R.string.settings_models_footer), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
+                        val custom = vm.endpoint.enabled
+                        Text(if (custom) stringResource(R.string.settings_models_footer_endpoint, vm.endpoint.speechModel, vm.endpoint.model)
+                            else stringResource(R.string.settings_models_footer), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
                     }
                     SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_openai_data_controls), tint = MuralColors.Secondary,
+                    if (!vm.endpoint.enabled) SettingsRow(stringResource(R.string.settings_openai_data_controls), tint = MuralColors.Secondary,
                         onClick = { open("https://developers.openai.com/api/docs/guides/your-data") })
-                    Text(stringResource(R.string.settings_data_use_footer), style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(if (vm.endpoint.enabled) R.string.settings_data_use_footer_endpoint else R.string.settings_data_use_footer),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_open_source_notices), chevron = true, onClick = { notices = true })

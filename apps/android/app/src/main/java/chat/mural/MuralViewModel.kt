@@ -643,8 +643,17 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             presentError(getApplication<Application>().getString(R.string.error_endpoint_invalid)); return false
         }
         try {
-            if (key.isNotBlank()) endpoints.credentials.save(key)
-            endpoints.save(clean); endpoint = clean
+            if (key.isNotBlank()) {
+                // The key and settings live in separate stores; never leave a new key paired with the old server URL.
+                val previousKey = endpoints.credentials.read()
+                endpoints.credentials.save(key)
+                try { endpoints.save(clean) } catch (e: Exception) {
+                    runCatching { previousKey?.let(endpoints.credentials::save) ?: endpoints.credentials.delete() }
+                        .onFailure { runCatching { endpoints.credentials.delete() } }
+                    throw e
+                }
+            } else endpoints.save(clean)
+            endpoint = clean
             if (clean.enabled) { selectConversationProvider(ConversationProvider.PERSONAL_KEY); recoverFinalAssessments() }
             notice = getApplication<Application>().getString(R.string.notice_endpoint_saved)
             return true

@@ -97,7 +97,7 @@ def parse_json(data, what):
 
 def strip_thinking(text):
     """The app removes inline reasoning from both API styles before speaking or storing a reply."""
-    return re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+    return re.sub(r"<think>[\s\S]*?(?:</think>|$)", "", text).strip()  # Also an unclosed block.
 
 
 def base_url_error(value):
@@ -279,9 +279,13 @@ def main():
             result = json.loads(text)
         except ValueError:
             raise Failure("the model ignored the JSON schema; learning progress would not be recorded")
+        if not isinstance(result, dict):
+            raise Failure("the assessment is not a JSON object; learning progress would not be recorded")
         missing = {"outcome", "suggestedLevel", "nextGoal", "capability", "words"} - set(result)
         if missing:
             raise Failure(f"JSON is missing {sorted(missing)}; learning progress would not be recorded")
+        if not isinstance(result["words"], list):
+            raise Failure('JSON field "words" is not a list; learning progress would not be recorded')
         return f"outcome={result['outcome']}, level={result['suggestedLevel']}, {len(result['words'])} words logged"
 
     audio = {}

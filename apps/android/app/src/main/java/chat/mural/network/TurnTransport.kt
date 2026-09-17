@@ -325,7 +325,9 @@ internal class SpeechDetector(private val frameMillis: Int) {
         if (!active) {
             if (!loud) { onset = 0; floor += (level - floor) * FLOOR_ADAPTATION; return Event.NONE }
             if (++onset * frameMillis < ONSET_MS) return Event.NONE
-            active = true; onset = 0; length = 0; voiced = 0; silence = 0
+            // The onset frames are speech too; without them a short "sí" would be discarded as a click.
+            val onsetMillis = onset * frameMillis
+            active = true; onset = 0; length = onsetMillis; voiced = onsetMillis; silence = 0
             return Event.START
         }
         length += frameMillis

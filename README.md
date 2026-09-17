@@ -89,7 +89,7 @@ On iPhone, Mandarin includes optional pinyin in Talk, transcripts and word detai
 
 ## Privacy and API costs
 
-Mural stores conversations, vocabulary and preferences on your device. There is no Mural cloud sync, analytics SDK or advertising. The optional iPhone account feature stores signup data on the account service; conversations and vocabulary stay local. Your API key is stored in the device’s Keychain, excluded from learning exports, and sent only to OpenAI. A [custom endpoint](docs/custom-endpoints.md) receives the same conversation data instead of OpenAI, and its key is sent only to that server.
+Mural stores conversations, vocabulary and preferences on your device. There is no Mural cloud sync, analytics SDK or advertising. The optional iPhone account feature stores signup data on the account service; conversations and vocabulary stay local. Your API key is stored in the Keychain on iPhone or encrypted with Android Keystore on Android, excluded from learning exports, and sent only to OpenAI. A [custom endpoint](docs/custom-endpoints.md) receives the same conversation data instead of OpenAI, and its key is sent only to that server.
 
 During practice, audio, selected conversation text, learning context and requested searches go to OpenAI, or to your custom endpoint when one is turned on. Mural does not save raw audio. API requests set `store: false` where supported, but that does not disable all provider retention; OpenAI’s abuse-monitoring rules and your project’s settings still apply. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
 
