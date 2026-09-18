@@ -100,7 +100,8 @@ data class SessionRecord(
 data class Preferences(
     var learningLanguageID: String = LanguageRegistry.defaultID, var meaningVisible: Boolean = true,
     var meaningLanguage: String = "English", var sessionMinutes: Int = 15, var hiddenWords: List<String> = emptyList(),
-    var interests: String = "", var hasOnboarded: Boolean = false, var aiConsentVersion: Int? = null
+    var interests: String = "", var hasOnboarded: Boolean = false, var aiConsentVersion: Int? = null,
+    var darkMode: Boolean = false
 )
 @Serializable data class Archive(var schemaVersion: Int = 2, var sessions: MutableList<SessionRecord> = mutableListOf(), var preferences: Preferences = Preferences())
 class ArchiveError private constructor(val kind: Kind) : Exception() {

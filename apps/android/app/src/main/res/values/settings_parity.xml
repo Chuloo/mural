@@ -10,5 +10,7 @@
     <string name="settings_byok_version_footer">An optional way to use Mural. OpenAI bills usage on your own key directly to you.</string>
     <string name="settings_key_owner_footer">Your OpenAI account pays for usage. The key stays encrypted on this phone and is sent only to OpenAI.</string>
     <string name="settings_keep_comfortable">Keep it comfortable</string>
+    <string name="settings_dark_mode_title">Appearance</string>
+    <string name="settings_dark_mode_label">Dark mode</string>
     <string name="settings_limit_minutes">%1$d minutes</string>
 </resources>

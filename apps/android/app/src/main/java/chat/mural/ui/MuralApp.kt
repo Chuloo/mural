@@ -94,7 +94,7 @@ fun MuralApp(
         }
     }
 
-    MuralTheme {
+    MuralTheme(darkMode = prefs.darkMode) {
         Surface(Modifier.fillMaxSize(), color = MuralColors.Cream) {
             if (vm.loadingHistory) {
                 Box(Modifier.fillMaxSize().testTag("history-loading"), contentAlignment = Alignment.Center) {

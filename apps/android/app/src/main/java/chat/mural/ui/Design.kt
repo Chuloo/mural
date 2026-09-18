@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,35 +46,85 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+@Immutable
+data class MuralColorSet(
+    val Cream: Color,
+    val CreamRaised: Color,
+    val Surface: Color,
+    val SurfaceBright: Color,
+    val Ink: Color,
+    val Secondary: Color,
+    val Orange: Color,
+    val Peach: Color,
+    val Lilac: Color,
+    val Sage: Color,
+    val Butter: Color,
+    val Red: Color,
+    val Panels: List<Color>,
+)
+
+val MuralColorsLight = MuralColorSet(
+    Cream = Color(0xFFFFF9EE),
+    CreamRaised = Color(0xFFFFFDF8),
+    Surface = Color(0xFFFFFFFF),
+    SurfaceBright = Color(0xFFFFF2E6),
+    Ink = Color(0xFF362A22),
+    Secondary = Color(0xFF735B4A),
+    Orange = Color(0xFFFF8A4D),
+    Peach = Color(0xFFFFE3CF),
+    Lilac = Color(0xFFEEE6FA),
+    Sage = Color(0xFFEAEFD6),
+    Butter = Color(0xFFFFF1C7),
+    Red = Color(0xFFB34B3F),
+    Panels = listOf(Color(0xFFFFE3CF), Color(0xFFEEE6FA), Color(0xFFEAEFD6), Color(0xFFFFF1C7)),
+)
+
+val MuralColorsDark = MuralColorSet(
+    Cream = Color(0xFF1A1614),
+    CreamRaised = Color(0xFF242019),
+    Surface = Color(0xFF1E1B16),
+    SurfaceBright = Color(0xFF2A2520),
+    Ink = Color(0xFFF5EDE4),
+    Secondary = Color(0xFFB8A898),
+    Orange = Color(0xFFFF9A5C),
+    Peach = Color(0xFF3D2E22),
+    Lilac = Color(0xFF2E2640),
+    Sage = Color(0xFF2A3020),
+    Butter = Color(0xFF3D3420),
+    Red = Color(0xFFE86B5F),
+    Panels = listOf(Color(0xFF3D2E22), Color(0xFF2E2640), Color(0xFF2A3020), Color(0xFF3D3420)),
+)
+
 object MuralColors {
-    val Cream = Color(0xFFFFF9EE)
-    val CreamRaised = Color(0xFFFFFDF8)
-    val Surface = Color(0xFFFFFFFF)
-    val SurfaceBright = Color(0xFFFFF2E6)
-    val Ink = Color(0xFF362A22)
-    val Secondary = Color(0xFF735B4A)
-    val Orange = Color(0xFFFF8A4D)
-    val Peach = Color(0xFFFFE3CF)
-    val Lilac = Color(0xFFEEE6FA)
-    val Sage = Color(0xFFEAEFD6)
-    val Butter = Color(0xFFFFF1C7)
-    val Red = Color(0xFFB34B3F)
-    val Panels = listOf(Peach, Lilac, Sage, Butter)
+    var current: MuralColorSet = MuralColorsLight
+    val Cream get() = current.Cream
+    val CreamRaised get() = current.CreamRaised
+    val Surface get() = current.Surface
+    val SurfaceBright get() = current.SurfaceBright
+    val Ink get() = current.Ink
+    val Secondary get() = current.Secondary
+    val Orange get() = current.Orange
+    val Peach get() = current.Peach
+    val Lilac get() = current.Lilac
+    val Sage get() = current.Sage
+    val Butter get() = current.Butter
+    val Red get() = current.Red
+    val Panels get() = current.Panels
 }
 
 private val MuralScheme = lightColorScheme(
-    primary = MuralColors.Orange,
-    onPrimary = MuralColors.Ink,
-    primaryContainer = MuralColors.Peach,
-    onPrimaryContainer = MuralColors.Ink,
-    secondary = MuralColors.Secondary,
-    background = MuralColors.Cream,
-    onBackground = MuralColors.Ink,
-    surface = MuralColors.Surface,
-    onSurface = MuralColors.Ink,
-    surfaceVariant = MuralColors.SurfaceBright,
-    onSurfaceVariant = MuralColors.Secondary,
-    error = MuralColors.Red,
+    primary = MuralColorsLight.Orange,
+    onPrimary = MuralColorsLight.Ink,
+    primaryContainer = MuralColorsLight.Peach,
+    onPrimaryContainer = MuralColorsLight.Ink,
+    secondary = MuralColorsLight.Secondary,
+    background = MuralColorsLight.Cream,
+    onBackground = MuralColorsLight.Ink,
+    surface = MuralColorsLight.Surface,
+    onSurface = MuralColorsLight.Ink,
+    surfaceVariant = MuralColorsLight.SurfaceBright,
+    onSurfaceVariant = MuralColorsLight.Secondary,
+    error = MuralColorsLight.Red,
 )
 
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
@@ -106,8 +158,37 @@ private val MuralTypography = Typography(
 )
 
 @Composable
-fun MuralTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = MuralScheme, typography = MuralTypography,
+fun MuralTheme(darkMode: Boolean = false, content: @Composable () -> Unit) {
+    val colors = if (darkMode) MuralColorsDark else MuralColorsLight
+    MuralColors.current = colors
+    val colorScheme = if (darkMode) darkColorScheme(
+        primary = colors.Orange,
+        onPrimary = colors.Ink,
+        primaryContainer = colors.Peach,
+        onPrimaryContainer = colors.Ink,
+        secondary = colors.Secondary,
+        background = colors.Cream,
+        onBackground = colors.Ink,
+        surface = colors.Surface,
+        onSurface = colors.Ink,
+        surfaceVariant = colors.SurfaceBright,
+        onSurfaceVariant = colors.Secondary,
+        error = colors.Red,
+    ) else lightColorScheme(
+        primary = colors.Orange,
+        onPrimary = colors.Ink,
+        primaryContainer = colors.Peach,
+        onPrimaryContainer = colors.Ink,
+        secondary = colors.Secondary,
+        background = colors.Cream,
+        onBackground = colors.Ink,
+        surface = colors.Surface,
+        onSurface = colors.Ink,
+        surfaceVariant = colors.SurfaceBright,
+        onSurfaceVariant = colors.Secondary,
+        error = colors.Red,
+    )
+    MaterialTheme(colorScheme = colorScheme, typography = MuralTypography,
         shapes = androidx.compose.material3.Shapes(
             extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
             small = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
