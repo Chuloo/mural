@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let german = LanguageModule(
-        id: "de", name: "German", nativeName: "Deutsch", variety: "Germany", locale: "de-DE",
+        id: "de", name: "German", nativeName: "Deutsch", variety: "Germany", locale: "de-DE", usesPlatformWordSegmentation: false,
         greeting: "Hallo!", greetingWord: "hallo",
         speechGuidance: "Use clear, natural Standard German as spoken in Germany. Use du for friendly conversation and Sie when the situation calls for formality. Accept valid Austrian, Swiss and other regional pronunciation, vocabulary and grammar. Do not treat a regional difference or a non-native accent alone as an error. Correct pronunciation only when supported by the audio, not a transcript alone.",
         writingGuidance: "Use standard German spelling, noun capitalization, umlauts and ß. Accept Swiss ss spellings and valid regional wording. Match the register to the situation.",

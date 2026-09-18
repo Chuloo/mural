@@ -178,13 +178,13 @@
     <string name="settings_voice_estimate_label">Estimación de voz</string>
     <string name="settings_search_calls_label">Búsquedas registradas</string>
     <string name="settings_usage_billing_link">Uso y facturación de OpenAI</string>
-    <string name="settings_usage_footer">La estimación de voz usa 0,05 USD/min a fecha de 11 de septiembre de 2026. La traducción, la enseñanza y las búsquedas se cobran aparte. Una solicitud interrumpida puede cobrarse sin quedar registrada aquí. Tu panel de OpenAI es la referencia. La duración orientativa es local, no un tope de gasto.</string>
+    <string name="settings_usage_footer">El tiempo de voz registrado es local. La traducción, la enseñanza y las búsquedas pueden cobrarse aparte. Una solicitud interrumpida puede cobrarse sin quedar registrada aquí. Tu panel de OpenAI es la referencia. La duración orientativa es local, no un tope de gasto.</string>
     <string name="settings_google_usage_billing_link">Uso y facturación de Google AI Studio</string>
     <string name="settings_google_usage_footer">Los precios y el uso de Google AI Studio varían según el modelo y el proyecto. Consulta tu panel de Google AI Studio; la duración orientativa es local, no un tope de gasto.</string>
     <string name="settings_section_ai_permission">Permiso para IA</string>
     <string name="settings_ai_consent_accepted">Aceptado para esta versión</string>
     <string name="settings_ai_consent_not_accepted">No aceptado</string>
-    <string name="settings_ai_permission_summary">Con permiso, Mural envía audio y el texto elegido al proveedor de IA seleccionado. Puedes usar el historial y las palabras sin concederlo.</string>
+    <string name="settings_ai_permission_summary">Con permiso, Mural envía audio, el texto elegido y el texto de las búsquedas de temas al proveedor de IA seleccionado. Puedes usar el historial y las palabras sin concederlo.</string>
     <string name="settings_revoke_consent_button">Retirar permiso</string>
     <string name="settings_review_consent_button">Revisar y aceptar</string>
     <string name="settings_section_your_data">Tus datos</string>
@@ -244,7 +244,7 @@
 
     <!-- AI consent -->
     <string name="consent_title">Antes de conversar.</string>
-    <string name="consent_ai_summary">Con tu permiso, Mural envía audio y el texto que elijas al proveedor de IA seleccionado para ofrecer conversaciones y significados.</string>
+    <string name="consent_ai_summary">Con tu permiso, Mural envía audio, el texto que elijas y el texto de las búsquedas de temas al proveedor de IA seleccionado para ofrecer conversaciones y significados. Se aplican las reglas de conservación del proveedor.</string>
     <string name="consent_local_storage_note">Tu historial de aprendizaje se guarda en este dispositivo. Mural no guarda audio sin procesar. Puedes consultar tus palabras y conversaciones sin aceptar.</string>
     <string name="consent_privacy_policy_link">Ver política de privacidad</string>
     <string name="consent_agree_button">Aceptar y continuar</string>

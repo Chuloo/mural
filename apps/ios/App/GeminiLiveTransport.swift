@@ -22,12 +22,20 @@ import AVFoundation
     private var connectionGeneration = 0
     private var sessionStarted = false
     private var usageReported = false
+    private var apiKey = ""
+    private var instructions = ""
+    private var socketReady = false
+    private var sessionResumptionHandle: String?
+    private var activeResumptionHandle: String?
+    private var reconnectTask: Task<Void, Never>?
+    private var reconnectDeadline: Date?
+    private var reconnectAttempts = 0
 
     func connect(key: String, instructions: String, history: [[String: Any]]) async throws {
         disconnect()
-        connectionGeneration &+= 1
-        let generation = connectionGeneration
         closing = false; muted = false; connectedAt = .now; pendingHistory = history; sessionStarted = false; usageReported = false
+        apiKey = key; self.instructions = instructions
+        sessionResumptionHandle = nil; activeResumptionHandle = nil; reconnectAttempts = 0
         let granted = await AVAudioApplication.requestRecordPermission()
         guard granted else { throw LiveTransport.TransportError.microphone }
         try Task.checkCancellation()
@@ -37,28 +45,39 @@ import AVFoundation
         try audio.setActive(true)
         ownsAudioActivation = true
 
+        try await openSocket(resumptionHandle: nil)
+    }
+
+    private func openSocket(resumptionHandle: String?) async throws {
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
+        activeResumptionHandle = resumptionHandle
+        socketReady = false
         guard var components = URLComponents(string: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent") else {
             throw LiveTransport.TransportError.connection
         }
-        components.queryItems = [URLQueryItem(name: "key", value: key)]
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         guard let url = components.url else { throw LiveTransport.TransportError.connection }
         let urlSession = URLSession(configuration: .ephemeral)
         session = urlSession
         let socket = urlSession.webSocketTask(with: url)
         self.socket = socket
         socket.resume()
-        let historyTurns = Self.historyTurns(history)
+        let historyTurns = Self.historyTurns(pendingHistory)
+        let sessionResumption: [String: Any] = resumptionHandle.map { ["handle": $0] } ?? [:]
         var setupBody: [String: Any] = [
             "model": "models/\(AIProvider.googleAIStudio.liveModel)",
             "generationConfig": [
                 "responseModalities": ["AUDIO"],
                 "speechConfig": ["voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Kore"]]]
             ],
-            "systemInstruction": ["parts": [["text": instructions]]],
+            "systemInstruction": ["parts": [["text": self.instructions]]],
             "inputAudioTranscription": [:],
-            "outputAudioTranscription": [:]
+            "outputAudioTranscription": [:],
+            "contextWindowCompression": ["slidingWindow": [String: Any]()],
+            "sessionResumption": sessionResumption
         ]
-        if !historyTurns.isEmpty { setupBody["historyConfig"] = ["initialHistoryInClientContent": true] }
+        if resumptionHandle == nil, !historyTurns.isEmpty { setupBody["historyConfig"] = ["initialHistoryInClientContent": true] }
         try await sendJSON(["setup": setupBody], socket: socket, generation: generation)
         receiveTask = Task { [weak self] in await self?.receiveLoop(socket: socket, generation: generation) }
     }
@@ -90,6 +109,8 @@ import AVFoundation
     func close() {
         guard !closing else { return }
         closing = true; muted = true
+        socketReady = false
+        reconnectTask?.cancel(); reconnectTask = nil; reconnectDeadline = nil
         _ = sendJSONImmediately(["realtimeInput": ["audioStreamEnd": true]])
         guard !usageReported else { return }
         usageReported = true
@@ -101,14 +122,17 @@ import AVFoundation
     func disconnect() {
         connectionGeneration &+= 1
         closing = true; muted = true
+        socketReady = false
+        reconnectTask?.cancel(); reconnectTask = nil; reconnectDeadline = nil
         receiveTask?.cancel(); receiveTask = nil
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
         session?.invalidateAndCancel(); session = nil
         stopAudio()
+        apiKey = ""; instructions = ""; pendingHistory = []; sessionResumptionHandle = nil; activeResumptionHandle = nil
         onLevels?(0, 0)
     }
 
-    private func startAudio(generation: Int) throws {
+    private func startAudio() throws {
         let engine = AVAudioEngine()
         let input = engine.inputNode
         let sourceFormat = input.inputFormat(forBus: 0)
@@ -129,7 +153,7 @@ import AVFoundation
                   let raw = converted.audioBufferList.pointee.mBuffers.mData else { return }
             let byteCount = Int(converted.frameLength) * Int(targetFormat.streamDescription.pointee.mBytesPerFrame)
             let data = Data(bytes: raw, count: byteCount)
-            Task { @MainActor [weak self] in self?.sendAudio(data, generation: generation) }
+            Task { @MainActor [weak self] in self?.sendAudio(data) }
         }
         let player = AVAudioPlayerNode()
         let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 24_000, channels: 1, interleaved: true)!
@@ -150,8 +174,8 @@ import AVFoundation
         }
     }
 
-    private func sendAudio(_ data: Data, generation: Int) {
-        guard !muted, !closing, self.connectionGeneration == generation, socket != nil else { return }
+    private func sendAudio(_ data: Data) {
+        guard !muted, !closing, socketReady, socket != nil else { return }
         inputLevel = min(1, Self.rms(data) * 7)
         onLevels?(inputLevel, player?.isPlaying == true ? 0.35 : 0)
         _ = sendJSONImmediately(["realtimeInput": ["audio": [
@@ -177,10 +201,13 @@ import AVFoundation
               (expectedGeneration == nil || connectionGeneration == expectedGeneration),
               let data = try? JSONSerialization.data(withJSONObject: object),
               let text = String(data: data, encoding: .utf8) else { return false }
+        let sendGeneration = connectionGeneration
         socket.send(.string(text)) { [weak self] error in
             guard let self, error != nil else { return }
             Task { @MainActor in
-                if !self.closing { self.onFailure?("The Google AI Studio voice connection couldn’t send an update.") }
+                if !self.closing, self.socket === socket, self.connectionGeneration == sendGeneration {
+                    self.connectionEnded(generation: sendGeneration)
+                }
             }
         }
         return true
@@ -208,27 +235,93 @@ import AVFoundation
                 @unknown default: break
                 }
             } catch {
-                if self.socket === socket, self.connectionGeneration == generation, !closing { onFailure?("The Google AI Studio voice connection ended. Check your key and connection, then try again.") }
+                if self.socket === socket, self.connectionGeneration == generation, !closing {
+                    connectionEnded(generation: generation)
+                }
                 return
             }
         }
     }
 
+    private func connectionEnded(generation: Int) {
+        guard self.connectionGeneration == generation, !closing else { return }
+        socketReady = false
+        if sessionResumptionHandle?.isEmpty == false {
+            scheduleReconnect(after: 0)
+        } else {
+            fail("The Google AI Studio voice connection ended. Check your key and connection, then try again.")
+        }
+    }
+
+    private func scheduleReconnect(after delay: TimeInterval) {
+        guard !closing else { return }
+        guard sessionResumptionHandle?.isEmpty == false else {
+            fail("The Google AI Studio voice connection ended. Check your key and connection, then try again.")
+            return
+        }
+        let deadline = Date().addingTimeInterval(max(0, delay))
+        if let reconnectDeadline, reconnectTask != nil, deadline >= reconnectDeadline { return }
+        reconnectTask?.cancel()
+        reconnectDeadline = deadline
+        let nanoseconds = UInt64(max(0, deadline.timeIntervalSinceNow) * 1_000_000_000)
+        reconnectTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: nanoseconds) } catch { return }
+            guard !Task.isCancelled else { return }
+            await self?.reconnect()
+        }
+    }
+
+    private func reconnect() async {
+        reconnectTask = nil; reconnectDeadline = nil
+        guard !closing, let handle = sessionResumptionHandle?.trimmingCharacters(in: .whitespacesAndNewlines), !handle.isEmpty else { return }
+        if reconnectAttempts >= 5 {
+            fail("The Google AI Studio voice connection could not be resumed. Check your connection, then try again.")
+            return
+        }
+        reconnectAttempts += 1
+        receiveTask?.cancel(); receiveTask = nil
+        socket?.cancel(with: .normalClosure, reason: nil); socket = nil
+        session?.invalidateAndCancel(); session = nil
+        do {
+            try await openSocket(resumptionHandle: handle)
+        } catch {
+            if !closing { scheduleReconnect(after: 1) }
+        }
+    }
+
+    private func fail(_ message: String) {
+        reconnectTask?.cancel(); reconnectTask = nil; reconnectDeadline = nil
+        guard !closing else { return }
+        onFailure?(message)
+    }
+
     private func handle(_ json: [String: Any], generation: Int) {
         guard self.connectionGeneration == generation, !closing else { return }
+        if let update = json["sessionResumptionUpdate"] as? [String: Any],
+           let handle = update["newHandle"] as? String,
+           !handle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sessionResumptionHandle = handle
+        }
+        if let goAway = json["goAway"] as? [String: Any] {
+            scheduleReconnect(after: Self.timeInterval(from: goAway["timeLeft"]))
+            return
+        }
         if json["setupComplete"] != nil {
-            guard !sessionStarted else { return }
+            socketReady = true
             do {
-                if audioEngine == nil { try startAudio(generation: generation) }
+                if audioEngine == nil { try startAudio() }
             } catch {
                 onFailure?("The Google AI Studio microphone couldn’t start.")
                 return
             }
-            if !pendingHistory.isEmpty, let socket { sendHistory(pendingHistory, socket: socket, generation: generation) }
-            sessionStarted = true
-            let session: [String: Any] = ["id": "gemini-live", "model": AIProvider.googleAIStudio.liveModel]
-            onEvent?(["type": "mural.session.created", "session": session])
-            onEvent?(["type": "session.started", "session": session])
+            reconnectAttempts = 0
+            if !sessionStarted {
+                if activeResumptionHandle == nil, !pendingHistory.isEmpty, let socket { sendHistory(pendingHistory, socket: socket, generation: generation) }
+                sessionStarted = true
+                let session: [String: Any] = ["id": "gemini-live", "model": AIProvider.googleAIStudio.liveModel]
+                onEvent?(["type": "mural.session.created", "session": session])
+                onEvent?(["type": "session.started", "session": session])
+            }
             return
         }
         if let error = json["error"] as? [String: Any] {
@@ -266,6 +359,15 @@ import AVFoundation
         player.scheduleBuffer(buffer)
         if !player.isPlaying { player.play() }
         onLevels?(muted ? 0 : inputLevel, 0.35)
+    }
+
+    private static func timeInterval(from value: Any?) -> TimeInterval {
+        if let number = value as? NSNumber { return max(0, number.doubleValue) }
+        guard let raw = value as? String else { return 0 }
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if text.hasSuffix("ms") { return max(0, (Double(String(text.dropLast(2))) ?? 0) / 1_000) }
+        if text.hasSuffix("s") { return max(0, Double(String(text.dropLast())) ?? 0) }
+        return max(0, Double(text) ?? 0)
     }
 
     private static func rms(_ data: Data) -> Double {

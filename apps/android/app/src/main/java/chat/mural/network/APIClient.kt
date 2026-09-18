@@ -143,6 +143,7 @@ class APIClient private constructor(
         val path = "models/${AIProvider.GOOGLE_AI_STUDIO.helperModel}:generateContent"
         val response = directPost(googleBaseUrl.newBuilder().addPathSegments(path).build(), key, body, "Google AI Studio", google = true)
         val candidate = response["candidates"]?.jsonArray?.firstOrNull()?.jsonObject ?: throw APIException.InvalidResponse
+        if (candidate["finishReason"]?.jsonPrimitive?.contentOrNull != "STOP") throw APIException.Incomplete
         val text = buildString {
             val parts = candidate["content"]?.jsonObject?.get("parts")?.jsonArray ?: JsonArray(emptyList())
             for (part in parts) append(part.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty())

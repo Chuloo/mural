@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -61,15 +62,31 @@ class GeminiLiveTransport(
     private var usageReported = false
     private var instructions = ""
     private var history = JsonArray(emptyList())
+    private var apiKey: String? = null
+    private var sessionResumptionHandle: String? = null
+    private var activeResumptionHandle: String? = null
+    private var reconnectJob: Job? = null
+    private var reconnectDueAt = Long.MAX_VALUE
+    private var reconnectAttempts = 0
 
     suspend fun connect(key: String, instructions: String, history: JsonArray) {
         disconnect()
         check(ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         this.instructions = instructions
         this.history = history
+        this.apiKey = key
+        sessionResumptionHandle = null
+        activeResumptionHandle = null
         connectedAt = System.currentTimeMillis()
         closing = false; muted = false; active = true; sessionStarted = false; usageReported = false
+        reconnectAttempts = 0
+        openSocket(null)
+    }
+
+    private fun openSocket(resumptionHandle: String?) {
+        val key = apiKey ?: return
         val generation = connectionGeneration.incrementAndGet()
+        activeResumptionHandle = resumptionHandle
         val url = HttpUrl.Builder()
             .scheme("wss")
             .host("generativelanguage.googleapis.com")
@@ -103,6 +120,7 @@ class GeminiLiveTransport(
     fun close() {
         if (!active || closing) return
         closing = true; muted = true
+        reconnectJob?.cancel(); reconnectJob = null; reconnectDueAt = Long.MAX_VALUE
         sendJson(buildJsonObject { put("realtimeInput", buildJsonObject { put("audioStreamEnd", true) }) })
         if (!usageReported) {
             usageReported = true
@@ -115,12 +133,14 @@ class GeminiLiveTransport(
     fun disconnect() {
         connectionGeneration.incrementAndGet()
         active = false; closing = true; muted = true
+        reconnectJob?.cancel(); reconnectJob = null; reconnectDueAt = Long.MAX_VALUE
         recordJob?.cancel(); recordJob = null
         try { record?.stop() } catch (_: Exception) { }
         try { record?.release() } catch (_: Exception) { }
         try { track?.pause(); track?.flush(); track?.release() } catch (_: Exception) { }
         record = null; track = null
         socket?.close(1000, null); socket = null
+        apiKey = null; sessionResumptionHandle = null; activeResumptionHandle = null
         emitLevels(0.0, 0.0)
     }
 
@@ -139,12 +159,24 @@ class GeminiLiveTransport(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            if (isCurrent(webSocket, expectedGeneration) && !closing) fail("The Google AI Studio voice connection ended. Check your key and connection, then try again.")
+            handleSocketEnded(webSocket, expectedGeneration, "The Google AI Studio voice connection ended. Check your key and connection, then try again.")
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            if (isCurrent(webSocket, expectedGeneration)) webSocket.close(code, reason)
+            if (isCurrent(webSocket, expectedGeneration)) {
+                handleSocketEnded(webSocket, expectedGeneration, "The Google AI Studio voice connection ended. Check your key and connection, then try again.")
+                webSocket.close(code, reason)
+            }
         }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            handleSocketEnded(webSocket, expectedGeneration, "The Google AI Studio voice connection ended. Check your key and connection, then try again.")
+        }
+    }
+
+    private fun handleSocketEnded(webSocket: WebSocket, expectedGeneration: Long, message: String) {
+        if (!isCurrent(webSocket, expectedGeneration) || closing) return
+        if (sessionResumptionHandle.isNullOrBlank()) fail(message) else scheduleReconnect(0L)
     }
 
     private fun setupMessage(): JsonObject = buildJsonObject {
@@ -159,8 +191,57 @@ class GeminiLiveTransport(
             put("systemInstruction", buildJsonObject { put("parts", buildJsonArray { add(buildJsonObject { put("text", instructions) }) }) })
             put("inputAudioTranscription", buildJsonObject { })
             put("outputAudioTranscription", buildJsonObject { })
-            if (historyTurns().isNotEmpty()) put("historyConfig", buildJsonObject { put("initialHistoryInClientContent", true) })
+            put("contextWindowCompression", buildJsonObject { put("slidingWindow", buildJsonObject { }) })
+            put("sessionResumption", buildJsonObject {
+                activeResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
+            })
+            if (activeResumptionHandle == null && historyTurns().isNotEmpty()) {
+                put("historyConfig", buildJsonObject { put("initialHistoryInClientContent", true) })
+            }
         })
+    }
+
+    private fun scheduleReconnect(delayMillis: Long) {
+        if (!active || closing || sessionResumptionHandle.isNullOrBlank()) return
+        val dueAt = System.currentTimeMillis() + delayMillis.coerceAtLeast(0L)
+        if (reconnectJob?.isActive == true && dueAt >= reconnectDueAt) return
+        reconnectJob?.cancel()
+        reconnectDueAt = dueAt
+        reconnectJob = scope.launch {
+            delay(delayMillis.coerceAtLeast(0L))
+            reconnectDueAt = Long.MAX_VALUE
+            reconnectJob = null
+            reconnect()
+        }
+    }
+
+    private fun reconnect() {
+        if (!active || closing) return
+        val handle = sessionResumptionHandle?.takeIf { it.isNotBlank() } ?: run {
+            fail("The Google AI Studio voice connection ended. Check your key and connection, then try again.")
+            return
+        }
+        if (++reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+            fail("The Google AI Studio voice connection could not be resumed. Check your connection, then try again.")
+            return
+        }
+        recordJob?.cancel(); recordJob = null
+        try { record?.stop() } catch (_: Exception) { }
+        try { record?.release() } catch (_: Exception) { }
+        record = null
+        val oldSocket = socket
+        socket = null
+        oldSocket?.close(1000, "Resuming session")
+        openSocket(handle)
+    }
+
+    private fun timeLeftMillis(value: String?): Long {
+        val text = value?.trim()?.lowercase() ?: return 0L
+        return when {
+            text.endsWith("ms") -> text.removeSuffix("ms").toDoubleOrNull()?.toLong() ?: 0L
+            text.endsWith("s") -> ((text.removeSuffix("s").toDoubleOrNull() ?: 0.0) * 1_000.0).toLong()
+            else -> text.toDoubleOrNull()?.toLong() ?: 0L
+        }
     }
 
     private fun historyTurns(): JsonArray = buildJsonArray {
@@ -186,26 +267,23 @@ class GeminiLiveTransport(
         if (!isCurrent(expectedSocket, expectedGeneration)) return
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE_IN, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             .coerceAtLeast(SAMPLES_PER_PACKET * 2)
-        val recorder = AudioRecord(
+        val recorder = record ?: AudioRecord(
             MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             SAMPLE_RATE_IN,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
             minBuffer * 2,
-        )
-        val outputFormat = AudioFormat.Builder()
-            .setSampleRate(SAMPLE_RATE_OUT)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .build()
-        val player = AudioTrack.Builder()
+        ).also { record = it }
+        val player = track ?: AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setAudioFormat(outputFormat)
+            .setAudioFormat(AudioFormat.Builder().setSampleRate(SAMPLE_RATE_OUT).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(SAMPLE_RATE_OUT / 2)
             .build()
-        recorder.startRecording(); player.play()
-        record = recorder; track = player
+            .also { track = it }
+        if (recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING) recorder.startRecording()
+        if (player.playState != AudioTrack.PLAYSTATE_PLAYING) player.play()
+        recordJob?.cancel()
         recordJob = scope.launch(Dispatchers.IO) {
             Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
             val packet = ByteArray(SAMPLES_PER_PACKET * 2)
@@ -229,17 +307,26 @@ class GeminiLiveTransport(
     private fun parse(text: String, expectedSocket: WebSocket, expectedGeneration: Long) {
         if (!isCurrent(expectedSocket, expectedGeneration)) return
         val json = runCatching { JSON.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
+        json["sessionResumptionUpdate"]?.jsonObject?.get("newHandle")?.jsonPrimitive?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+            ?.let { sessionResumptionHandle = it }
+        json["goAway"]?.jsonObject?.let { goAway ->
+            scheduleReconnect(timeLeftMillis(goAway["timeLeft"]?.jsonPrimitive?.contentOrNull))
+            return
+        }
         if (json["setupComplete"] != null) {
-            if (sessionStarted) return
             try { startAudio(expectedGeneration, expectedSocket) } catch (_: Exception) {
                 fail("The Google AI Studio microphone couldn’t start.")
                 return
             }
-            sendHistory(expectedSocket, expectedGeneration)
-            sessionStarted = true
-            val session = buildJsonObject { put("id", "gemini-live"); put("model", AIProvider.GOOGLE_AI_STUDIO.liveModel) }
-            emitEvent(buildJsonObject { put("type", "mural.session.created"); put("session", session) }, expectedGeneration)
-            emitEvent(buildJsonObject { put("type", "session.started"); put("session", session) }, expectedGeneration)
+            reconnectAttempts = 0
+            if (!sessionStarted) {
+                if (activeResumptionHandle == null) sendHistory(expectedSocket, expectedGeneration)
+                sessionStarted = true
+                val session = buildJsonObject { put("id", "gemini-live"); put("model", AIProvider.GOOGLE_AI_STUDIO.liveModel) }
+                emitEvent(buildJsonObject { put("type", "mural.session.created"); put("session", session) }, expectedGeneration)
+                emitEvent(buildJsonObject { put("type", "session.started"); put("session", session) }, expectedGeneration)
+            }
             return
         }
         val error = json["error"]?.jsonObject
@@ -298,6 +385,7 @@ class GeminiLiveTransport(
         }
     }
     private fun fail(message: String) {
+        reconnectJob?.cancel(); reconnectJob = null; reconnectDueAt = Long.MAX_VALUE
         val expectedGeneration = connectionGeneration.get()
         scope.launch { if (active && connectionGeneration.get() == expectedGeneration && !closing) onFailure?.invoke(message) }
     }
@@ -317,6 +405,7 @@ class GeminiLiveTransport(
         private const val SAMPLE_RATE_IN = 16_000
         private const val SAMPLE_RATE_OUT = 24_000
         private const val SAMPLES_PER_PACKET = 1_600
+        private const val MAX_RECONNECT_ATTEMPTS = 5
         private val JSON = Json { ignoreUnknownKeys = true }
     }
 }

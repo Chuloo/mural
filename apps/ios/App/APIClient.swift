@@ -96,6 +96,7 @@ struct APIResult {
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let candidate = (json["candidates"] as? [[String: Any]])?.first else { throw APIError.invalidResponse }
+        guard candidate["finishReason"] as? String == "STOP" else { throw APIError.incomplete }
         var text = ""
         for part in (candidate["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? [] {
             text += part["text"] as? String ?? ""
@@ -112,9 +113,9 @@ struct APIResult {
             usage.input = metadata["promptTokenCount"] as? Int ?? 0
             usage.output = metadata["candidatesTokenCount"] as? Int ?? 0
         }
-        let searchQueries = (grounding?["webSearchQueries"] as? [String] ?? [])
+        let searchQueries = Set((grounding?["webSearchQueries"] as? [String] ?? [])
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty })
         usage.searches = search ? (searchQueries.isEmpty && !sources.isEmpty ? 1 : searchQueries.count) : 0
         let searchEntryPointHTML = ((grounding?["searchEntryPoint"] as? [String: Any])?["renderedContent"] as? String).map { String($0.prefix(32_000)) }
         guard !text.isEmpty else { throw APIError.incomplete }

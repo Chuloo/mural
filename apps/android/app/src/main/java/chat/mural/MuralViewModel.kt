@@ -202,7 +202,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private var actionJob: Job? = null
     private val meanings = MeaningController(viewModelScope, canRetryFailure = HostedHelperRetry::canRetryAtBoundary,
         retryDelay = HostedHelperRetry::automaticDelay) { request ->
-        if (archive.preferences.aiConsentVersion != 1) throw IllegalStateException("AI processing consent is required.")
+        if (archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) throw IllegalStateException("AI processing consent is required.")
         val module = LanguageRegistry.get(request.learningLanguageID) ?: throw IllegalStateException("Unsupported language.")
         if (request.sessionID in hostedSessionIDs && request.translationInput.toByteArray(Charsets.UTF_8).size > 24_576) throw MeaningInputLimitException()
         val result = teaching(request.sessionID, HelperPurpose.MEANING, request.cacheKey,
@@ -292,7 +292,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             val current = archive.sessions.firstOrNull { it.id == snapshot.id }
             val ticket = finalAssessmentTickets.firstOrNull { it.matches(snapshot, passage) }
             if (snapshot.id in hostedSessionIDs) false
-            else if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != 1 || current == null ||
+            else if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != AI_CONSENT_VERSION || current == null ||
                 ticket == null || !FinalAssessmentRecovery.canAttempt(ticket, current, nowSeconds())) false
             else {
                 finalAssessmentTickets = finalAssessmentTickets.map {
@@ -312,7 +312,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun recoverFinalAssessments() {
-        if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != 1) return
+        if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) return
         val remaining = FinalAssessmentRecovery.MAX_RECOVERED_PER_LAUNCH - recoveredAssessmentIDs.size
         if (remaining <= 0) return
         FinalAssessmentRecovery.recover(archive.sessions, finalAssessmentTickets, nowSeconds())
@@ -370,7 +370,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun cloudReady(): Boolean {
         if (!storageReady) { presentError(getApplication<Application>().getString(R.string.error_resolve_local_history_first)); return false }
-        if (archive.preferences.aiConsentVersion != 1) {
+        if (archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) {
             presentError(getApplication<Application>().getString(R.string.error_accept_ai_consent)); return false
         }
         val currentHosted = session?.id in hostedSessionIDs
@@ -413,7 +413,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     readiness.selectAccount(member.accountID, false)
                     readiness.refresh()
                 } else {
-                    if (archive.preferences.aiConsentVersion != 1 || conversationProvider != ConversationProvider.HOSTED_MINUTES) {
+                    if (archive.preferences.aiConsentVersion != AI_CONSENT_VERSION || conversationProvider != ConversationProvider.HOSTED_MINUTES) {
                         readiness.selectAccount(null, false); return@launch
                     }
                     guests?.acquire()
@@ -496,7 +496,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** The creating session, rather than the currently selected settings option, chooses every helper. */
     private suspend fun teaching(localID: String?, purpose: HelperPurpose, logicalID: String,
         instructions: String, input: String, schema: JsonObject? = null, search: Boolean = false): APIResult {
-        if (archive.preferences.aiConsentVersion != 1) throw HostedFailure.Unavailable
+        if (archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) throw HostedFailure.Unavailable
         if (localID != null && localID in hostedSessionIDs) {
             return hostedBindings.respond(localID, purpose, logicalID, instructions, input, schema, search)
         }
@@ -621,6 +621,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         api.provider = provider
         AIProviderSelection.save(getApplication(), provider)
         hasKey = credentials.hasKey(provider)
+        if (storageReady) updatePreferences(archive.preferences.copy(aiConsentVersion = null))
         dismissError()
     }
     fun updatePreferences(preferences: Preferences) {
@@ -628,7 +629,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         if (LanguageRegistry.get(preferences.learningLanguageID) == null || preferences.meaningLanguage !in MeaningLanguages.all || preferences.sessionMinutes !in 1..60) return
         val languageChanged = preferences.learningLanguageID != language.id
         actionJob?.cancel(); clearLookup(); working = false
-        if (preferences.aiConsentVersion != 1) {
+        if (preferences.aiConsentVersion != AI_CONSENT_VERSION) {
             finalAssessments.cancelAll(); hostedBindings.disableHelpers()
             hostedFinalAssessmentJobs.values.toList().forEach { it.cancel() }; hostedFinalAssessmentJobs.clear()
         }
@@ -864,7 +865,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         s.searchCalls = (s.searchCalls.toLong() + usage.searches).coerceAtMost(1_000_000_000).toInt()
     }
     private fun scheduleTranslation(utteranceComplete: Boolean = state == "ended") {
-        if (!archive.preferences.meaningVisible || archive.preferences.aiConsentVersion != 1) return
+        if (!archive.preferences.meaningVisible || archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) return
         val current = session ?: return
         val passage = current.passages.lastOrNull { it.speaker == Speaker.assistant } ?: return
         val request = MeaningRequest(current.id, passage, current.languageID, archive.preferences.meaningLanguage)
@@ -907,7 +908,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         ))
     }
     private suspend fun requestAssessment(snapshot: SessionRecord, passage: Passage): FinalAssessmentResult {
-        if (archive.preferences.aiConsentVersion != 1) throw IllegalStateException("AI processing consent is required.")
+        if (archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) throw IllegalStateException("AI processing consent is required.")
         val module = LanguageRegistry.get(snapshot.languageID) ?: throw IllegalStateException("Unsupported language.")
         val result = teaching(snapshot.id, HelperPurpose.ASSESSMENT, passage.revisionKey,
             TeachingPolicy.assessment(module), helperContext(snapshot, passage), assessmentSchema(module.id))
@@ -923,7 +924,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 withTimeout(HostedConversationBindings.POST_END_MILLIS) {
                     val result = requestAssessment(snapshot, passage)
-                    if (archive.preferences.aiConsentVersion != 1) return@withTimeout
+                    if (archive.preferences.aiConsentVersion != AI_CONSENT_VERSION) return@withTimeout
                     result.applying(archive.sessions.firstOrNull { it.id == result.sessionID })?.let { updated ->
                         save(updated)
                         if (session?.id == updated.id) session = clone(updated)

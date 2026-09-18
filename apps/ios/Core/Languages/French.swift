@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let french = LanguageModule(
-        id: "fr", name: "French", nativeName: "Français", variety: "France", locale: "fr-FR",
+        id: "fr", name: "French", nativeName: "Français", variety: "France", locale: "fr-FR", usesPlatformWordSegmentation: false,
         greeting: "Salut !", greetingWord: "salut",
         speechGuidance: "Use clear, natural metropolitan French pronunciation. Use tu in a friendly conversation and vous when the situation calls for formality or plural address. Accept valid regional accents, vocabulary and grammar from across the French-speaking world. Do not treat regional variation, informal omission of ne or a non-native accent alone as an error. Do not imitate a regional caricature.",
         writingGuidance: "Use standard French spelling, accents, apostrophes and punctuation. Preserve accents on capital letters. Match the register to the situation and accept valid regional usage from the learner.",

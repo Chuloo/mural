@@ -168,8 +168,10 @@ import MuralCore
     }
     func selectAIProvider(_ provider: AIProvider) {
         guard !isRunning else { return }
+        let providerChanged = api.provider != provider
         api.setProvider(provider)
         AIProviderSelection.save(provider)
+        if providerChanged { store.updatePreferences { $0.aiConsentVersion = nil } }
         error = nil
     }
     func selectMeaningLanguage(_ value: String) {

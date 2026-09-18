@@ -7,6 +7,7 @@ public struct LanguageModule: Identifiable, Sendable {
     public let nativeName: String
     public let variety: String
     public let locale: String
+    public let usesPlatformWordSegmentation: Bool
     public let greeting: String
     public let greetingWord: String
     public let speechGuidance: String

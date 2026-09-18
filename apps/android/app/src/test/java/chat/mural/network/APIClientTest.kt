@@ -49,7 +49,7 @@ class APIClientTest {
     @Test fun googleProviderUsesGemmaEndpointGoogleAuthGroundingSourcesAndSearchSuggestions() = runBlocking {
         val google = APIClient("AIza-fake-test-only-credential", OkHttpClient.Builder().followRedirects(false).build(), server.url("/v1/"), server.url("/v1/"))
         google.provider = AIProvider.GOOGLE_AI_STUDIO
-        server.enqueue(MockResponse().setBody("""{"candidates":[{"content":{"parts":[{"text":"สวัสดี"}]},"groundingMetadata":{"webSearchQueries":["thai news","thai culture"],"searchEntryPoint":{"renderedContent":"<a href=\"https://www.google.com/search?q=thai+news\">Search suggestions</a>"},"groundingChunks":[{"web":{"uri":"https://example.com","title":"Example"}}]}}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":4}}"""))
+        server.enqueue(MockResponse().setBody("""{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"สวัสดี"}]},"groundingMetadata":{"webSearchQueries":["thai news","thai culture"],"searchEntryPoint":{"renderedContent":"<a href=\"https://www.google.com/search?q=thai+news\">Search suggestions</a>"},"groundingChunks":[{"web":{"uri":"https://example.com","title":"Example"}}]}}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":4}}"""))
         val result = google.respond("policy", "hello", search = true)
         val request = server.takeRequest(2, TimeUnit.SECONDS)!!
         assertEquals("/v1/models/gemma-4-31b-it:generateContent", request.path)

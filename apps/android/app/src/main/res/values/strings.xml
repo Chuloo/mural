@@ -178,13 +178,13 @@
     <string name="settings_voice_estimate_label">Voice estimate</string>
     <string name="settings_search_calls_label">Search calls recorded</string>
     <string name="settings_usage_billing_link">OpenAI usage and billing</string>
-    <string name="settings_usage_footer">Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.</string>
+    <string name="settings_usage_footer">Recorded voice time is local. Translation, teaching and search usage may be billed separately. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.</string>
     <string name="settings_google_usage_billing_link">Google AI Studio usage and billing</string>
     <string name="settings_google_usage_footer">Google AI Studio pricing and usage vary by model and project. Check your Google AI Studio dashboard; the time limit is local, not a billing cap.</string>
     <string name="settings_section_ai_permission">AI permission</string>
     <string name="settings_ai_consent_accepted">Accepted for this version</string>
     <string name="settings_ai_consent_not_accepted">Not accepted</string>
-    <string name="settings_ai_permission_summary">With permission, Mural sends audio and the text you choose to the selected AI provider. You can use your history and words without granting it.</string>
+    <string name="settings_ai_permission_summary">With permission, Mural sends audio, the text you choose, and topic search text to the selected AI provider. You can use your history and words without granting it.</string>
     <string name="settings_revoke_consent_button">Withdraw permission</string>
     <string name="settings_review_consent_button">Review and accept</string>
     <string name="settings_section_your_data">Your words belong to you</string>
@@ -244,7 +244,7 @@
 
     <!-- AI consent -->
     <string name="consent_title">Before we talk.</string>
-    <string name="consent_ai_summary">With your permission, Mural sends audio and selected text to the selected AI provider to provide conversations and meanings. Provider retention rules apply.</string>
+    <string name="consent_ai_summary">With your permission, Mural sends audio, selected text, and topic search text to the selected AI provider to provide conversations and meanings. Provider retention rules apply.</string>
     <string name="consent_local_storage_note">Your learning record is stored on this device. Mural does not save raw audio. You can keep browsing your saved words and conversations without agreeing.</string>
     <string name="consent_privacy_policy_link">Privacy policy</string>
     <string name="consent_agree_button">Agree and continue</string>

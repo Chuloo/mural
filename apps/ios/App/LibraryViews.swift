@@ -196,13 +196,15 @@ struct GoogleSearchSuggestionsView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
-        guard view.accessibilityValue != html else { return }
-        view.accessibilityValue = html
+        guard context.coordinator.loadedHTML != html else { return }
+        context.coordinator.loadedHTML = html
         let policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">"
         view.loadHTMLString(policy + html, baseURL: URL(string: "https://www.google.com"))
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
+        var loadedHTML: String?
+
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard action.navigationType == .linkActivated,
                   let url = action.request.url,
@@ -399,12 +401,11 @@ struct SettingsView: View {
                         ForEach([5, 10, 15, 20, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
                     }
                     LabeledContent("Recorded voice time", value: "\(Int(totalVoiceSeconds / 60)) min \(Int(totalVoiceSeconds) % 60) sec")
-                    LabeledContent("Voice estimate", value: String(format: "$%.2f USD", totalVoiceSeconds / 60 * 0.05))
                     LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
                     Link("\(coordinator.aiProvider.title) usage and billing", destination: coordinator.aiProvider.usageURL)
                 } header: { Text("Keep it comfortable") } footer: {
                     if coordinator.aiProvider == .openAI {
-                        Text("Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
+                        Text("Recorded voice time is local. Translation, teaching and search usage may be billed separately. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
                     } else {
                         Text("Google AI Studio pricing and usage vary by model and project. Check your Google AI Studio dashboard; the time limit is local, not a billing cap.")
                     }

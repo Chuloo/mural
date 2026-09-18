@@ -160,4 +160,11 @@ final class AdditionalLanguageTests: XCTestCase {
             XCTAssertEqual(segments.compactMap(\.lookup), expected)
         }
     }
+
+    func testThaiWordLinksUsePlatformWordBoundaries() {
+        let text = "ฉันอยากไปตลาด"
+        let segments = CaptionWords.segments(text, languageID: "th")
+        XCTAssertEqual(segments.map(\.text).joined(), text)
+        XCTAssertEqual(segments.compactMap(\.lookup), ["ฉัน", "อยาก", "ไป", "ตลาด"])
+    }
 }

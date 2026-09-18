@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let norwegian = LanguageModule(
-        id: "nb", name: "Norwegian", nativeName: "Norsk", variety: "Bokmål", locale: "nb-NO",
+        id: "nb", name: "Norwegian", nativeName: "Norsk", variety: "Bokmål", locale: "nb-NO", usesPlatformWordSegmentation: false,
         greeting: "Hei!", greetingWord: "hei",
         speechGuidance: "Use natural Eastern Norwegian pronunciation. Accept other Norwegian dialects without treating dialect differences as errors.",
         writingGuidance: "Use Norwegian Bokmål spelling and wording.",

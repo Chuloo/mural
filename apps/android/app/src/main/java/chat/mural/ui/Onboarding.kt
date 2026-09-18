@@ -62,8 +62,7 @@ import chat.mural.R
 import chat.mural.core.LanguageModule
 import chat.mural.core.LanguageRegistry
 import chat.mural.core.MeaningLanguages
-
-const val AI_CONSENT_VERSION = 1
+import chat.mural.core.AI_CONSENT_VERSION
 
 @Composable
 fun OnboardingScreen(

@@ -10,6 +10,7 @@ import kotlinx.serialization.json.*
 @Serializable enum class Outcome { success, partial, breakdown, uncertain }
 
 const val APPLE_EPOCH_UNIX_SECONDS = 978307200.0
+const val AI_CONSENT_VERSION = 2
 fun nowSeconds(): Double = System.currentTimeMillis() / 1000.0 - APPLE_EPOCH_UNIX_SECONDS
 
 @Serializable

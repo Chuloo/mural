@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let thai = LanguageModule(
-        id: "th", name: "Thai", nativeName: "ภาษาไทย", variety: "Thailand", locale: "th-TH",
+        id: "th", name: "Thai", nativeName: "ภาษาไทย", variety: "Thailand", locale: "th-TH", usesPlatformWordSegmentation: true,
         greeting: "สวัสดี!", greetingWord: "สวัสดี",
         speechGuidance: "Use clear, natural Central Thai pronunciation. Treat tones, vowel length, final consonants and polite particles as meaningful when they affect understanding. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
         writingGuidance: "Use natural modern Thai with Thai script and appropriate spacing between phrases. Keep polite particles and pronouns natural to the learner’s context. Do not append transliteration or translations to ordinary spoken replies; explain pronunciation briefly only when asked.",

@@ -65,6 +65,7 @@ import chat.mural.core.Passage
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.UsageSummary
+import chat.mural.core.AI_CONSENT_VERSION
 import chat.mural.network.AIProvider
 
 @Composable
@@ -162,8 +163,6 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         "settings-conversation-limit", !vm.isRunning) { vm.updatePreferences(prefs.copy(sessionMinutes = it.toInt())) }
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_voice_time_label), usage.voiceTime)
-                    SettingsDivider()
-                    SettingsRow(stringResource(R.string.settings_voice_estimate_label), usage.voiceEstimate)
                     SettingsDivider()
                     SettingsRow(stringResource(R.string.settings_search_calls_label), usage.searchCalls.toString())
                     SettingsDivider()
@@ -362,8 +361,10 @@ fun TranscriptDialog(vm: MuralViewModel, session: SessionRecord, onDismiss: () -
                         if (passage.speaker == Speaker.user && !vm.isRunning) MuralTextButton(onClick = { correcting = passage }) { Text(stringResource(R.string.history_edit_passage_button)) }
                     }
                 }
-                liveSession.topics.mapNotNull { it.searchEntryPointHTML?.takeIf { html -> html.isNotBlank() } }.firstOrNull()?.let { html ->
-                    item { GoogleSearchSuggestions(html) }
+                liveSession.topics.forEach { topic ->
+                    topic.searchEntryPointHTML?.takeIf { html -> html.isNotBlank() }?.let { html ->
+                        item(key = "topic-search-${topic.id}") { GoogleSearchSuggestions(html) }
+                    }
                 }
                 liveSession.topics.flatMap { it.sources }.filter { it.safeUrl() != null }.takeIf { it.isNotEmpty() }?.let { sources ->
                     item { Text(stringResource(R.string.history_saved_sources), fontWeight = FontWeight.SemiBold) }

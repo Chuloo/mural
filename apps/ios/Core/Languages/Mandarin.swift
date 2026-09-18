@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let mandarin = LanguageModule(
-        id: "zh", name: "Mandarin Chinese", nativeName: "普通话", variety: "Mainland China", locale: "zh-CN",
+        id: "zh", name: "Mandarin Chinese", nativeName: "普通话", variety: "Mainland China", locale: "zh-CN", usesPlatformWordSegmentation: false,
         greeting: "你好！", greetingWord: "你好",
         speechGuidance: "Use clear, natural Standard Mandarin pronunciation. Treat tones, tone changes, retroflex and non-retroflex sounds, and distinctions between initials and finals as meaningful when they affect understanding. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
         writingGuidance: "Use natural Simplified Chinese and standard modern punctuation. Prefer everyday Mainland usage while accepting valid regional wording and Traditional Chinese input. Keep Chinese text free of unnecessary spaces. The app displays pinyin separately; do not append pinyin or translations to ordinary spoken replies. Explain characters and tones briefly in Mandarin when asked.",

@@ -184,8 +184,8 @@ struct OnboardingView: View {
 }
 
 enum AIProcessingConsent {
-    static let version = 1
-    static let summary = "With your permission, Mural sends audio and selected text to the AI provider you select to provide conversations and meanings. Provider retention rules apply."
+    static let version = 2
+    static let summary = "With your permission, Mural sends audio, selected text, and topic search text to the AI provider you select to provide conversations and meanings. Provider retention rules apply."
     enum ConsentError: LocalizedError {
         case required
         var errorDescription: String? { "Before using AI features, open Talk and tap the microphone to review how your selected AI provider processes your audio and text." }
