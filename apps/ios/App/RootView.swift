@@ -33,7 +33,13 @@ struct RootView: View {
         .sheet(isPresented: $coordinator.showAIConsent, onDismiss: { coordinator.resumeAfterAIConsent() }) {
             AIConsentView(agree: { coordinator.acceptAIConsent() }, decline: { coordinator.declineAIConsent() })
         }
-        .fullScreenCover(isPresented: $onboarding) { OnboardingView(coordinator: coordinator) { coordinator.store.updatePreferences { $0.hasOnboarded = true }; onboarding = false } }
+        .fullScreenCover(isPresented: $onboarding) {
+            OnboardingView(coordinator: coordinator) {
+                coordinator.store.updatePreferences { $0.hasOnboarded = true }
+                onboarding = false
+                coordinator.promptAPIKeyAfterOnboardingIfNeeded()
+            }
+        }
         .alert("A little interruption", isPresented: Binding(get: { coordinator.error != nil || coordinator.store.error != nil }, set: { if !$0 { coordinator.error = nil; coordinator.store.error = nil } })) {
             Button("OK", role: .cancel) { coordinator.error = nil; coordinator.store.error = nil }
         } message: { Text(coordinator.error ?? coordinator.store.error ?? "") }

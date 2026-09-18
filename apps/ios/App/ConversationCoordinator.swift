@@ -23,6 +23,8 @@ import MuralCore
     var typedReplyError: String?
     var notice: String?
     var showSettings = false
+    /// When true, Settings opens with the API-key section expanded and explains why.
+    var promptAPIKeySetup = false
     var showAIConsent = false
     private var startAfterConsent = false
     private let api: APIClient
@@ -117,7 +119,10 @@ import MuralCore
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--preview") { showSettings = true; return }
         #endif
-        guard CredentialStore.hasKey else { showSettings = true; return }
+        guard CredentialStore.hasKey else {
+            requireAPIKey()
+            return
+        }
         cancelReset(); meanings.reset()
         error = nil; notice = nil; lastAssessmentKey = ""
         lastLanguageCheck = ""; pendingCommands = [:]
@@ -152,6 +157,17 @@ import MuralCore
         guard startAfterConsent else { return }
         startAfterConsent = false
         if hasAIConsent { start() }
+    }
+    /// Opens Settings with a clear prompt to add a personal OpenAI key (local/BYOK builds).
+    func requireAPIKey(message: String = "Add your OpenAI API key in Settings to start practising on this phone.") {
+        notice = message
+        promptAPIKeySetup = true
+        showSettings = true
+    }
+    /// Call after onboarding when this install still has no key saved.
+    func promptAPIKeyAfterOnboardingIfNeeded() {
+        guard !CredentialStore.hasKey else { return }
+        requireAPIKey(message: "Welcome! Add your OpenAI API key to start conversations.")
     }
     func selectLanguage(_ id: String) {
         guard !isRunning, id != language.id, LanguageRegistry.module(for: id) != nil else { return }

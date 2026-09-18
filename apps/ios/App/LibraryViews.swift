@@ -380,6 +380,16 @@ struct SettingsView: View {
             }.scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.secondary)
                 .navigationTitle("Make yourself comfortable").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { key = ""; dismiss() } } }
+                .onAppear {
+                    hasKey = CredentialStore.hasKey
+                    if coordinator.promptAPIKeySetup {
+                        showingAPIKey = true
+                        if message == nil {
+                            message = coordinator.notice ?? "Add an OpenAI API key to start conversations on this phone."
+                        }
+                        coordinator.promptAPIKeySetup = false
+                    }
+                }
         }
         .fileExporter(isPresented: $exporting, document: backup, contentType: .json, defaultFilename: "Mural-learning-backup") { result in if case .failure(let error) = result { message = error.localizedDescription } }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
