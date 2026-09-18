@@ -140,7 +140,6 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 }
             }
             item {
-                val providerType = vm.providerType
                 SettingsGroup(stringResource(R.string.settings_advanced),
                     if (!vm.hasKey) stringResource(R.string.settings_byok_version_footer) else null) {
                     SettingsRow(stringResource(R.string.settings_use_own_key), symbol = SettingsSymbol.KEY,
