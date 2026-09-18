@@ -157,6 +157,18 @@ private val MuralTypography = Typography(
     labelSmall = rounded(11, 15, FontWeight.Medium),
 )
 
+/**
+ * Root theme composable that selects light or dark color palette.
+ *
+ * Sets [MuralColors.current] to the active palette before wrapping [content]
+ * in a Material 3 [colorScheme] built from the selected palette values.
+ * All [MuralColors] property getters throughout the app read from this
+ * singleton, so every screen picks up the new palette without per-screen
+ * changes.
+ *
+ * @param darkMode when true uses [MuralColorsDark], otherwise [MuralColorsLight].
+ * @param content the composable tree that receives the themed colors.
+ */
 @Composable
 fun MuralTheme(darkMode: Boolean = false, content: @Composable () -> Unit) {
     val colors = if (darkMode) MuralColorsDark else MuralColorsLight
