@@ -45,6 +45,29 @@ class EvidenceTest {
             listOf(WordProposal("gustar","to like","gusta",EvidenceKind.independent,0.95,listOf("f1","f2"),"Me gusta el café","es")))
         assertEquals(1, LearningEngine.validate(session.assessments.single(), session)!!.words.size)
     }
+    @Test fun paraphrasedMeaningsAndArticleVariantsCollapseToOneWord() {
+        fun session(day: Double, lemma: String, meaning: String): SessionRecord {
+            val date = 1_780_000_000.0 + day * 86400
+            val s = SessionRecord(languageID = "en", themeID = "work", startedAt = date)
+            s.append(Fragment(id="f-${day.toInt()}",speaker=Speaker.user,text="version",startMS=0,endMS=1000,receivedAt=date))
+            val p = s.passages.single()
+            s.assessments += Assessment(p.id, p.revisionKey, Outcome.success, 2, "Keep going.", "Names software releases",
+                listOf(WordProposal(lemma, meaning, "version", EvidenceKind.independent, 0.95, p.fragments.map { it.id }, "version", "en")),
+                createdAt = date, context = "work")
+            return s
+        }
+        val sessions = listOf(
+            session(0.0, "a version", "a particular form of a product or software"),
+            session(2.0, "version", "a particular form or release of software"),
+            session(4.0, "version", "a particular form or release of something"),
+        )
+        val projected = LearningEngine.project(sessions, "en", now = sessions[2].startedAt)
+        assertEquals(1, projected.words.size)
+        assertEquals("en|version", projected.words.single().id)
+        assertEquals(3, projected.words.single().independentCount)
+        assertTrue(LearningEngine.project(sessions, "en",
+            listOf("en|version|a particular form of a product or software"), sessions[2].startedAt).words.isEmpty())
+    }
     @Test fun hiddenWordsAreLanguageScopedAndRepetitionIsDeduplicated() {
         val s = record(); val a = s.assessments.single(); s.assessments += a.copy()
         assertEquals(1,LearningEngine.project(listOf(s),"es").observationCount)
