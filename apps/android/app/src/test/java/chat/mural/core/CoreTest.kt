@@ -13,6 +13,11 @@ class CoreTest {
         s.assessments += Assessment(passageID=p.id,revisionKey=p.revisionKey,outcome=Outcome.success,suggestedLevel=2,nextGoal="A goal",capability="Uses a familiar word",words=listOf(WordProposal("radio","radio","radio",kind,.95,listOf("f-${language}-${day}"),"radio",language)),createdAt=date,context=theme)
         return s
     }
+    @Test fun assessmentPromptAsksForOneStableSensePerLemma() {
+        for (language in LanguageRegistry.all) {
+            assertTrue(language.id, TeachingPolicy.assessment(language).contains("Reuse one stable sense for the same lemma"))
+        }
+    }
     @Test fun transcriptGroupingPreservesWhitespaceAndTypedBoundaries() {
         val a=Fragment(id="a",speaker=Speaker.assistant,text="Hva",startMS=0,endMS=100)
         val b=Fragment(id="b",speaker=Speaker.assistant,text=" gjorde du?",startMS=100,endMS=400)

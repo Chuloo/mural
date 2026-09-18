@@ -7,6 +7,7 @@ extension LanguageModule {
         speechGuidance: "Use clear Spanish from Spain, with a natural distinction between s and z/soft c, tú for friendly singular address and vosotros for informal plural address. Accept seseo, ustedes, voseo and other valid regional forms without marking them wrong. Do not imitate a regional caricature.",
         writingGuidance: "Use standard Spanish spelling, accents and opening question and exclamation marks.",
         lemmaGuidance: "Give nouns with their singular grammatical article and verbs in the infinitive, for example la casa and hablar. Keep reflexive verbs such as llamarse distinct. Preserve accents and ñ.",
+        lemmaPrefixes: ["el", "la", "los", "las", "un", "una", "unos", "unas"],
         teachingFocus: [
             "Greetings, introductions and short useful chunks such as me llamo and quiero.",
             "Everyday questions, gender and number agreement, present tense and useful ser/estar contrasts.",

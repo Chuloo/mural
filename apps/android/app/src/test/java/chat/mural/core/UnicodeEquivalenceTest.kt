@@ -12,7 +12,7 @@ class UnicodeEquivalenceTest {
         val composed = proposal("caf\u00e9", "coffee")
         val decomposed = proposal("cafe\u0301", "coffee")
         assertEquals(composed.key, decomposed.key)
-        assertEquals("fr|caf\u00e9|coffee", decomposed.key)
+        assertEquals("fr|caf\u00e9", decomposed.key)
     }
 
     @Test fun canonicalContainmentIgnoresCompositionAndCase() {

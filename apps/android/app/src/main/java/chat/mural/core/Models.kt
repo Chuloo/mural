@@ -88,12 +88,32 @@ fun String.canonical(): String = java.text.Normalizer.normalize(this, java.text.
 
 fun String.containsCanonical(other: String): Boolean = canonical().contains(other.canonical(), ignoreCase = true)
 
+/** Groups every observation of one dictionary word: articles, case, spacing and the meaning wording do not split it. */
+fun wordKey(language: String, lemma: String): String {
+    // Lowercasing can break NFC, so compose last; whitespace follows Unicode White_Space like Swift's Character.isWhitespace.
+    var text = lemma.lowercase().splitWhere { it.isWhitespace() || it == '\u0085' }.joinToString(" ").canonical()
+    for (prefix in LanguageRegistry.get(language)?.lemmaPrefixes ?: emptyList()) {
+        val marker = if (prefix.endsWith("'") || prefix.endsWith("’")) prefix else "$prefix "
+        if (!text.startsWith(marker)) continue
+        val rest = text.removePrefix(marker).trim()
+        if (rest.isNotEmpty()) { text = rest; break }
+    }
+    return "$language|$text"
+}
+
+private fun String.splitWhere(isSeparator: (Char) -> Boolean): List<String> {
+    val parts = mutableListOf<String>(); val current = StringBuilder()
+    for (c in this) if (isSeparator(c)) { if (current.isNotEmpty()) { parts += current.toString(); current.clear() } } else current.append(c)
+    if (current.isNotEmpty()) parts += current.toString()
+    return parts
+}
+
 @Serializable
 data class WordProposal(
     val lemma: String, val meaning: String, val form: String, val kind: EvidenceKind,
     val confidence: Double, val sourceIDs: List<String>, val quote: String,
     val language: String = LanguageRegistry.defaultID
-) { val key get() = "${language}|${lemma.trim().lowercase().canonical()}|${meaning.lowercase().canonical()}" }
+) { val key get() = wordKey(language, lemma) }
 
 @Serializable
 data class Assessment(
