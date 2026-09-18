@@ -240,7 +240,7 @@ fun TalkScreen(
             val micEnabled = !busy && (vm.state != "active" || vm.isVoiceSession)
             Box(Modifier.padding(bottom = if (compact) 15.dp else 19.dp).size(if (compact) 66.dp else 76.dp)
                 .shadow(18.dp, CircleShape, ambientColor = MuralColors.Orange.copy(alpha = .15f), spotColor = MuralColors.Orange.copy(alpha = .25f))
-                .background(Brush.linearGradient(listOf(Color(0xFFFFBA7A), MuralColors.Orange)), CircleShape).clip(CircleShape)
+                .background(Brush.linearGradient(listOf(MuralColors.Butter, MuralColors.Orange)), CircleShape).clip(CircleShape)
                 .testTag("start-conversation").semantics { contentDescription = micDescription }
                 .clickable(enabled = micEnabled, role = Role.Button) {
                     if (vm.state == "active" && vm.isVoiceSession) vm.toggleMute() else onMicrophone()
@@ -313,7 +313,7 @@ private fun Modifier.passageScroll(state: ScrollState): Modifier = this
 @Composable
 private fun RoundAction(symbol: MuralSymbol, label: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SoftRoundButton(symbol, label, onClick, tint = if (selected) MuralColors.Butter.copy(alpha = .70f) else Color.White.copy(alpha = .72f),
+        SoftRoundButton(symbol, label, onClick, tint = if (selected) MuralColors.Butter.copy(alpha = .70f) else MuralColors.Surface.copy(alpha = .72f),
             enabled = enabled, filledIcon = selected)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MuralColors.Ink.copy(alpha = if (enabled) 1f else .45f))
     }

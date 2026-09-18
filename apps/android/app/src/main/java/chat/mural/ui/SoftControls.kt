@@ -33,14 +33,14 @@ import chat.mural.R
 
 @Composable
 fun SoftRoundButton(symbol: MuralSymbol, description: String, onClick: () -> Unit, modifier: Modifier = Modifier,
-                    diameter: Dp = 48.dp, tint: Color = Color.White.copy(alpha = .78f),
+                    diameter: Dp = 48.dp, tint: Color = MuralColors.Surface.copy(alpha = .78f),
                     enabled: Boolean = true, filledIcon: Boolean = false) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) .94f else 1f, spring(stiffness = 600f), label = "button press")
     Box(modifier.size(diameter).graphicsLayer { scaleX = scale; scaleY = scale }
         .shadow(18.dp, CircleShape, ambientColor = MuralColors.Secondary.copy(alpha = .05f), spotColor = MuralColors.Secondary.copy(alpha = .08f))
-        .background(tint, CircleShape).border(1.dp, Color.White.copy(alpha = .7f), CircleShape).clip(CircleShape)
+        .background(tint, CircleShape).border(1.dp, MuralColors.Surface.copy(alpha = .7f), CircleShape).clip(CircleShape)
         .clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center) {
         MuralIcon(symbol, Modifier.size(23.dp), color = MuralColors.Ink.copy(alpha = if (enabled) 1f else .4f),
@@ -56,11 +56,11 @@ fun FloatingNavigation(selected: Int, onSelect: (Int) -> Unit) {
     Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(top = 8.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
         BoxWithConstraints(Modifier.widthIn(max = 304.dp).fillMaxWidth().height(66.dp).testTag("floating-navigation")
             .shadow(25.dp, CircleShape, ambientColor = MuralColors.Secondary.copy(alpha = .08f), spotColor = MuralColors.Secondary.copy(alpha = .10f))
-            .background(Color(0xFFFDFCF3).copy(alpha = .94f), CircleShape)
-            .border(1.5.dp, Color.White.copy(alpha = .85f), CircleShape).padding(4.dp).selectableGroup()) {
+            .background(MuralColors.CreamRaised.copy(alpha = .94f), CircleShape)
+            .border(1.5.dp, MuralColors.Surface.copy(alpha = .85f), CircleShape).padding(4.dp).selectableGroup()) {
             val width = maxWidth / 3
             val offset by animateDpAsState(width * selected, spring(dampingRatio = .88f, stiffness = 350f), label = "tab position")
-            Box(Modifier.offset(x = offset).width(width).fillMaxHeight().background(Color(0xFFEDEBDD), CircleShape))
+            Box(Modifier.offset(x = offset).width(width).fillMaxHeight().background(MuralColors.SurfaceBright, CircleShape))
             Row(Modifier.fillMaxSize()) {
                 items.forEachIndexed { index, (title, symbol, tag) ->
                     Column(Modifier.weight(1f).fillMaxHeight().clip(CircleShape).testTag(tag)
@@ -90,8 +90,8 @@ fun MuralTextField(value: String, onValueChange: (String) -> Unit, modifier: Mod
         textStyle = MaterialTheme.typography.bodyLarge, shape = RoundedCornerShape(22.dp),
         keyboardOptions = keyboardOptions, visualTransformation = visualTransformation,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.White.copy(alpha = .90f), unfocusedContainerColor = Color.White.copy(alpha = .72f),
-            focusedBorderColor = MuralColors.Orange.copy(alpha = .7f), unfocusedBorderColor = Color.White,
+            focusedContainerColor = MuralColors.Surface.copy(alpha = .90f), unfocusedContainerColor = MuralColors.Surface.copy(alpha = .72f),
+            focusedBorderColor = MuralColors.Orange.copy(alpha = .7f), unfocusedBorderColor = MuralColors.Surface,
             cursorColor = MuralColors.Ink, focusedLabelColor = MuralColors.Secondary,
             unfocusedLabelColor = MuralColors.Secondary))
 }
@@ -102,9 +102,9 @@ fun MuralSearchField(value: String, onValueChange: (String) -> Unit, placeholder
         placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyLarge) },
         leadingIcon = { MuralIcon(MuralSymbol.Search, Modifier.size(21.dp)) }, shape = CircleShape,
         textStyle = MaterialTheme.typography.bodyLarge,
-        colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.White.copy(alpha = .9f),
-            unfocusedContainerColor = Color.White.copy(alpha = .75f), focusedBorderColor = MuralColors.Orange.copy(alpha = .6f),
-            unfocusedBorderColor = Color.White, cursorColor = MuralColors.Ink, unfocusedPlaceholderColor = MuralColors.Secondary))
+        colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = MuralColors.Surface.copy(alpha = .9f),
+            unfocusedContainerColor = MuralColors.Surface.copy(alpha = .75f), focusedBorderColor = MuralColors.Orange.copy(alpha = .6f),
+            unfocusedBorderColor = MuralColors.Surface, cursorColor = MuralColors.Ink, unfocusedPlaceholderColor = MuralColors.Secondary))
 }
 
 @Composable

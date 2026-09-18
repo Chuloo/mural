@@ -28,11 +28,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -119,6 +124,19 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 SettingsGroup {
                     SettingsRow(stringResource(R.string.account_title), enabled = !vm.isRunning, symbol = SettingsSymbol.ACCOUNT,
                         chevron = true, modifier = Modifier.testTag("managed-account-settings"), onClick = onAccount)
+                }
+            }
+            item {
+                SettingsGroup(stringResource(R.string.settings_dark_mode_title)) {
+                    Row(Modifier.fillMaxWidth().testTag("settings-dark-mode")
+                        .toggleable(prefs.darkMode, role = Role.Switch) { vm.updatePreferences(prefs.copy(darkMode = !prefs.darkMode)) }
+                        .heightIn(min = 52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.settings_dark_mode_label), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Switch(prefs.darkMode, onCheckedChange = null, colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White, checkedTrackColor = MuralColors.Secondary,
+                            uncheckedThumbColor = Color.White, uncheckedTrackColor = MuralColors.Secondary.copy(alpha = .18f),
+                            uncheckedBorderColor = Color.Transparent))
+                    }
                 }
             }
             item {
