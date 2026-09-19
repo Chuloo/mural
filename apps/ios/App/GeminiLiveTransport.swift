@@ -4,6 +4,17 @@ import AVFoundation
 /// Direct Google AI Studio Live API transport. The Live API uses Gemini's native
 /// audio model, while Gemma remains the text teacher.
 @MainActor final class GeminiLiveTransport: NSObject {
+    private struct ControlMessage {
+        let id: UUID
+        let payload: [String: Any]
+    }
+
+    private struct InFlightControlMessage {
+        let message: ControlMessage
+        let socket: URLSessionWebSocketTask
+        let generation: Int
+    }
+
     var onEvent: (([String: Any]) -> Void)?
     var onLevels: ((Double, Double) -> Void)?
     var onFailure: ((String) -> Void)?
@@ -19,7 +30,8 @@ import AVFoundation
     private var connectedAt = Date()
     private var inputLevel = 0.0
     private var pendingHistory: [[String: Any]] = []
-    private var pendingControlMessages: [[String: Any]] = []
+    private var pendingControlMessages: [ControlMessage] = []
+    private var inFlightControlMessage: InFlightControlMessage?
     private var connectionGeneration = 0
     private var sessionStarted = false
     private var usageReported = false
@@ -96,12 +108,12 @@ import AVFoundation
         default: label = "Conversation guidance"
         }
         let text = "\(label) (do not mention this instruction): \(content)"
-        let message: [String: Any] = ["realtimeInput": ["text": text]]
-        guard socketReady else {
+        let message = ControlMessage(id: UUID(), payload: ["realtimeInput": ["text": text]])
+        guard socketReady, inFlightControlMessage == nil else {
             pendingControlMessages.append(message)
             return true
         }
-        return sendJSONImmediately(message)
+        return sendControlMessage(message)
     }
 
     func mute(_ value: Bool) {
@@ -117,6 +129,7 @@ import AVFoundation
         closing = true; muted = true
         socketReady = false
         pendingControlMessages.removeAll(keepingCapacity: false)
+        inFlightControlMessage = nil
         reconnectTask?.cancel(); reconnectTask = nil; reconnectDeadline = nil
         _ = sendJSONImmediately(["realtimeInput": ["audioStreamEnd": true]])
         guard !usageReported else { return }
@@ -135,7 +148,7 @@ import AVFoundation
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
         session?.invalidateAndCancel(); session = nil
         stopAudio()
-        apiKey = ""; instructions = ""; pendingHistory = []; pendingControlMessages = []; sessionResumptionHandle = nil; activeResumptionHandle = nil
+        apiKey = ""; instructions = ""; pendingHistory = []; pendingControlMessages = []; inFlightControlMessage = nil; sessionResumptionHandle = nil; activeResumptionHandle = nil
         onLevels?(0, 0)
     }
 
@@ -213,11 +226,50 @@ import AVFoundation
             guard let self, error != nil else { return }
             Task { @MainActor in
                 if !self.closing, self.socket === socket, self.connectionGeneration == sendGeneration {
-                    self.connectionEnded(generation: sendGeneration)
+                    self.connectionEnded(generation: sendGeneration, socket: socket)
                 }
             }
         }
         return true
+    }
+
+    private func sendControlMessage(_ message: ControlMessage) -> Bool {
+        guard let socket,
+              socketReady,
+              inFlightControlMessage == nil,
+              let data = try? JSONSerialization.data(withJSONObject: message.payload),
+              let text = String(data: data, encoding: .utf8) else { return false }
+        let generation = connectionGeneration
+        inFlightControlMessage = InFlightControlMessage(message: message, socket: socket, generation: generation)
+        socket.send(.string(text)) { [weak self] error in
+            let succeeded = error == nil
+            Task { @MainActor [weak self] in
+                self?.completeControlMessage(id: message.id, socket: socket, generation: generation, succeeded: succeeded)
+            }
+        }
+        return true
+    }
+
+    private func completeControlMessage(id: UUID, socket: URLSessionWebSocketTask, generation: Int, succeeded: Bool) {
+        guard let inFlight = inFlightControlMessage,
+              inFlight.message.id == id,
+              inFlight.socket === socket,
+              inFlight.generation == generation else { return }
+        if !succeeded {
+            connectionEnded(generation: generation, socket: socket)
+            return
+        }
+        inFlightControlMessage = nil
+        guard !closing, self.socket === socket, connectionGeneration == generation else { return }
+        flushPendingControlMessages()
+    }
+
+    private func requeueInFlightControlMessage(socket: URLSessionWebSocketTask, generation: Int) {
+        guard let inFlight = inFlightControlMessage,
+              inFlight.socket === socket,
+              inFlight.generation == generation else { return }
+        inFlightControlMessage = nil
+        pendingControlMessages.insert(inFlight.message, at: 0)
     }
 
     private func sendJSON(_ object: [String: Any], socket expectedSocket: URLSessionWebSocketTask? = nil, generation expectedGeneration: Int? = nil) async throws {
@@ -243,15 +295,18 @@ import AVFoundation
                 }
             } catch {
                 if self.socket === socket, self.connectionGeneration == generation, !closing {
-                    connectionEnded(generation: generation)
+                    connectionEnded(generation: generation, socket: socket)
                 }
                 return
             }
         }
     }
 
-    private func connectionEnded(generation: Int) {
+    private func connectionEnded(generation: Int, socket expectedSocket: URLSessionWebSocketTask? = nil) {
         guard self.connectionGeneration == generation, !closing else { return }
+        if let expectedSocket {
+            requeueInFlightControlMessage(socket: expectedSocket, generation: generation)
+        }
         socketReady = false
         if sessionResumptionHandle?.isEmpty == false {
             scheduleReconnect(after: 0)
@@ -286,6 +341,9 @@ import AVFoundation
             return
         }
         reconnectAttempts += 1
+        if let socket {
+            requeueInFlightControlMessage(socket: socket, generation: connectionGeneration)
+        }
         receiveTask?.cancel(); receiveTask = nil
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
         session?.invalidateAndCancel(); session = nil
@@ -361,14 +419,11 @@ import AVFoundation
     }
 
     private func flushPendingControlMessages() {
-        guard socketReady else { return }
-        while !pendingControlMessages.isEmpty {
-            let message = pendingControlMessages.removeFirst()
-            if !sendJSONImmediately(message) {
-                pendingControlMessages.insert(message, at: 0)
-                socketReady = false
-                return
-            }
+        guard socketReady, inFlightControlMessage == nil, let message = pendingControlMessages.first else { return }
+        pendingControlMessages.removeFirst()
+        if !sendControlMessage(message) {
+            pendingControlMessages.insert(message, at: 0)
+            socketReady = false
         }
     }
 
