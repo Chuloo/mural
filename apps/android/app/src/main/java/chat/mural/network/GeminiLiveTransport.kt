@@ -36,6 +36,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicLong
 
 /** Direct Google AI Studio Live API transport using 16 kHz input and 24 kHz output PCM. */
@@ -53,7 +54,11 @@ class GeminiLiveTransport(
     @Volatile private var active = false
     @Volatile private var muted = false
     @Volatile private var closing = false
+    @Volatile private var socketReady = false
     private val connectionGeneration = AtomicLong(0)
+    private val controlLock = Any()
+    private val pendingControlMessages = ArrayDeque<JsonObject>()
+    private var flushingControlMessages = false
     private var record: AudioRecord? = null
     private var track: AudioTrack? = null
     private var recordJob: Job? = null
@@ -87,6 +92,7 @@ class GeminiLiveTransport(
         val key = apiKey ?: return
         val generation = connectionGeneration.incrementAndGet()
         activeResumptionHandle = resumptionHandle
+        synchronized(controlLock) { socketReady = false }
         val url = HttpUrl.Builder()
             .scheme("wss")
             .host("generativelanguage.googleapis.com")
@@ -106,7 +112,9 @@ class GeminiLiveTransport(
             "session.thinking.append" -> "Teaching context"
             else -> "Conversation guidance"
         }
-        return sendJson(buildJsonObject { put("realtimeInput", buildJsonObject { put("text", "$label (do not mention this instruction): $content") }) })
+        return sendControlMessage(buildJsonObject {
+            put("realtimeInput", buildJsonObject { put("text", "$label (do not mention this instruction): $content") })
+        })
     }
 
     fun mute(value: Boolean) {
@@ -120,6 +128,10 @@ class GeminiLiveTransport(
     fun close() {
         if (!active || closing) return
         closing = true; muted = true
+        synchronized(controlLock) {
+            socketReady = false
+            pendingControlMessages.clear()
+        }
         reconnectJob?.cancel(); reconnectJob = null; reconnectDueAt = Long.MAX_VALUE
         sendJson(buildJsonObject { put("realtimeInput", buildJsonObject { put("audioStreamEnd", true) }) })
         if (!usageReported) {
@@ -133,6 +145,11 @@ class GeminiLiveTransport(
     fun disconnect() {
         connectionGeneration.incrementAndGet()
         active = false; closing = true; muted = true
+        synchronized(controlLock) {
+            socketReady = false
+            flushingControlMessages = false
+            pendingControlMessages.clear()
+        }
         reconnectJob?.cancel(); reconnectJob = null; reconnectDueAt = Long.MAX_VALUE
         recordJob?.cancel(); recordJob = null
         try { record?.stop() } catch (_: Exception) { }
@@ -176,6 +193,7 @@ class GeminiLiveTransport(
 
     private fun handleSocketEnded(webSocket: WebSocket, expectedGeneration: Long, message: String) {
         if (!isCurrent(webSocket, expectedGeneration) || closing) return
+        synchronized(controlLock) { socketReady = false }
         if (sessionResumptionHandle.isNullOrBlank()) fail(message) else scheduleReconnect(0L)
     }
 
@@ -230,7 +248,10 @@ class GeminiLiveTransport(
         try { record?.release() } catch (_: Exception) { }
         record = null
         val oldSocket = socket
-        socket = null
+        synchronized(controlLock) {
+            socketReady = false
+            socket = null
+        }
         oldSocket?.close(1000, "Resuming session")
         openSocket(handle)
     }
@@ -319,9 +340,16 @@ class GeminiLiveTransport(
                 fail("The Google AI Studio microphone couldn’t start.")
                 return
             }
+            if (!isCurrent(expectedSocket, expectedGeneration)) return
+            val firstSession = !sessionStarted
+            if (firstSession && activeResumptionHandle == null) sendHistory(expectedSocket, expectedGeneration)
+            synchronized(controlLock) {
+                if (!isCurrent(expectedSocket, expectedGeneration)) return
+                socketReady = true
+                flushPendingControlMessages(expectedSocket, expectedGeneration)
+            }
             reconnectAttempts = 0
-            if (!sessionStarted) {
-                if (activeResumptionHandle == null) sendHistory(expectedSocket, expectedGeneration)
+            if (firstSession) {
                 sessionStarted = true
                 val session = buildJsonObject { put("id", "gemini-live"); put("model", AIProvider.GOOGLE_AI_STUDIO.liveModel) }
                 emitEvent(buildJsonObject { put("type", "mural.session.created"); put("session", session) }, expectedGeneration)
@@ -366,6 +394,40 @@ class GeminiLiveTransport(
 
     private fun isCurrent(expectedSocket: WebSocket, expectedGeneration: Long): Boolean =
         active && connectionGeneration.get() == expectedGeneration && socket === expectedSocket
+
+    private fun sendControlMessage(value: JsonObject): Boolean {
+        synchronized(controlLock) {
+            if (!active || closing) return false
+            val currentSocket = socket
+            if (!socketReady || flushingControlMessages || currentSocket == null) {
+                pendingControlMessages.addLast(value)
+                return true
+            }
+            if (sendJson(value, currentSocket, connectionGeneration.get())) return true
+            socketReady = false
+            pendingControlMessages.addFirst(value)
+            return true
+        }
+    }
+
+    private fun flushPendingControlMessages(expectedSocket: WebSocket, expectedGeneration: Long) {
+        synchronized(controlLock) {
+            if (!socketReady || !isCurrent(expectedSocket, expectedGeneration)) return
+            flushingControlMessages = true
+            try {
+                while (pendingControlMessages.isNotEmpty()) {
+                    val message = pendingControlMessages.first()
+                    if (!sendJson(message, expectedSocket, expectedGeneration)) {
+                        socketReady = false
+                        return
+                    }
+                    pendingControlMessages.removeFirst()
+                }
+            } finally {
+                flushingControlMessages = false
+            }
+        }
+    }
 
     private fun sendJson(value: JsonObject, expectedSocket: WebSocket? = null, expectedGeneration: Long? = null): Boolean {
         val current = socket ?: return false

@@ -19,6 +19,7 @@ import AVFoundation
     private var connectedAt = Date()
     private var inputLevel = 0.0
     private var pendingHistory: [[String: Any]] = []
+    private var pendingControlMessages: [[String: Any]] = []
     private var connectionGeneration = 0
     private var sessionStarted = false
     private var usageReported = false
@@ -95,7 +96,12 @@ import AVFoundation
         default: label = "Conversation guidance"
         }
         let text = "\(label) (do not mention this instruction): \(content)"
-        return sendJSONImmediately(["realtimeInput": ["text": text]])
+        let message: [String: Any] = ["realtimeInput": ["text": text]]
+        guard socketReady else {
+            pendingControlMessages.append(message)
+            return true
+        }
+        return sendJSONImmediately(message)
     }
 
     func mute(_ value: Bool) {
@@ -110,6 +116,7 @@ import AVFoundation
         guard !closing else { return }
         closing = true; muted = true
         socketReady = false
+        pendingControlMessages.removeAll(keepingCapacity: false)
         reconnectTask?.cancel(); reconnectTask = nil; reconnectDeadline = nil
         _ = sendJSONImmediately(["realtimeInput": ["audioStreamEnd": true]])
         guard !usageReported else { return }
@@ -128,7 +135,7 @@ import AVFoundation
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
         session?.invalidateAndCancel(); session = nil
         stopAudio()
-        apiKey = ""; instructions = ""; pendingHistory = []; sessionResumptionHandle = nil; activeResumptionHandle = nil
+        apiKey = ""; instructions = ""; pendingHistory = []; pendingControlMessages = []; sessionResumptionHandle = nil; activeResumptionHandle = nil
         onLevels?(0, 0)
     }
 
@@ -307,16 +314,21 @@ import AVFoundation
             return
         }
         if json["setupComplete"] != nil {
-            socketReady = true
             do {
                 if audioEngine == nil { try startAudio() }
             } catch {
+                socketReady = false
                 onFailure?("The Google AI Studio microphone couldn’t start.")
                 return
             }
+            let firstSession = !sessionStarted
+            if firstSession, activeResumptionHandle == nil, !pendingHistory.isEmpty, let socket {
+                sendHistory(pendingHistory, socket: socket, generation: generation)
+            }
+            socketReady = true
+            flushPendingControlMessages()
             reconnectAttempts = 0
-            if !sessionStarted {
-                if activeResumptionHandle == nil, !pendingHistory.isEmpty, let socket { sendHistory(pendingHistory, socket: socket, generation: generation) }
+            if firstSession {
                 sessionStarted = true
                 let session: [String: Any] = ["id": "gemini-live", "model": AIProvider.googleAIStudio.liveModel]
                 onEvent?(["type": "mural.session.created", "session": session])
@@ -345,6 +357,18 @@ import AVFoundation
             guard let inline = part["inlineData"] as? [String: Any], let encoded = inline["data"] as? String,
                   let data = Data(base64Encoded: encoded) else { continue }
             playAudio(data)
+        }
+    }
+
+    private func flushPendingControlMessages() {
+        guard socketReady else { return }
+        while !pendingControlMessages.isEmpty {
+            let message = pendingControlMessages.removeFirst()
+            if !sendJSONImmediately(message) {
+                pendingControlMessages.insert(message, at: 0)
+                socketReady = false
+                return
+            }
         }
     }
 
