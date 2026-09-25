@@ -23,11 +23,14 @@ final class MuralUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding"]
         app.launch()
+        let picker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        reveal(picker, in: app)
+        picker.tap()
         let choice = app.buttons["onboarding-language-\(id)"]
-        XCTAssertTrue(choice.waitForExistence(timeout: 10))
-        reveal(choice, in: app)
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
         choice.tap()
-        XCTAssertTrue(choice.isSelected)
+        XCTAssertTrue(picker.exists)
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Language selection - \(id)"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["onboarding-continue"].tap()
@@ -56,11 +59,14 @@ final class MuralUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
+        let picker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        reveal(picker, in: app)
+        picker.tap()
         let choice = app.buttons["onboarding-language-zh"]
-        XCTAssertTrue(choice.waitForExistence(timeout: 10))
-        reveal(choice, in: app)
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
         choice.tap()
-        XCTAssertTrue(choice.isSelected)
+        XCTAssertTrue(picker.exists)
         XCTAssertTrue(app.buttons["onboarding-continue"].isHittable)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))

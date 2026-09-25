@@ -324,8 +324,14 @@ struct SettingsView: View {
                         Text("Mural minutes").tag(ConversationProvider.hosted)
                         Text("My OpenAI key").tag(ConversationProvider.personalKey)
                     }.disabled(coordinator.isRunning)
-                    if coordinator.conversationProvider == .hosted, let remaining = coordinator.hostedBalanceMilliseconds {
-                        LabeledContent("Available", value: "\(remaining / 60_000) min \((remaining % 60_000) / 1_000) sec")
+                    if coordinator.conversationProvider == .hosted {
+                        if coordinator.isRunning {
+                            LabeledContent("Available", value: "Updates after this conversation")
+                        } else if let remaining = coordinator.hostedBalanceMilliseconds {
+                            LabeledContent("Available", value: "\(remaining / 60_000) min \((remaining % 60_000) / 1_000) sec")
+                        } else {
+                            LabeledContent("Available", value: coordinator.hostedBalanceLoading ? "Checking…" : "Unavailable")
+                        }
                     }
                 } header: { Text("Start talking") } footer: {
                     Text("Eligible new installations can receive up to 10 free conversation minutes while trial funding is available. Mural checks the remaining time with its server. Your own key uses your OpenAI account and its billing.")
@@ -382,7 +388,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settings-support")
                 } header: { Text("Help and privacy") }
                 Section {
-                    Text("Mural 0.1 · TestFlight preview").font(.footnote)
+                    Text("Mural 1.0 · TestFlight preview").font(.footnote)
                     Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
                     Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
                     Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.").font(.footnote)
@@ -407,6 +413,9 @@ struct SettingsView: View {
                 ScrollView { Text(Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt").flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "Notices unavailable.").font(.footnote).padding(24).textSelection(.enabled) }
                     .navigationTitle("Open-source notices").navigationBarTitleDisplayMode(.inline)
             }
+        }
+        .task(id: "\(coordinator.conversationProvider.rawValue)-\(coordinator.isRunning)") {
+            await coordinator.refreshHostedBalance()
         }
     }
 }

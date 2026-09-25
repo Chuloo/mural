@@ -1,6 +1,14 @@
 # Release status
 
-**The source and website are public, and optional Google accounts are deployed for supported preview builds.** The user completed Google sign-in on the phone, and PostgreSQL account/session records were verified without exposing personal data. Apple sign-in, TestFlight, the App Store, hosted free minutes and credit purchases remain unavailable. Account creation does not enable hosted conversations or payments; practice with a personal OpenAI key remains independent of signup.
+## September 25, 2026: internal TestFlight
+
+Mural 1.0 (2) is uploaded and available to the **Mural Internal** TestFlight group. The group has two invited testers, including `williamimoh@gmail.com`. The App Store Connect version remains **Prepare for Submission** with build 2 attached, the pastel orb icon, listing copy, and four current iPhone screenshots. It has not been submitted for App Review. See the [build 2 release record](testflight-2026-09-25.md) for checks and remaining device tests.
+
+A voice conversation and Google sign-in worked on a directly installed iPhone build. That test exposed a stale guest-minute display in Settings; build 2 fetches the current balance when Settings opens. The TestFlight-installed build still needs the same real-device checks.
+
+## September 12 historical checkpoint
+
+At this checkpoint, **the source and website were public, and optional Google accounts were deployed for supported preview builds.** The user completed Google sign-in on the phone, and PostgreSQL account/session records were verified without exposing personal data. Apple sign-in, TestFlight, the App Store, hosted free minutes and credit purchases were still unavailable. Account creation did not enable hosted conversations or payments; practice with a personal OpenAI key remained independent of signup.
 
 ## Completed
 

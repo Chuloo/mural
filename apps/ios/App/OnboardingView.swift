@@ -113,26 +113,31 @@ struct OnboardingView: View {
             Text("What would you\nlike to speak?")
                 .font(.system(.title2, design: .rounded, weight: .semibold)).tracking(-0.5)
                 .multilineTextAlignment(.center).accessibilityIdentifier("onboarding-language-title")
-            VStack(spacing: 10) {
+            Menu {
                 ForEach(LanguageRegistry.all) { language in
                     Button { targetID = language.id } label: {
-                        HStack(spacing: 14) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(language.nativeName).font(.system(.headline, design: .rounded))
-                                Text(language.settingsTitle).font(.caption).foregroundStyle(MuralColor.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: targetID == language.id ? "checkmark.circle.fill" : "circle")
-                                .font(.title3).foregroundStyle(targetID == language.id ? MuralColor.orange : MuralColor.secondary.opacity(0.4))
-                        }.padding(.horizontal, 18).padding(.vertical, 13).frame(maxWidth: .infinity)
-                            .background(targetID == language.id ? .white.opacity(0.92) : .white.opacity(0.52), in: RoundedRectangle(cornerRadius: 22))
-                            .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(targetID == language.id ? MuralColor.orange.opacity(0.55) : .clear, lineWidth: 1.5) }
-                    }.buttonStyle(.plain)
-                        .accessibilityLabel(language.settingsTitle)
-                        .accessibilityAddTraits(targetID == language.id ? .isSelected : [])
-                        .accessibilityIdentifier("onboarding-language-\(language.id)")
+                        if targetID == language.id {
+                            Label(language.settingsTitle, systemImage: "checkmark")
+                        } else {
+                            Text(language.settingsTitle)
+                        }
+                    }.accessibilityIdentifier("onboarding-language-\(language.id)")
                 }
+            } label: {
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(target.nativeName).font(.system(.title3, design: .rounded, weight: .medium))
+                        Text(target.settingsTitle).font(.caption).foregroundStyle(MuralColor.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.system(.subheadline, weight: .semibold))
+                        .foregroundStyle(MuralColor.secondary)
+                }.padding(.horizontal, 22).padding(.vertical, 18).frame(maxWidth: .infinity)
+                    .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 24))
+                    .overlay { RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.9), lineWidth: 1) }
             }
+            .accessibilityLabel("Learning language, \(target.settingsTitle)")
+            .accessibilityIdentifier("onboarding-language-picker")
         }
     }
 

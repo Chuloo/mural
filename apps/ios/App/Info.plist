@@ -10,6 +10,7 @@
 <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 <key>LSRequiresIPhoneOS</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>Mural listens while you practise speaking. Your voice is sent to OpenAI during a conversation.</string>
+<key>NSCameraUsageDescription</key><string>Mural's voice connection framework includes camera access. Mural's current conversations are voice only and do not capture photos or video.</string>
 <key>UIUserInterfaceStyle</key><string>Light</string>
 <key>UILaunchScreen</key><dict/>
 <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>

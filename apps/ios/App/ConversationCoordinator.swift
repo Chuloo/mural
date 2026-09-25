@@ -24,6 +24,7 @@ import MuralCore
     var notice: String?
     private(set) var conversationProvider: ConversationProvider
     private(set) var hostedBalanceMilliseconds: Int?
+    private(set) var hostedBalanceLoading = false
     var showSettings = false
     var showAIConsent = false
     private var startAfterConsent = false
@@ -156,6 +157,7 @@ import MuralCore
                     guard try await client.available(owner) else { throw HostedError.unavailable }
                     let balance = try await client.balance(owner)
                     self.hostedBalanceMilliseconds = balance.availableMilliseconds
+                    self.hostedBalanceLoading = false
                     guard balance.availableMilliseconds > 0 else { throw HostedError.noMinutes }
                     hosted = HostedConnectRequest(client: client, owner: owner, language: self.language.locale,
                                                   requestedMilliseconds: self.store.preferences.sessionMinutes * 60_000)
@@ -177,7 +179,27 @@ import MuralCore
         api.conversationProvider = provider
         api.hostedLease = nil
         hostedBalanceMilliseconds = nil
+        hostedBalanceLoading = false
         error = nil; notice = nil
+    }
+    func refreshHostedBalance() async {
+        guard conversationProvider == .hosted, !isRunning else { return }
+        hostedBalanceMilliseconds = nil
+        hostedBalanceLoading = true
+        defer { hostedBalanceLoading = false }
+        do {
+            guard let client = HostedClient.shared else { throw HostedError.unavailable }
+            let member: ManagedAccountSession?
+            if let config = ManagedAccountConfiguration.load() {
+                member = try ManagedAccountKeychain(scope: config.storageScope).load()
+            } else { member = nil }
+            let owner = try await GuestAccess.shared.owner(member: member)
+            let balance = try await client.balance(owner)
+            guard conversationProvider == .hosted, !isRunning else { return }
+            hostedBalanceMilliseconds = balance.availableMilliseconds
+        } catch {
+            hostedBalanceMilliseconds = nil
+        }
     }
     private var hasAIConsent: Bool {
         store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested
@@ -272,6 +294,8 @@ import MuralCore
         assessmentTask?.cancel(); saveTask?.cancel(); saveTask = nil
         delegationTasks.values.forEach { $0.cancel() }; delegationTasks.removeAll()
         transport.disconnect(); pendingCommands = [:]; working = false
+        hostedBalanceMilliseconds = nil
+        hostedBalanceLoading = false
         session?.endedAt = .now; session?.usageFinal = final
         save(); state = .ended
         if let session { finalAssessments.submit(session) }

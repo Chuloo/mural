@@ -85,46 +85,17 @@ struct TalkView: View {
     @State private var lookup: WordLookup?
     var body: some View {
         GeometryReader { geometry in
-            ScrollView {
-                VStack(spacing: 0) {
-                    Text(coordinator.selectedTheme?.title ?? coordinator.language.talkTitle)
-                        .font(.system(.caption, design: .rounded, weight: .medium)).foregroundStyle(MuralColor.secondary)
-                        .padding(.horizontal, 14).padding(.vertical, 9).background(MuralColor.butter.opacity(0.58), in: Capsule()).padding(.top, 12)
-                    Spacer(minLength: 8)
-                    MuralOrb(energy: max(coordinator.outputLevel, coordinator.inputLevel * 0.45), listening: coordinator.state == .active && !coordinator.isMuted, active: coordinator.state != .closing)
-                        .frame(width: typeSize.isAccessibilitySize ? 170 : 220, height: typeSize.isAccessibilitySize ? 180 : 222).padding(.vertical, 8)
-                    VStack(spacing: 2) {
-                        if coordinator.state == .active, let seconds = coordinator.inactivitySeconds {
-                            Text("Ending in \(seconds)s").fontWeight(.medium).monospacedDigit()
-                            Text("Reply to continue").font(.system(.caption2, design: .rounded))
-                        } else { Text(coordinator.status) }
-                    }
-                    .font(.system(.caption, design: .rounded)).foregroundStyle(MuralColor.secondary)
-                    .multilineTextAlignment(.center).frame(minHeight: 36)
-                    .padding(.top, 6).padding(.bottom, 16)
-                    .accessibilityElement(children: .ignore).accessibilityLabel(coordinator.status)
-                    .accessibilityAddTraits([.isStaticText, .updatesFrequently]).accessibilityIdentifier("conversation-status")
-                    captionArea
-                    Spacer(minLength: 12)
-                    controls
-                    Text(coordinator.microphoneLabel).font(.caption2).foregroundStyle(MuralColor.secondary).padding(.top, 10)
-                        .accessibilityIdentifier("microphone-status")
-                    HStack(spacing: 24) {
-                        if coordinator.state == .active {
-                            Button("Type instead", systemImage: "keyboard") { typing = true }
-                            Button("A little help", systemImage: "sparkles") { coordinator.help() }
-                        } else if coordinator.session == nil {
-                            Text("Reply in whichever language comes to you.").foregroundStyle(MuralColor.secondary)
-                        } else if !coordinator.isRunning {
-                            Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
-                                .accessibilityIdentifier("new-conversation")
-                        }
-                    }.font(.caption).padding(.top, 6).padding(.bottom, 12)
-                    if let notice = coordinator.notice {
-                        Text(notice).font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center).padding(.bottom, 12)
-                    }
-                }.padding(.horizontal, 30).frame(maxWidth: .infinity).frame(minHeight: geometry.size.height)
-            }.scrollIndicators(.hidden)
+            let scrollPage = typeSize.isAccessibilitySize || geometry.size.height < 480
+            let compact = !scrollPage && geometry.size.height < 620
+            if scrollPage {
+                ScrollView {
+                    talkContent(scrollPage: true, compact: compact)
+                        .frame(minHeight: geometry.size.height)
+                }.scrollIndicators(.hidden)
+            } else {
+                talkContent(scrollPage: false, compact: compact)
+                    .frame(height: geometry.size.height)
+            }
         }
         .sheet(isPresented: $typing) { TypedReplyView(coordinator: coordinator) }
         .animation(.smooth(duration: 0.35), value: coordinator.state)
@@ -133,30 +104,62 @@ struct TalkView: View {
         }
         .sheet(item: $lookup) { item in LookupView(item: item, coordinator: coordinator) }
     }
-    private var captionArea: some View {
-        VStack(spacing: 12) {
-            Text(linkedCaption).font(.system(coordinator.assistantPassage == nil ? .largeTitle : .title2, design: .rounded, weight: .medium))
-                .tracking(-0.5).multilineTextAlignment(.center).tint(MuralColor.ink)
-                .environment(\.openURL, OpenURLAction { url in
-                    guard url.scheme == "mural-word", let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first?.value else { return .discarded }
-                    lookup = WordLookup(word: word, sentence: coordinator.caption); return .handled
-                }).accessibilityIdentifier("target-caption")
-            if coordinator.language.id == "zh" { PinyinHelp(text: coordinator.caption) }
-            if coordinator.store.preferences.meaningVisible {
-                Text(coordinator.assistantPassage == nil ? MeaningLanguages.greeting(in: coordinator.store.preferences.meaningLanguage) : !coordinator.meaning.isEmpty ? coordinator.meaning : coordinator.translating ? "Finding the meaning…" : "")
-                    .font(.subheadline).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
-                    .accessibilityIdentifier("meaning-caption")
-                if let error = coordinator.meaningError {
-                    VStack(spacing: 6) {
-                        Text(error).foregroundStyle(MuralColor.secondary)
-                        Button("Try meaning again") { coordinator.retryMeaning() }
-                    }.font(.caption).multilineTextAlignment(.center)
+    private func talkContent(scrollPage: Bool, compact: Bool) -> some View {
+        let hasLongPassage = coordinator.assistantPassage != nil &&
+            (coordinator.caption.count > 60 || coordinator.language.id == "zh")
+        let orbSide: CGFloat = scrollPage ? 170 : compact ? (hasLongPassage ? 124 : 150) : (hasLongPassage ? 156 : 220)
+        return VStack(spacing: 0) {
+            Text(coordinator.selectedTheme?.title ?? coordinator.language.talkTitle)
+                .font(.system(.caption, design: .rounded, weight: .medium)).foregroundStyle(MuralColor.secondary)
+                .padding(.horizontal, 14).padding(.vertical, compact ? 6 : 9)
+                .background(MuralColor.butter.opacity(0.58), in: Capsule()).padding(.top, 12)
+            Spacer(minLength: compact ? 4 : 8)
+            MuralOrb(energy: max(coordinator.outputLevel, coordinator.inputLevel * 0.45), listening: coordinator.state == .active && !coordinator.isMuted, active: coordinator.state != .closing)
+                .frame(width: orbSide, height: orbSide).padding(.vertical, compact ? 2 : 8)
+            VStack(spacing: 2) {
+                if coordinator.state == .active, let seconds = coordinator.inactivitySeconds {
+                    Text("Ending in \(seconds)s").fontWeight(.medium).monospacedDigit()
+                    Text("Reply to continue").font(.system(.caption2, design: .rounded))
+                } else { Text(coordinator.status) }
+            }
+            .font(.system(.caption, design: .rounded)).foregroundStyle(MuralColor.secondary)
+            .multilineTextAlignment(.center).frame(minHeight: 36)
+            .padding(.top, 6).padding(.bottom, compact ? 8 : 16)
+            .accessibilityElement(children: .ignore).accessibilityLabel(coordinator.status)
+            .accessibilityAddTraits([.isStaticText, .updatesFrequently]).accessibilityIdentifier("conversation-status")
+            captionArea(scrollPage: scrollPage)
+                .frame(maxHeight: scrollPage ? nil : .infinity)
+            controls.padding(.top, compact ? 8 : 12)
+            Text(coordinator.microphoneLabel).font(.caption2).foregroundStyle(MuralColor.secondary).padding(.top, 10)
+                .accessibilityIdentifier("microphone-status")
+            HStack(spacing: 24) {
+                if coordinator.state == .active {
+                    Button("Type instead", systemImage: "keyboard") { typing = true }
+                    Button("A little help", systemImage: "sparkles") { coordinator.help() }
+                } else if coordinator.session == nil {
+                    Text("Reply in whichever language comes to you.").foregroundStyle(MuralColor.secondary)
+                } else if !coordinator.isRunning {
+                    Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
+                        .accessibilityIdentifier("new-conversation")
                 }
+            }.font(.caption).padding(.top, 6).padding(.bottom, 12)
+            if let notice = coordinator.notice {
+                Text(notice).font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center).padding(.bottom, 12)
+            }
+        }.padding(.horizontal, 30).frame(maxWidth: .infinity)
+    }
+    private func captionArea(scrollPage: Bool) -> some View {
+        VStack(spacing: 12) {
+            if scrollPage { targetPassage }
+            else { scrollingPassage { targetPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("target-passage-scroll") }
+            if coordinator.store.preferences.meaningVisible {
+                if scrollPage { meaningPassage }
+                else { scrollingPassage { meaningPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("meaning-passage-scroll") }
             }
             if let user = coordinator.userPassage {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("YOU").font(.system(.caption2, design: .rounded, weight: .medium))
-                    Text(String(user.text.suffix(160))).font(.caption)
+                    Text(String(user.text.suffix(160))).font(.caption).lineLimit(1)
                 }.foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center).padding(.top, 3)
             }
             if coordinator.working { ProgressView("Checking that for you…").font(.caption).tint(MuralColor.secondary) }
@@ -164,6 +167,35 @@ struct TalkView: View {
                 Button("Sources", systemImage: "link") { transcript = coordinator.session }.font(.caption)
             }
         }.frame(minHeight: typeSize.isAccessibilitySize ? 100 : 105).frame(maxWidth: .infinity)
+    }
+    private var targetPassage: some View {
+        VStack(spacing: 8) {
+            Text(linkedCaption).font(.system(coordinator.assistantPassage == nil ? .largeTitle : .title2, design: .rounded, weight: .medium))
+                .tracking(-0.5).multilineTextAlignment(.center).tint(MuralColor.ink)
+                .environment(\.openURL, OpenURLAction { url in
+                    guard url.scheme == "mural-word", let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first?.value else { return .discarded }
+                    lookup = WordLookup(word: word, sentence: coordinator.caption); return .handled
+                }).accessibilityIdentifier("target-caption")
+            if coordinator.language.id == "zh" { PinyinHelp(text: coordinator.caption) }
+        }.frame(maxWidth: .infinity)
+    }
+    private var meaningPassage: some View {
+        VStack(spacing: 6) {
+            Text(coordinator.assistantPassage == nil ? MeaningLanguages.greeting(in: coordinator.store.preferences.meaningLanguage) : !coordinator.meaning.isEmpty ? coordinator.meaning : coordinator.translating ? "Finding the meaning…" : "")
+                .font(.subheadline).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
+                .accessibilityIdentifier("meaning-caption")
+            if let error = coordinator.meaningError {
+                Text(error).foregroundStyle(MuralColor.secondary)
+                Button("Try meaning again") { coordinator.retryMeaning() }
+            }
+        }.font(.caption).frame(maxWidth: .infinity)
+    }
+    private func scrollingPassage<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        GeometryReader { geometry in
+            ScrollView {
+                content().frame(maxWidth: .infinity).frame(minHeight: geometry.size.height)
+            }.scrollIndicators(.hidden)
+        }
     }
     private var linkedCaption: AttributedString {
         var result = AttributedString()
