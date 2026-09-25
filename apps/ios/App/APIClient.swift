@@ -9,6 +9,8 @@ struct APIUsage { var input = 0; var output = 0; var searches = 0 }
 struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUsage }
 
 @MainActor final class APIClient {
+    var conversationProvider: ConversationProvider = .personalKey
+    var hostedLease: HostedLease?
     private let session: URLSession
     init() {
         let config = URLSessionConfiguration.ephemeral
@@ -29,7 +31,15 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw APIError.invalidResponse }
         return json
     }
-    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false, onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
+    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false,
+                 purpose: String = "meaning", onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
+        if conversationProvider == .hosted {
+            guard let hostedLease, let client = HostedClient.shared else { throw HostedError.unavailable }
+            let result = try await client.helper(hostedLease, purpose: purpose, instructions: instructions, input: input,
+                                                 schema: schema, search: search)
+            onText?(result.text)
+            return result
+        }
         var body: [String: Any] = ["model": "gpt-5.6-luna", "store": false, "instructions": instructions,
                                   "input": [["role": "user", "content": input]], "max_output_tokens": schema == nil ? 1400 : 2200,
                                   "reasoning": ["effort": "low"]]

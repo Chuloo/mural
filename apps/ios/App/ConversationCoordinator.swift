@@ -22,6 +22,8 @@ import MuralCore
     var error: String?
     var typedReplyError: String?
     var notice: String?
+    private(set) var conversationProvider: ConversationProvider
+    private(set) var hostedBalanceMilliseconds: Int?
     var showSettings = false
     var showAIConsent = false
     private var startAfterConsent = false
@@ -50,6 +52,9 @@ import MuralCore
 
     init(store: LearningStore) {
         self.store = store
+        let savedProvider = UserDefaults.standard.string(forKey: "mural.conversation-provider")
+        conversationProvider = savedProvider.flatMap(ConversationProvider.init(rawValue:))
+            ?? (CredentialStore.hasKey ? .personalKey : .hosted)
         let api = APIClient(); self.api = api
         finalAssessments = FinalAssessmentQueue { snapshot, passage in
             guard store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested else { throw AIProcessingConsent.ConsentError.required }
@@ -61,6 +66,7 @@ import MuralCore
             let result = try await api.respond(instructions: TeachingPolicy.translation(language: language, meaningLanguage: request.meaningLanguage), input: request.translationInput, onText: onText)
             return MeaningResult(text: result.text, inputTokens: result.usage.input, outputTokens: result.usage.output)
         })
+        api.conversationProvider = conversationProvider
         meanings.onResult = { [weak self] request, result in
             guard let self, self.session?.id == request.sessionID else { return }
             self.session?.translations[request.cacheKey] = result.text
@@ -83,6 +89,10 @@ import MuralCore
             }
         }
         transport.onFailure = { [weak self] in self?.fail($0) }
+        transport.onHostedLease = { [weak self] lease in
+            guard let self, self.isRunning else { return }
+            self.api.hostedLease = lease
+        }
         observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] notification in
             guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt, raw == AVAudioSession.InterruptionType.began.rawValue else { return }
             Task { @MainActor in self?.end(reason: "Audio interrupted") }
@@ -117,7 +127,7 @@ import MuralCore
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--preview") { showSettings = true; return }
         #endif
-        guard CredentialStore.hasKey else { showSettings = true; return }
+        guard conversationProvider != .personalKey || CredentialStore.hasKey else { showSettings = true; return }
         cancelReset(); meanings.reset()
         error = nil; notice = nil; lastAssessmentKey = ""
         lastLanguageCheck = ""; pendingCommands = [:]
@@ -130,15 +140,44 @@ import MuralCore
         // Each new conversation starts fresh; learned vocabulary and difficulty still carry forward.
         let history: [[String: Any]] = []
         let instructions = TeachingPolicy.voice(language: language, learner: learner, theme: selectedTheme, interests: store.preferences.interests, meaningLanguage: store.preferences.meaningLanguage)
+        api.conversationProvider = conversationProvider
+        api.hostedLease = nil
         connectionTask = Task { [weak self] in
             guard let self else { return }
-            do { try await self.transport.connect(api: self.api, instructions: instructions, history: history) }
+            do {
+                var hosted: HostedConnectRequest?
+                if self.conversationProvider == .hosted {
+                    guard let client = HostedClient.shared else { throw HostedError.unavailable }
+                    let member: ManagedAccountSession?
+                    if let config = ManagedAccountConfiguration.load() {
+                        member = try ManagedAccountKeychain(scope: config.storageScope).load()
+                    } else { member = nil }
+                    let owner = try await GuestAccess.shared.owner(member: member)
+                    guard try await client.available(owner) else { throw HostedError.unavailable }
+                    let balance = try await client.balance(owner)
+                    self.hostedBalanceMilliseconds = balance.availableMilliseconds
+                    guard balance.availableMilliseconds > 0 else { throw HostedError.noMinutes }
+                    hosted = HostedConnectRequest(client: client, owner: owner, language: self.language.locale,
+                                                  requestedMilliseconds: self.store.preferences.sessionMinutes * 60_000)
+                }
+                guard self.session?.id == generation, self.state == .connecting else { return }
+                try await self.transport.connect(api: self.api, instructions: instructions, history: history, hosted: hosted)
+            }
             catch is CancellationError { return }
             catch {
                 guard self.session?.id == generation, self.state == .connecting || self.state == .active else { return }
                 self.fail(error.localizedDescription)
             }
         }
+    }
+    func selectConversationProvider(_ provider: ConversationProvider) {
+        guard !isRunning else { return }
+        conversationProvider = provider
+        UserDefaults.standard.set(provider.rawValue, forKey: "mural.conversation-provider")
+        api.conversationProvider = provider
+        api.hostedLease = nil
+        hostedBalanceMilliseconds = nil
+        error = nil; notice = nil
     }
     private var hasAIConsent: Bool {
         store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested
@@ -417,7 +456,7 @@ import MuralCore
     private struct AssessmentResult: Decodable { var outcome: Outcome; var suggestedLevel: Int; var nextGoal: String; var capability: String; var words: [WordProposal] }
     private static func assess(api: APIClient, snapshot: SessionRecord, passage: Passage) async throws -> FinalAssessmentResult {
         guard let language = LanguageRegistry.module(for: snapshot.languageID) else { throw ArchiveError.unsupportedLanguage }
-        let result = try await api.respond(instructions: TeachingPolicy.assessment(language: language), input: TeachingPolicy.context(snapshot, passage: passage), schema: APIClient.assessmentSchema(language: language))
+        let result = try await api.respond(instructions: TeachingPolicy.assessment(language: language), input: TeachingPolicy.context(snapshot, passage: passage), schema: APIClient.assessmentSchema(language: language), purpose: "assessment")
         let decoded = try JSONDecoder().decode(AssessmentResult.self, from: Data(result.text.utf8))
         let proposed = Assessment(passageID: passage.id, revisionKey: passage.revisionKey, outcome: decoded.outcome, suggestedLevel: decoded.suggestedLevel,
                                   nextGoal: decoded.nextGoal, capability: decoded.capability, words: decoded.words, context: snapshot.themeID ?? "free")
@@ -473,7 +512,7 @@ import MuralCore
                 try await Task.sleep(for: .milliseconds(500))
                 guard self.session?.id == snapshot.id, self.state == .active, let current = self.session else { return }
                 guard let targetLanguage = LanguageRegistry.module(for: current.languageID) else { return }
-                let result = try await self.api.respond(instructions: TeachingPolicy.delegation(language: targetLanguage), input: TeachingPolicy.context(current), search: current.searchCalls < 3)
+                let result = try await self.api.respond(instructions: TeachingPolicy.delegation(language: targetLanguage), input: TeachingPolicy.context(current), search: current.searchCalls < 3, purpose: "delegation")
                 guard self.session?.id == snapshot.id, self.state == .active else { return }
                 self.addUsage(result.usage)
                 if !result.sources.isEmpty {
@@ -538,12 +577,12 @@ import MuralCore
             return APIResult(text: "Gracias.", sources: [], usage: APIUsage())
         }
         #endif
-        return try await api.respond(instructions: instructions, input: input)
+        return try await api.respond(instructions: instructions, input: input, purpose: "typed_reply")
     }
     func lookup(word: String, sentence: String) async throws -> String {
         guard hasAIConsent else { throw AIProcessingConsent.ConsentError.required }
         let generation = languageGeneration, sessionID = session?.id
-        let result = try await api.respond(instructions: TeachingPolicy.lookup(language: language, meaningLanguage: store.preferences.meaningLanguage), input: "Selected: \(word)\nSentence: \(sentence)")
+        let result = try await api.respond(instructions: TeachingPolicy.lookup(language: language, meaningLanguage: store.preferences.meaningLanguage), input: "Selected: \(word)\nSentence: \(sentence)", purpose: "lookup")
         guard generation == languageGeneration else { throw CancellationError() }
         if session?.id == sessionID { addUsage(result.usage); scheduleSave() }
         return result.text
@@ -552,7 +591,8 @@ import MuralCore
         let targetLanguage = language, generation = languageGeneration
         if let cached = store.learningSessions.flatMap(\.topics).first(where: { $0.languageID == targetLanguage.id && $0.query.lowercased() == query.lowercased() && $0.isFresh }) { return cached }
         guard hasAIConsent else { throw AIProcessingConsent.ConsentError.required }
-        let result = try await api.respond(instructions: TeachingPolicy.currentTopic(language: targetLanguage), input: String(query.prefix(500)), search: true)
+        if conversationProvider == .hosted && api.hostedLease == nil { throw HostedError.personalKeyRequired }
+        let result = try await api.respond(instructions: TeachingPolicy.currentTopic(language: targetLanguage), input: String(query.prefix(500)), search: true, purpose: "topic")
         guard generation == languageGeneration else { throw CancellationError() }
         guard !result.sources.isEmpty else { throw TopicError.unsourced }
         let brief = TopicBrief(languageID: targetLanguage.id, query: query, text: result.text, sources: result.sources)

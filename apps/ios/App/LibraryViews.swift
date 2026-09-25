@@ -76,7 +76,7 @@ struct CurrentTopicView: View {
                         Button("Talk about this", systemImage: "waveform") { coordinator.discuss(brief); selected(); dismiss() }
                             .font(.headline).padding(18).frame(maxWidth: .infinity).background(MuralColor.orange, in: Capsule())
                     }
-                    Text("Search uses your OpenAI API account. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                    Text("Current topics use your OpenAI key outside a conversation. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -320,18 +320,29 @@ struct SettingsView: View {
                     }
                 }
                 Section {
+                    Picker("Conversation access", selection: Binding(get: { coordinator.conversationProvider }, set: { coordinator.selectConversationProvider($0) })) {
+                        Text("Mural minutes").tag(ConversationProvider.hosted)
+                        Text("My OpenAI key").tag(ConversationProvider.personalKey)
+                    }.disabled(coordinator.isRunning)
+                    if coordinator.conversationProvider == .hosted, let remaining = coordinator.hostedBalanceMilliseconds {
+                        LabeledContent("Available", value: "\(remaining / 60_000) min \((remaining % 60_000) / 1_000) sec")
+                    }
+                } header: { Text("Start talking") } footer: {
+                    Text("Eligible new installations can receive up to 10 free conversation minutes while trial funding is available. Mural checks the remaining time with its server. Your own key uses your OpenAI account and its billing.")
+                }
+                Section {
                     DisclosureGroup(isExpanded: $showingAPIKey) {
                         if hasKey { Label("Your key is saved on this iPhone", systemImage: "checkmark.shield") }
                         SecureField(hasKey ? "Replace OpenAI key" : "OpenAI API key", text: $key)
                             .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive().accessibilityIdentifier("api-key")
                         Button(hasKey ? "Save replacement key" : "Save key") {
-                            do { try CredentialStore.save(key); key = ""; hasKey = true; message = "Saved securely. Start a conversation to connect." }
+                            do { try CredentialStore.save(key); key = ""; hasKey = true; coordinator.selectConversationProvider(.personalKey); message = "Saved securely. Start a conversation to connect." }
                             catch { message = error.localizedDescription }
                         }.disabled(key.isEmpty || coordinator.isRunning)
                         Link("Open OpenAI API keys", destination: URL(string: "https://platform.openai.com/api-keys")!)
                         if hasKey {
                             Button("Remove key", role: .destructive) {
-                                do { try CredentialStore.delete(); hasKey = false; message = "Your key has been removed." }
+                                do { try CredentialStore.delete(); hasKey = false; coordinator.selectConversationProvider(.hosted); message = "Your key has been removed." }
                                 catch { message = error.localizedDescription }
                             }.disabled(coordinator.isRunning)
                         }
@@ -340,7 +351,7 @@ struct SettingsView: View {
                     } label: { Label("Use your own API key", systemImage: "key").accessibilityIdentifier("advanced-api-key") }
                     if let message { Text(message).font(.footnote).foregroundStyle(MuralColor.secondary) }
                 } header: { Text("Advanced") } footer: {
-                    if !hasKey { Text("This version uses your OpenAI API key to start a conversation.") }
+                    if !hasKey { Text("A personal key is optional when Mural minutes are available.") }
                 }
                 Section {
                     Picker("Conversation limit", selection: Binding(get: { store.preferences.sessionMinutes }, set: { value in store.updatePreferences { $0.sessionMinutes = value } })) {
@@ -371,10 +382,10 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settings-support")
                 } header: { Text("Help and privacy") }
                 Section {
-                    Text("Mural 0.1 · Personal build").font(.footnote)
+                    Text("Mural 0.1 · TestFlight preview").font(.footnote)
                     Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
                     Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
-                    Text("Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.").font(.footnote)
+                    Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.").font(.footnote)
                     Button("Open-source notices") { notices = true }
                 }
             }.scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.secondary)

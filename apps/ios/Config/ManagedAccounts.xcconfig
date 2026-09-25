@@ -1,10 +1,10 @@
 // Public app configuration. Enable only providers available on the configured server.
 // Local.xcconfig can override these values without changing personal signing.
-MURAL_MANAGED_ACCOUNTS_ENABLED = NO
-MURAL_MANAGED_API_URL =
-MURAL_GOOGLE_SIGN_IN_ENABLED = NO
-MURAL_GOOGLE_CLIENT_ID =
-MURAL_GOOGLE_CALLBACK_SCHEME = no.william.mural.accounts-disabled
+MURAL_MANAGED_ACCOUNTS_ENABLED = YES
+MURAL_MANAGED_API_URL = https:/$()/api.mural.chat
+MURAL_GOOGLE_SIGN_IN_ENABLED = YES
+MURAL_GOOGLE_CLIENT_ID = 1034240936303-h3u9og7kbch24j06ju5f21uam5fn9f2r.apps.googleusercontent.com
+MURAL_GOOGLE_CALLBACK_SCHEME = com.googleusercontent.apps.1034240936303-h3u9og7kbch24j06ju5f21uam5fn9f2r
 MURAL_APPLE_SIGN_IN_ENABLED = NO
 MURAL_APPLE_SWIFT_FLAGS =
 MURAL_APPLE_ENTITLEMENTS =

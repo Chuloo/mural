@@ -7,6 +7,7 @@ final class ManagedAccountStore {
     let configuration: ManagedAccountConfiguration?
     private(set) var session: ManagedAccountSession?
     private(set) var profile: ManagedAccountProfile?
+    private(set) var hostedBalanceMilliseconds: Int?
     private(set) var isBusy = false
     var message: String?
     @ObservationIgnored private let client: ManagedAccountClient?
@@ -36,6 +37,9 @@ final class ManagedAccountStore {
         guard !isBusy, session == nil, let client, let configuration, let keychain,
               configuration.providers.contains(provider) else { return }
         run { [self] token in
+            // Claim this installation's trial before account creation so a new member can
+            // keep its unused minutes. Existing members remain subject to the server's limit.
+            if HostedClient.shared != nil { _ = try? await GuestAccess.shared.owner(member: nil) }
             let challenge = try await client.challenge()
             let expiresAt = Date.now.addingTimeInterval(TimeInterval(challenge.expiresInSeconds))
             let credential = try await (provider == .google
@@ -53,6 +57,11 @@ final class ManagedAccountStore {
             let result = try await client.profile(session: newSession)
             guard gate.accepts(token) else { return }
             profile = result
+            if let hosted = HostedClient.shared {
+                let owner = HostedOwner(accountID: newSession.accountID, accessToken: newSession.accessToken, expiresAt: newSession.expiresAt)
+                try await GuestAccess.shared.linkIfNeeded(to: owner)
+                hostedBalanceMilliseconds = try? await hosted.balance(owner).availableMilliseconds
+            }
         }
     }
     func refresh() {
@@ -61,6 +70,11 @@ final class ManagedAccountStore {
             let result = try await client.profile(session: session)
             guard gate.accepts(token) else { return }
             profile = result
+            if let hosted = HostedClient.shared {
+                let owner = HostedOwner(accountID: session.accountID, accessToken: session.accessToken, expiresAt: session.expiresAt)
+                try await GuestAccess.shared.linkIfNeeded(to: owner)
+                hostedBalanceMilliseconds = try? await hosted.balance(owner).availableMilliseconds
+            }
         }
     }
     func signOut() {
@@ -72,7 +86,7 @@ final class ManagedAccountStore {
             catch { remoteFailed = true }
             guard gate.accepts(token) else { return }
             try keychain.remove()
-            self.session = nil; profile = nil
+            self.session = nil; profile = nil; hostedBalanceMilliseconds = nil
             if remoteFailed { message = "Signed out on this iPhone. We couldn’t reach Mural to revoke other sessions; they expire within 24 hours." }
         }
     }
@@ -87,7 +101,7 @@ final class ManagedAccountStore {
             guard gate.accepts(token) else { return }
             try await client.delete(session: session, appleCode: code)
             guard gate.accepts(token) else { return }
-            self.session = nil; profile = nil
+            self.session = nil; profile = nil; hostedBalanceMilliseconds = nil
             do { try keychain.remove() }
             catch {
                 message = "Account deleted. Mural couldn’t clear its local secure sign-in record. Unlock this iPhone and reopen Account to clear it."
@@ -119,7 +133,8 @@ final class ManagedAccountStore {
         }
     }
     private static func message(for error: Error) -> String {
-        switch error as? ManagedAccountError {
+        if let hosted = error as? HostedError { return hosted.localizedDescription }
+        return switch error as? ManagedAccountError {
         case .secureStorage: "Mural couldn’t update this iPhone’s secure account storage. Unlock the iPhone and try again."
         case .server("unresolved_billing"): "Your account has a balance, pending payment or active usage. Contact hi@hackmamba.io to resolve it before deleting your account."
         case .server("sign_in_required"): "Please sign in again. Your learning history is still on this iPhone."

@@ -8,9 +8,9 @@ import { appendMinuteEntry, captureWelcomeOffer } from './minutes.js';
 
 export type Provider = 'google' | 'apple';
 export type Identity = { provider: Provider; subject: string; email: string | null };
-export type AuthConfig = { googleClientID?: string; appleClientID?: string;
+export type AuthConfig = { googleClientID?: string; googleIOSClientIDs?: string[]; appleClientID?: string;
   googleAndroidServerClientID?: string; googleAndroidClientIDs?: string[] };
-export const hasGoogleSignIn = (config: AuthConfig) => Boolean(config.googleClientID ||
+export const hasGoogleSignIn = (config: AuthConfig) => Boolean(config.googleClientID || config.googleIOSClientIDs?.length ||
   (config.googleAndroidServerClientID && config.googleAndroidClientIDs?.length));
 const googleKeys = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const appleKeys = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
@@ -19,7 +19,7 @@ export const digest = (text: string) => createHash('sha256').update(text).digest
 export async function verifyIdentity(provider: Provider, token: string, nonceHash: string,
   config: AuthConfig, getKey?: JWTVerifyGetKey): Promise<Identity> {
   const audiences = provider === 'google'
-    ? [config.googleClientID, ...(config.googleAndroidClientIDs?.length ? [config.googleAndroidServerClientID] : [])].filter((id): id is string => Boolean(id))
+    ? [config.googleClientID, ...(config.googleIOSClientIDs ?? []), ...(config.googleAndroidClientIDs?.length ? [config.googleAndroidServerClientID] : [])].filter((id): id is string => Boolean(id))
     : [config.appleClientID].filter((id): id is string => Boolean(id));
   if (!audiences.length) throw new ServiceError('identity_provider_not_configured', 503);
   try {
@@ -34,11 +34,12 @@ export async function verifyIdentity(provider: Provider, token: string, nonceHas
     if (provider === 'google') {
       const tokenAudiences = typeof payload.aud === 'string' ? [payload.aud] : payload.aud ?? [];
       const android = config.googleAndroidServerClientID !== undefined && tokenAudiences.includes(config.googleAndroidServerClientID);
-      const parties = android ? config.googleAndroidClientIDs ?? [] : [config.googleClientID];
+      const parties = android ? config.googleAndroidClientIDs ?? [] :
+        [...(config.googleClientID ? [config.googleClientID] : []), ...(config.googleIOSClientIDs ?? [])];
       // Native Android tokens must identify an explicitly registered Android client.
       // The web client ID is an audience, not permission for arbitrary Android apps.
       if ((android && (typeof payload.azp !== 'string' || !parties.includes(payload.azp))) ||
-          (!android && payload.azp !== undefined && payload.azp !== config.googleClientID) ||
+          (!android && payload.azp !== undefined && (typeof payload.azp !== 'string' || !parties.includes(payload.azp))) ||
           (tokenAudiences.length > 1 && typeof payload.azp !== 'string')) throw new Error();
     }
     const verified = payload.email_verified === true || payload.email_verified === 'true';

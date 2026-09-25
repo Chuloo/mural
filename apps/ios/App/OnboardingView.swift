@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @State private var meaningLanguage: String
     @State private var hasChosenMeaning: Bool
     @State private var greetingIndex = 0
+    @State private var adultConfirmed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
@@ -69,6 +70,7 @@ struct OnboardingView: View {
                     .font(.system(.headline, design: .rounded)).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity).padding(.vertical, 19)
                     .background(MuralColor.orange, in: Capsule())
+                    .disabled(step == 1 && !adultConfirmed)
                     .accessibilityIdentifier("onboarding-continue")
                 if !typeSize.isAccessibilitySize {
                     Text(step == 0 ? "We’ll find your pace through conversation." : "You can change both languages in Settings.")
@@ -95,6 +97,8 @@ struct OnboardingView: View {
 
     private var consentDetails: some View {
         VStack(spacing: 12) {
+            Toggle("I’m 18 or older", isOn: $adultConfirmed)
+                .font(.footnote).accessibilityIdentifier("onboarding-adult-confirmation")
             Text(AIProcessingConsent.summary)
                 .font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -185,7 +189,7 @@ struct OnboardingView: View {
 
 enum AIProcessingConsent {
     static let version = 1
-    static let summary = "With your permission, Mural sends audio and selected text to OpenAI to provide conversations and meanings. Provider retention rules apply."
+    static let summary = "With your permission, Mural sends audio and selected text to OpenAI for conversations and meanings. Mural minutes pass through our server; your own key connects directly. Provider retention rules apply."
     enum ConsentError: LocalizedError {
         case required
         var errorDescription: String? { "Before using AI features, open Talk and tap the microphone to review how OpenAI processes your audio and text." }

@@ -3,6 +3,13 @@ import XCTest
 final class MuralUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    private func confirmAdult(in app: XCUIApplication) {
+        let control = app.switches["onboarding-adult-confirmation"]
+        XCTAssertTrue(control.exists)
+        control.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertEqual(control.value as? String, "1")
+    }
+
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<8 {
             let footer = app.buttons["onboarding-continue"].frame
@@ -25,6 +32,7 @@ final class MuralUITests: XCTestCase {
         screen.name = "Language selection - \(id)"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        confirmAdult(in: app)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["target-caption"].label, greeting)
@@ -60,6 +68,7 @@ final class MuralUITests: XCTestCase {
         reveal(privacy, in: app)
         XCTAssertTrue(app.staticTexts["onboarding-ai-consent"].exists)
         XCTAssertTrue(app.buttons["onboarding-continue"].isHittable)
+        confirmAdult(in: app)
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Mandarin onboarding - largest accessibility text"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["onboarding-continue"].tap()
@@ -103,6 +112,7 @@ final class MuralUITests: XCTestCase {
         app.buttons["onboarding-meaning-picker"].tap()
         app.buttons["Chinese (Simplified)"].tap()
         XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "你好！")
+        confirmAdult(in: app)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["meaning-caption"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "你好！")
@@ -257,8 +267,10 @@ final class MuralUITests: XCTestCase {
         let languageScreen = XCTAttachment(screenshot: app.screenshot())
         languageScreen.name = "Onboarding - language"; languageScreen.lifetime = .keepAlways; add(languageScreen)
         app.buttons["onboarding-language-fr"].tap()
+        XCTAssertTrue(app.buttons["onboarding-language-fr"].isSelected)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Mural speaks French")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts["onboarding-ai-consent"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "onboarding-privacy-policy").firstMatch.exists)
         XCTAssertEqual(app.buttons["onboarding-continue"].label, "Agree and continue")
@@ -267,8 +279,11 @@ final class MuralUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "¡Hola!")
         let meaningScreen = XCTAttachment(screenshot: app.screenshot())
         meaningScreen.name = "Onboarding - meanings and consent"; meaningScreen.lifetime = .keepAlways; add(meaningScreen)
+        confirmAdult(in: app)
+        XCTAssertTrue(app.buttons["onboarding-continue"].isEnabled)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["onboarding-continue"].exists)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Salut !")
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "¡Hola!")
         XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
@@ -290,6 +305,7 @@ final class MuralUITests: XCTestCase {
         app.buttons["onboarding-language-fr"].tap()
         app.buttons["onboarding-continue"].tap()
         XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "¡Hola!")
+        confirmAdult(in: app)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "¡Hola!")

@@ -28,8 +28,10 @@ struct ManagedAccountView: View {
                             Text(email).font(.body).textSelection(.enabled)
                                 .accessibilityIdentifier("managed-account-email")
                         }
-                        Text("Purchases and hosted conversations aren’t available in this build.")
-                            .font(.footnote).foregroundStyle(MuralColor.secondary)
+                        if let balance = store.hostedBalanceMilliseconds {
+                            Text("\(balance / 60_000) min \((balance % 60_000) / 1_000) sec of Mural conversation time available")
+                                .font(.footnote).foregroundStyle(MuralColor.secondary)
+                        }
                         Button("Refresh account", action: store.refresh).buttonStyle(.bordered)
                         Button("Sign out on all devices", action: store.signOut).buttonStyle(.bordered)
                         Button("Delete account", role: .destructive) { confirmDeletion = true }
@@ -37,7 +39,7 @@ struct ManagedAccountView: View {
                         .disabled(store.isBusy)
                 } else {
                     VStack(spacing: 14) {
-                        Text("Mural stores your sign-in details and account sessions. You can practise with your own API key without an account.")
+                        Text("Sign in to keep your eligible free minutes with your account. You can also practise with your own API key without an account.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                         Text("By signing in, you agree to the [Terms of use](https://mural.chat/terms/) and acknowledge the [Privacy policy](https://mural.chat/privacy/).")
                             .font(.footnote).multilineTextAlignment(.center).tint(MuralColor.ink)
