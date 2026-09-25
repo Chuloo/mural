@@ -1,6 +1,6 @@
-# Mural iOS 1.0 (2): internal TestFlight record
+# Mural iOS 1.0 (2): TestFlight record
 
-**Status on September 25, 2026:** Apple accepted build 2 for internal testing. App Store Connect lists it in the Mural Internal group with two invited testers. The App Store version remains a draft at **Prepare for Submission**; no App Review submission has been made.
+**Status on September 25, 2026:** Apple accepted build 2 for internal testing. App Store Connect lists it in the Mural Internal group with two invited testers. The Mural Early Access external group contains build 2, which is **Waiting for Review** in TestFlight Beta App Review. Its public link is capped at 25 testers and cannot accept testers until Apple approves the build. The App Store version remains a draft at **Prepare for Submission**; it has not been submitted for App Store review.
 
 ## What build 2 contains
 
@@ -16,7 +16,7 @@
 - On the directly installed phone build, a voice conversation and Google sign-in worked. After sign-in, Settings showed 8 min 54 sec remaining. Before sign-in, it had still shown 10 min 0 sec after the conversation; build 2 contains the display fix, which needs a TestFlight phone retest.
 - The new onboarding menu and a long example passage were inspected in Simulator. The long passage stayed inside its caption area with the orb and controls visible. Manual scrolling inside that area still needs confirmation on the phone.
 - The focused Xcode UI test could not start because Xcode compiled `MuralCore.swiftmodule` for an incompatible target. The simulator and device Release builds succeeded; the automated UI-test failure remains open.
-- Personal-key use, account restoration and deletion, microphone denial, offline recovery, and all eight language qualities remain to be checked on the TestFlight build. Paid minutes and external TestFlight access are outside this internal milestone.
+- Personal-key use, account restoration and deletion, microphone denial, offline recovery, and all eight language qualities remain to be checked on the TestFlight build. Paid minutes are outside this release. External TestFlight access is pending Apple's beta review.
 
 ## App Store draft
 

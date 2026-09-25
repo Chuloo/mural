@@ -2,7 +2,7 @@
 
 ## September 25, 2026: internal TestFlight
 
-Mural 1.0 (2) is uploaded and available to the **Mural Internal** TestFlight group. The group has two invited testers, including `williamimoh@gmail.com`. The App Store Connect version remains **Prepare for Submission** with build 2 attached, the pastel orb icon, listing copy, and four current iPhone screenshots. It has not been submitted for App Review. See the [build 2 release record](testflight-2026-09-25.md) for checks and remaining device tests.
+Mural 1.0 (2) is uploaded and available to the **Mural Internal** TestFlight group. The group has two invited testers, including `williamimoh@gmail.com`. An external group, **Mural Early Access**, has build 2 waiting for TestFlight Beta App Review; its 25-person public link cannot accept testers yet. The App Store Connect version remains **Prepare for Submission** with build 2 attached, the pastel orb icon, listing copy, and four current iPhone screenshots. It has not been submitted for App Store review. See the [build 2 release record](testflight-2026-09-25.md) for checks and remaining device tests.
 
 A voice conversation and Google sign-in worked on a directly installed iPhone build. That test exposed a stale guest-minute display in Settings; build 2 fetches the current balance when Settings opens. The TestFlight-installed build still needs the same real-device checks.
 
