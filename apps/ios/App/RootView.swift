@@ -83,6 +83,14 @@ struct TalkView: View {
     @State private var typing = false
     @State private var transcript: SessionRecord?
     @State private var lookup: WordLookup?
+    init(coordinator: ConversationCoordinator) {
+        self.coordinator = coordinator
+        #if DEBUG && targetEnvironment(simulator)
+        if ScreenshotPreview.screen == .meaning {
+            _lookup = State(initialValue: WordLookup(word: "sobremesa", sentence: "Podemos quedarnos de sobremesa y charlar un rato."))
+        }
+        #endif
+    }
     var body: some View {
         GeometryReader { geometry in
             let scrollPage = typeSize.isAccessibilitySize || geometry.size.height < 480
@@ -264,7 +272,16 @@ struct LookupView: View {
             }.padding(28).frame(maxWidth: .infinity, alignment: .leading).background(MuralColor.cream)
                 .navigationTitle("A little meaning").navigationBarTitleDisplayMode(.inline)
         }.presentationDetents([.medium, .large])
-            .task { do { explanation = try await coordinator.lookup(word: item.word, sentence: item.sentence) } catch { self.error = error.localizedDescription } }
+            .task {
+                #if DEBUG && targetEnvironment(simulator)
+                if ScreenshotPreview.screen == .meaning {
+                    explanation = "The relaxed conversation that continues after a meal, when nobody is in a hurry to leave."
+                    return
+                }
+                #endif
+                do { explanation = try await coordinator.lookup(word: item.word, sentence: item.sentence) }
+                catch { self.error = error.localizedDescription }
+            }
     }
 }
 

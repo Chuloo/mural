@@ -184,6 +184,12 @@ import MuralCore
     }
     func refreshHostedBalance() async {
         guard conversationProvider == .hosted, !isRunning else { return }
+        #if DEBUG && targetEnvironment(simulator)
+        if ScreenshotPreview.screen == .settings {
+            hostedBalanceMilliseconds = 600_000
+            return
+        }
+        #endif
         hostedBalanceMilliseconds = nil
         hostedBalanceLoading = true
         defer { hostedBalanceLoading = false }
@@ -463,16 +469,26 @@ import MuralCore
         }
     }
     func prepareScreenshot(_ screen: ScreenshotPreview.Screen) {
-        store.selectLanguage("es")
+        let languageID = screen == .mandarin ? "zh" : screen == .italian ? "it" : "es"
+        store.selectLanguage(languageID)
         store.updatePreferences { $0.meaningVisible = true; $0.meaningLanguage = "English"; $0.hasOnboarded = true }
         if screen == .words { ScreenshotPreview.seedWords(store) }
-        guard screen == .conversation else { return }
+        if screen == .settings { showSettings = true }
+        guard [.conversation, .mandarin, .italian, .meaning].contains(screen) else { return }
         selectedTheme = language.themes.first { $0.id == "coffee" }
-        var record = SessionRecord(languageID: "es", themeID: selectedTheme?.id, title: selectedTheme?.title)
-        record.append(Fragment(speaker: .user, text: "Un café con leche, por favor.", startMS: 0, endMS: 2200))
-        record.append(Fragment(speaker: .assistant, text: "¡Un café con leche! ¿Y algo para comer?", startMS: 2800, endMS: 6000))
+        let examples: [String: (String, String, String)] = [
+            "es": ("Un café con leche, por favor.", "¡Un café con leche! ¿Y algo para comer?", "A coffee with milk! And something to eat?"),
+            "it": ("Un cappuccino, per favore.", "Un cappuccino! Lo preferisci al banco o al tavolo?", "A cappuccino! Do you prefer it at the counter or at a table?"),
+            "zh": ("我想喝一杯茶。", "好呀！你喜欢喝绿茶还是红茶？", "Sounds good! Do you prefer green tea or black tea?")
+        ]
+        let example = screen == .meaning
+            ? ("¿Qué hacemos después de comer?", "Podemos quedarnos de sobremesa y charlar un rato.", "We can linger after the meal and chat for a while.")
+            : examples[languageID]!
+        var record = SessionRecord(languageID: languageID, themeID: selectedTheme?.id, title: selectedTheme?.title)
+        record.append(Fragment(speaker: .user, text: example.0, startMS: 0, endMS: 2200))
+        record.append(Fragment(speaker: .assistant, text: example.1, startMS: 2800, endMS: 6000))
         let passage = record.passages.last!
-        record.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: "English")] = "A coffee with milk! And something to eat?"
+        record.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: "English")] = example.2
         session = record; state = .active; outputLevel = 0.18
         scheduleTranslation()
     }

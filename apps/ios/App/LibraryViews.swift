@@ -388,7 +388,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settings-support")
                 } header: { Text("Help and privacy") }
                 Section {
-                    Text("Mural 1.0 · TestFlight preview").font(.footnote)
+                    Text("Mural 1.0").font(.footnote)
                     Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
                     Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
                     Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.").font(.footnote)

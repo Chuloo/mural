@@ -1,5 +1,7 @@
 # Mural iOS 1.0 (2): TestFlight record
 
+**Superseded for App Store review:** Build 1.0 (3) was submitted on 25 September 2026. See [the App Store review record](app-store-review-2026-09-25.md). This page remains the build 2 TestFlight history.
+
 **Status on September 25, 2026:** Apple accepted build 2 for internal testing. App Store Connect lists it in the Mural Internal group with two invited testers. The Mural Early Access external group contains build 2, which is **Waiting for Review** in TestFlight Beta App Review. Its public link is capped at 25 testers and cannot accept testers until Apple approves the build. The App Store version remains a draft at **Prepare for Submission**; it has not been submitted for App Store review.
 
 ## What build 2 contains
