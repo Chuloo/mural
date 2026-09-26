@@ -19,7 +19,7 @@ enum HostedError: LocalizedError {
         case .invalidResponse: "Mural couldn’t verify the server response. Please try again."
         case .secureStorage: "Mural couldn’t read this iPhone’s secure trial record. Unlock your iPhone and try again."
         case .signInRequired: "Sign in to continue using Mural minutes, or use your own API key."
-        case .noMinutes: "Your free minutes have been used. You can keep practising with your own API key."
+        case .noMinutes: "No Mural minutes are available for a new conversation. Check Account or use your own API key."
         case .unconfirmed: "Mural is checking an earlier conversation. Please try again shortly."
         case .personalKeyRequired: "Current topics need your API key. Add one in Settings and switch to Your key."
         case .server(let code, _):
@@ -75,6 +75,27 @@ struct HostedOwner: Codable, Sendable {
 
 struct HostedBalance {
     let availableMilliseconds: Int
+    let paidEstimatedMilliseconds: Int?
+    let paidAvailable: Bool
+    let hasPaidRemainder: Bool
+    let paidReserved: Bool
+    var canStart: Bool { availableMilliseconds > 0 || paidAvailable }
+    var totalDisplayMilliseconds: Int? {
+        guard let paidEstimatedMilliseconds else { return hasPaidRemainder ? nil : availableMilliseconds }
+        let (sum, overflow) = availableMilliseconds.addingReportingOverflow(paidEstimatedMilliseconds)
+        return overflow ? nil : sum
+    }
+    var displayText: String {
+        guard let total = totalDisplayMilliseconds else { return "Couldn’t check your minutes" }
+        if total == 0 && paidReserved { return "Updating your minutes…" }
+        if hasPaidRemainder {
+            let minutes = total / 60_000
+            return minutes > 0 ? "About \(minutes) min" : "Less than 1 min"
+        }
+        guard total > 0 else { return "No minutes left" }
+        let seconds = MinuteBalanceTime.roundedSeconds(total)
+        return "\(seconds / 60) min \(seconds % 60) sec"
+    }
     init(_ value: [String: Any]) throws {
         guard value["unit"] as? String == "milliseconds", value["billingBasis"] as? String == "connected-conversation-time",
               let balance = value["balanceMilliseconds"] as? Int, let reserved = value["reservedMilliseconds"] as? Int,
@@ -82,8 +103,45 @@ struct HostedBalance {
               balance >= 0, reserved >= 0, reserved <= balance, available == balance - reserved
         else { throw HostedError.invalidResponse }
         availableMilliseconds = available
+        if let paid = value["paid"] as? [String: Any] {
+            guard paid["billingBasis"] as? String == "actual-ai-usage",
+                  let balanceText = paid["balanceNanoUSD"] as? String,
+                  let reservedText = paid["reservedNanoUSD"] as? String,
+                  let availableText = paid["availableNanoUSD"] as? String,
+                  let balanceValue = UInt64(balanceText), let reservedValue = UInt64(reservedText),
+                  let availableValue = UInt64(availableText), reservedValue <= balanceValue,
+                  availableValue == balanceValue - reservedValue,
+                  let estimate = paid["estimatedMilliseconds"] as? Int, estimate >= 0,
+                  let minimumText = paid["minimumSessionNanoUSD"] as? String,
+                  let minimum = UInt64(minimumText), minimum > 0,
+                  let eligible = paid["available"] as? Bool,
+                  eligible == (availableValue >= minimum)
+            else { throw HostedError.invalidResponse }
+            paidEstimatedMilliseconds = estimate
+            paidAvailable = eligible
+            hasPaidRemainder = availableValue > 0
+            paidReserved = reservedValue > 0
+        } else {
+            paidEstimatedMilliseconds = nil
+            paidAvailable = false
+            hasPaidRemainder = false
+            paidReserved = false
+        }
+    }
+    static func preview(paidOnly: Bool, reserved: Bool = false) -> HostedBalance? {
+        let free = paidOnly ? 0 : 260_000
+        return try? HostedBalance(["unit": "milliseconds", "billingBasis": "connected-conversation-time",
+                                   "balanceMilliseconds": free, "reservedMilliseconds": 0,
+                                   "availableMilliseconds": free,
+                                   "paid": ["billingBasis": "actual-ai-usage", "balanceNanoUSD": "3690000000",
+                                            "reservedNanoUSD": reserved ? "3690000000" : "0",
+                                            "availableNanoUSD": reserved ? "0" : "3690000000",
+                                            "estimatedMilliseconds": reserved ? 0 : 2_214_000,
+                                            "minimumSessionNanoUSD": "100000000", "available": !reserved]])
     }
 }
+
+enum HostedFunding: String { case minutes, aiValue = "ai-value" }
 
 struct HostedLease {
     let sessionID: UUID
@@ -91,6 +149,9 @@ struct HostedLease {
     let deadline: Date
     let providerSessionID: String
     let answerSDP: String
+    let funding: HostedFunding
+    let limitMilliseconds: Int
+    let minimumChargeMilliseconds: Int
 }
 
 /// The same HTTPS origin is used for guest admission, member minutes and hosted voice.
@@ -162,15 +223,49 @@ struct HostedLease {
             "sdp": sdp, "language": language, "instructions": instructions, "history": [],
             "requestedMilliseconds": requestedMilliseconds
         ], owner: owner, key: requestID)
+        do { return try decodeLease(value, owner: owner, requestedMilliseconds: requestedMilliseconds) }
+        catch {
+            // A malformed success response can still represent a funded server session.
+            if let sessionID = UUID(uuidString: value["sessionID"] as? String ?? "") {
+                _ = try? await request("/v1/live/sessions/\(sessionID.uuidString.lowercased())/close",
+                                       method: "POST", body: [:], owner: owner)
+            }
+            throw error
+        }
+    }
+    private func decodeLease(_ value: [String: Any], owner: HostedOwner,
+                             requestedMilliseconds: Int) throws -> HostedLease {
         guard let id = UUID(uuidString: value["sessionID"] as? String ?? ""),
               let providerID = value["providerSessionID"] as? String, !providerID.isEmpty,
               let answer = value["sdp"] as? String, answer.hasPrefix("v=0"), answer.utf8.count <= 65_536,
               let deadlineText = value["deadline"] as? String,
               let deadline = Self.parseDate(deadlineText), deadline > .now,
               value["experimental"] as? Bool == true,
-              value["billingBasis"] as? String == "connected-conversation-time"
+              let fundingText = value["fundingMode"] as? String,
+              let funding = HostedFunding(rawValue: fundingText),
+              let minimum = value["minimumChargeMilliseconds"] as? Int,
+              minimum == 15_000
         else { throw HostedError.invalidResponse }
-        return HostedLease(sessionID: id, owner: owner, deadline: deadline, providerSessionID: providerID, answerSDP: answer)
+        let limit: Int
+        switch funding {
+        case .minutes:
+            guard value["billingBasis"] as? String == "connected-conversation-time",
+                  value["billingPolicy"] as? String == "connected-time-15s-minimum-v1",
+                  let reserved = value["reservedMilliseconds"] as? Int,
+                  (1...requestedMilliseconds).contains(reserved), value["limitMilliseconds"] == nil
+            else { throw HostedError.invalidResponse }
+            limit = reserved
+        case .aiValue:
+            guard value["billingBasis"] as? String == "actual-ai-usage",
+                  value["billingPolicy"] as? String == "actual-ai-usage-15s-minimum-v1",
+                  let granted = value["limitMilliseconds"] as? Int,
+                  (minimum...requestedMilliseconds).contains(granted), value["reservedMilliseconds"] == nil
+            else { throw HostedError.invalidResponse }
+            limit = granted
+        }
+        return HostedLease(sessionID: id, owner: owner, deadline: deadline, providerSessionID: providerID,
+                           answerSDP: answer, funding: funding, limitMilliseconds: limit,
+                           minimumChargeMilliseconds: minimum)
     }
     private static func parseDate(_ value: String) -> Date? {
         let fractional = ISO8601DateFormatter()

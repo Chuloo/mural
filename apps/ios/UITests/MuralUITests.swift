@@ -320,6 +320,60 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.buttons["settings-conversation-access"].exists)
     }
 
+    func testMixedMuralMinutesFloorTheCombinedEstimate() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-member"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let balance = app.staticTexts["managed-account-minutes"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "About 41 min")
+        XCTAssertTrue(app.staticTexts["estimated conversation time remaining"].exists)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Account with mixed Mural minutes"; screen.lifetime = .keepAlways; add(screen)
+    }
+
+    func testPaidOnlyMuralMinutesStayAvailable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-only"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let balance = app.staticTexts["managed-account-minutes"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "About 36 min")
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Account with paid Mural minutes"; screen.lifetime = .keepAlways; add(screen)
+    }
+
+    func testPaidOnlyBalanceCanSwitchFromPersonalKey() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key", "--preview-paid-only"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        let access = app.buttons["settings-conversation-access"]
+        XCTAssertTrue(access.waitForExistence(timeout: 5))
+        access.tap()
+        app.buttons["Mural minutes"].tap()
+        let balance = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "About 36 min")).firstMatch
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        app.buttons["Use Mural minutes"].tap()
+        XCTAssertTrue(access.label.contains("Mural minutes"))
+    }
+
+    func testReservedPaidMinutesAreNotShownAsSpendable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-reserved"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let balance = app.staticTexts["managed-account-minutes"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "Updating your minutes…")
+        XCTAssertTrue(app.staticTexts["Some minutes are in use"].exists)
+    }
+
     func testProviderFailureCanSwitchFromKeyDetailsToMural() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-key", "--preview-provider-quota"]

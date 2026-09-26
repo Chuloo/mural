@@ -8,6 +8,7 @@ final class ManagedAccountStore {
     private(set) var session: ManagedAccountSession?
     private(set) var profile: ManagedAccountProfile?
     private(set) var hostedBalanceMilliseconds: Int?
+    private(set) var hostedBalance: HostedBalance?
     private(set) var isBusy = false
     var message: String?
     @ObservationIgnored private let client: ManagedAccountClient?
@@ -29,7 +30,9 @@ final class ManagedAccountStore {
         // Screenshot and UI-test fixtures never read a real account or create a server session.
         if isPreview {
             let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("--preview-member") || arguments.contains("--preview-apple") {
+            if arguments.contains("--preview-member") || arguments.contains("--preview-apple") ||
+                arguments.contains("--preview-paid-member") || arguments.contains("--preview-paid-only") ||
+                arguments.contains("--preview-paid-reserved") {
                 let apple = arguments.contains("--preview-apple")
                 let id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
                 let exchangeData = Data("{\"accountID\":\"\(id)\",\"accessToken\":\"\(String(repeating: "x", count: 43))\",\"expiresInSeconds\":86400}".utf8)
@@ -40,7 +43,17 @@ final class ManagedAccountStore {
                 let address = apple ? "a.very.long.private.relay.address.for.layout@privaterelay.appleid.com" : "preview@example.test"
                 let profileData = Data("{\"accountID\":\"\(id)\",\"email\":\"\(address)\",\"providers\":[\"\(apple ? "apple" : "google")\"],\"createdAt\":\"2026-09-25T12:00:00Z\"}".utf8)
                 profile = try? JSONDecoder().decode(ManagedAccountProfile.self, from: profileData)
-                hostedBalanceMilliseconds = 534_000
+                if arguments.contains("--preview-paid-member") || arguments.contains("--preview-paid-only") ||
+                    arguments.contains("--preview-paid-reserved") {
+                    hostedBalance = HostedBalance.preview(paidOnly: !arguments.contains("--preview-paid-member"),
+                                                          reserved: arguments.contains("--preview-paid-reserved"))
+                    hostedBalanceMilliseconds = hostedBalance?.availableMilliseconds
+                } else {
+                    hostedBalanceMilliseconds = 534_000
+                    hostedBalance = try? HostedBalance(["unit": "milliseconds", "billingBasis": "connected-conversation-time",
+                                                         "balanceMilliseconds": 534_000, "reservedMilliseconds": 0,
+                                                         "availableMilliseconds": 534_000])
+                }
             }
         } else {
             do { session = try keychain?.load() }
@@ -75,7 +88,10 @@ final class ManagedAccountStore {
             if let hosted = HostedClient.shared {
                 let owner = HostedOwner(accountID: newSession.accountID, accessToken: newSession.accessToken, expiresAt: newSession.expiresAt)
                 try await GuestAccess.shared.linkIfNeeded(to: owner)
-                hostedBalanceMilliseconds = try? await hosted.balance(owner).availableMilliseconds
+                let balance = try? await hosted.balance(owner)
+                guard gate.accepts(token), session?.accountID == newSession.accountID else { return }
+                hostedBalance = balance
+                hostedBalanceMilliseconds = balance?.availableMilliseconds
             }
         }
     }
@@ -83,6 +99,7 @@ final class ManagedAccountStore {
         guard !isPreview else { return }
         guard !isBusy, let client, let session else { return }
         hostedBalanceMilliseconds = nil
+        hostedBalance = nil
         run { [self] token in
             let result = try await client.profile(session: session)
             guard gate.accepts(token) else { return }
@@ -90,7 +107,10 @@ final class ManagedAccountStore {
             if let hosted = HostedClient.shared {
                 let owner = HostedOwner(accountID: session.accountID, accessToken: session.accessToken, expiresAt: session.expiresAt)
                 try await GuestAccess.shared.linkIfNeeded(to: owner)
-                hostedBalanceMilliseconds = try? await hosted.balance(owner).availableMilliseconds
+                let balance = try? await hosted.balance(owner)
+                guard gate.accepts(token), self.session?.accountID == session.accountID else { return }
+                hostedBalance = balance
+                hostedBalanceMilliseconds = balance?.availableMilliseconds
             }
         }
     }
@@ -108,7 +128,7 @@ final class ManagedAccountStore {
             catch { remoteFailed = true }
             guard gate.accepts(token) else { return }
             try keychain.remove()
-            self.session = nil; profile = nil; hostedBalanceMilliseconds = nil
+            self.session = nil; profile = nil; hostedBalanceMilliseconds = nil; hostedBalance = nil
             if remoteFailed { message = "Signed out on this iPhone. We couldn’t reach Mural to revoke other sessions; they expire within 24 hours." }
         }
     }
@@ -124,7 +144,7 @@ final class ManagedAccountStore {
             guard gate.accepts(token) else { return }
             try await client.delete(session: session, appleCode: code)
             guard gate.accepts(token) else { return }
-            self.session = nil; profile = nil; hostedBalanceMilliseconds = nil
+            self.session = nil; profile = nil; hostedBalanceMilliseconds = nil; hostedBalance = nil
             do { try keychain.remove() }
             catch {
                 message = "Account deleted. Mural couldn’t clear its local secure sign-in record. Unlock this iPhone and reopen Account to clear it."

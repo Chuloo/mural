@@ -167,7 +167,7 @@ import MuralCore
                     let owner = try await GuestAccess.shared.owner(member: member)
                     guard try await client.available(owner) else { throw HostedError.unavailable }
                     let balance = try await client.balance(owner)
-                    guard balance.availableMilliseconds > 0 else { throw HostedError.noMinutes }
+                    guard balance.canStart else { throw HostedError.noMinutes }
                     hosted = HostedConnectRequest(client: client, owner: owner, language: self.language.locale,
                                                   requestedMilliseconds: self.store.preferences.sessionMinutes * 60_000)
                 }
@@ -196,9 +196,19 @@ import MuralCore
     }
     func clearPersonalKeyFailure() { personalKeyFailure = nil }
     /// Checks the hosted wallet without selecting it or opening a voice lease.
-    func hostedBalanceForSwitch() async -> Int? {
+    func hostedBalanceForSwitch() async -> HostedBalance? {
         #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--preview") { return 534_000 }
+        if ProcessInfo.processInfo.arguments.contains("--preview") {
+            if ProcessInfo.processInfo.arguments.contains("--preview-paid-member") ||
+                ProcessInfo.processInfo.arguments.contains("--preview-paid-only") ||
+                ProcessInfo.processInfo.arguments.contains("--preview-paid-reserved") {
+                return HostedBalance.preview(paidOnly: !ProcessInfo.processInfo.arguments.contains("--preview-paid-member"),
+                                             reserved: ProcessInfo.processInfo.arguments.contains("--preview-paid-reserved"))
+            }
+            return try? HostedBalance(["unit": "milliseconds", "billingBasis": "connected-conversation-time",
+                                       "balanceMilliseconds": 534_000, "reservedMilliseconds": 0,
+                                       "availableMilliseconds": 534_000])
+        }
         #endif
         guard !isRunning, let client = HostedClient.shared else { return nil }
         do {
@@ -214,7 +224,7 @@ import MuralCore
                 currentMember = try ManagedAccountKeychain(scope: config.storageScope).load()
             } else { currentMember = nil }
             guard try await GuestAccess.shared.owner(member: currentMember).accountID == owner.accountID else { return nil }
-            return balance.availableMilliseconds
+            return balance
         } catch { return nil }
     }
     private var hasAIConsent: Bool {
@@ -398,7 +408,9 @@ import MuralCore
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self, self.state == .active, let session = self.session else { return }
-                if Date().timeIntervalSince(session.startedAt) > Double(self.store.preferences.sessionMinutes * 60) {
+                let requestedDeadline = session.startedAt.addingTimeInterval(Double(self.store.preferences.sessionMinutes * 60))
+                let allowedDeadline = self.api.hostedLease.map { min(requestedDeadline, $0.deadline) } ?? requestedDeadline
+                if Date() >= allowedDeadline {
                     self.notice = "You’ve reached your conversation time limit."; self.end(reason: "Time limit"); return
                 }
                 self.inactivitySeconds = nil

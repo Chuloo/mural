@@ -533,7 +533,7 @@ private struct OpenAIKeyView: View {
 private struct HostedAccessSwitchView: View {
     let coordinator: ConversationCoordinator
     @Environment(\.dismiss) private var dismiss
-    @State private var available: Int?
+    @State private var available: HostedBalance?
     @State private var checking = true
     @State private var failed = false
     @State private var switchTask: Task<Void, Never>?
@@ -542,20 +542,23 @@ private struct HostedAccessSwitchView: View {
             Form {
                 Section {
                     if checking { ProgressView("Checking your minutes…") }
-                    else if let available, MinuteBalanceTime.isEligible(available) {
-                        let seconds = MinuteBalanceTime.roundedSeconds(available)
-                        LabeledContent("Available", value: "\(seconds / 60) min \(seconds % 60) sec")
-                    } else if available == 0 { Text("No Mural minutes remaining.") }
+                    else if let available {
+                        LabeledContent("Available", value: available.displayText)
+                        if !available.canStart {
+                            Text(available.paidReserved ? "Some minutes are in use. Check again shortly." :
+                                 "Not enough minutes to start a conversation.")
+                        }
+                    }
                     else { Text("Couldn’t check your minutes. Try again.") }
                     if failed { Text("Your minutes changed. Check again before switching.").foregroundStyle(MuralColor.secondary) }
                     if !checking && available == nil { Button("Try again") { Task { await check() } } }
                 } header: { Text("Mural minutes") } footer: { Text("Your saved OpenAI key will remain on this iPhone. Switching changes the next conversation only.") }
-                if let available, MinuteBalanceTime.isEligible(available), !checking {
+                if let available, available.canStart, !checking {
                     Section {
                         Button("Use Mural minutes") {
                             switchTask = Task {
                                 checking = true
-                                guard let latest = await coordinator.hostedBalanceForSwitch(), MinuteBalanceTime.isEligible(latest),
+                                guard let latest = await coordinator.hostedBalanceForSwitch(), latest.canStart,
                                       !Task.isCancelled, coordinator.conversationProvider == .personalKey,
                                       !coordinator.isRunning else {
                                     self.available = nil; failed = true; checking = false; return

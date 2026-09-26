@@ -38,12 +38,13 @@ struct ManagedAccountView: View {
                     if coordinator.conversationProvider == .hosted {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Mural minutes").font(.headline)
-                            if let balance = store.hostedBalanceMilliseconds {
-                                let seconds = MinuteBalanceTime.roundedSeconds(balance)
-                                Text("\(seconds / 60) min \(seconds % 60) sec")
+                            if let balance = store.hostedBalance {
+                                Text(balance.displayText)
                                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                                     .accessibilityIdentifier("managed-account-minutes")
-                                Text("conversation time remaining").font(.subheadline)
+                                Text(balance.paidReserved && !balance.canStart ? "Some minutes are in use" :
+                                     balance.hasPaidRemainder ? "estimated conversation time remaining" : "conversation time remaining")
+                                    .font(.subheadline)
                             } else {
                                 Text(store.isBusy ? "Checking your minutes…" : "Couldn’t check your minutes. Pull down to retry.")
                                     .font(.subheadline)
