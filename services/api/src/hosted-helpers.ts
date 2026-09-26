@@ -33,7 +33,7 @@ export interface HostedHelperConfig {
   timeoutMilliseconds: number;
 }
 export interface HostedResponsesRequest {
-  model: typeof HOSTED_HELPER_MODEL; store: false; background: false; stream: false;
+  model: typeof HOSTED_HELPER_MODEL; store: false; background: false; stream: boolean;
   service_tier: 'default'; prompt_cache_options: { mode: 'explicit' };
   instructions: string; input: [{ role: 'user'; content: string }];
   max_output_tokens: 1400 | 2200; reasoning: { effort: 'low' };
@@ -41,7 +41,7 @@ export interface HostedResponsesRequest {
   tools?: [{ type: 'web_search'; search_context_size: 'low' }]; tool_choice: 'auto' | 'none'; max_tool_calls: 1;
 }
 /** One network attempt only. The implementation must honor the signal, bound the body and never retry. */
-export interface HostedResponsesTransport { send(body: HostedResponsesRequest, signal: AbortSignal): Promise<unknown> }
+export interface HostedResponsesTransport { send(body: HostedResponsesRequest, signal: AbortSignal, onText?: (text: string) => void): Promise<unknown> }
 export interface HostedHelperUsage { inputTokens: number; cachedInputTokens: number; cacheWriteTokens: number; outputTokens: number; searchCalls: number }
 export interface HostedHelperResult {
   requestID: string; text: string; sources: Array<{ title: string; url: string }>;
@@ -94,8 +94,8 @@ export function parseHostedHelperInput(body: unknown): HostedHelperInput {
   const result = JSON.parse(serialized) as HostedHelperInput; result.requestID = result.requestID.toLowerCase();
   return result;
 }
-export function hostedHelperBody(input: HostedHelperInput): HostedResponsesRequest {
-  return { model: HOSTED_HELPER_MODEL, store: false, background: false, stream: false, service_tier: 'default',
+export function hostedHelperBody(input: HostedHelperInput, stream = false): HostedResponsesRequest {
+  return { model: HOSTED_HELPER_MODEL, store: false, background: false, stream, service_tier: 'default',
     prompt_cache_options: { mode: 'explicit' }, instructions: input.instructions, input: [{ role: 'user', content: input.input }],
     max_output_tokens: input.schema ? 2200 : 1400, reasoning: { effort: 'low' }, tool_choice: input.search ? 'auto' : 'none', max_tool_calls: 1,
     ...(input.schema ? { text: { format: { type: 'json_schema' as const, name: 'mural_result' as const, strict: true as const, schema: input.schema } } } : {}),
@@ -155,17 +155,19 @@ export class HostedHelpers {
       throw new ServiceError('helper_session_funding_unavailable', 409);
     await this.ensureBudget(sql, session);
   }
-  async request(account: string, sessionID: string, body: unknown): Promise<HostedHelperResult> {
+  async request(account: string, sessionID: string, body: unknown, onText?: (text: string) => void): Promise<HostedHelperResult> {
     if (!this.allows(account)) throw new ServiceError('hosted_helpers_not_ready', 503);
     if (!UUID.test(sessionID)) throw invalid();
-    const input = parseHostedHelperInput(body), providerBody = hostedHelperBody(input);
+    const input = parseHostedHelperInput(body);
+    if (onText && input.purpose !== 'meaning') throw invalid();
+    const providerBody = hostedHelperBody(input, Boolean(onText));
     const reservation = await this.reserve(account, sessionID, input, providerBody);
     let raw: unknown;
     const controller = new AbortController();
     let timeout: NodeJS.Timeout | undefined;
     try {
       if (Date.now() >= reservation.active_until.getTime()) throw new Error('Reserved request deadline passed.');
-      raw = await Promise.race([this.transport.send(providerBody, controller.signal), new Promise<never>((_, reject) => {
+      raw = await Promise.race([this.transport.send(providerBody, controller.signal, onText), new Promise<never>((_, reject) => {
         timeout = setTimeout(() => { controller.abort(); reject(new Error('Provider deadline exceeded.')); },
           Math.min(reservation.timeout_ms, reservation.active_until.getTime() - Date.now()));
       })]);

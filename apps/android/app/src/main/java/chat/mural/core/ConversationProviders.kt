@@ -91,7 +91,10 @@ object HostedHelperRetry {
 class HostedConversationBindings(private val scope: CoroutineScope, private val now: () -> Long = System::currentTimeMillis) {
     class Lease(val serverID: String, val teaching: TeachingClient, val close: suspend () -> Unit,
         val status: suspend () -> HostedSessionStatus, val deadlineMilliseconds: Long = Long.MAX_VALUE)
-    private class Attempt(val result: Deferred<APIResult>, var usageDelivered: Boolean = false)
+    private class Attempt(val result: Deferred<APIResult>, var usageDelivered: Boolean = false) {
+        var partial: String? = null
+        val listeners = mutableSetOf<(String) -> Unit>()
+    }
     private class Binding(val ownerID: String, val lease: Lease) {
         var endedAt: Long? = null
         var confirmedClosed = false
@@ -132,16 +135,17 @@ class HostedConversationBindings(private val scope: CoroutineScope, private val 
     /** Each logical automatic request owns one deferred result, including an uncertain failure.
      * Cancelling a UI waiter cannot create a second provider bill or discard the request identity. */
     suspend fun respond(localID: String, purpose: HelperPurpose, logicalID: String,
-        instructions: String, input: String, schema: JsonObject? = null, search: Boolean = false): APIResult {
+        instructions: String, input: String, schema: JsonObject? = null, search: Boolean = false, onText: ((String) -> Unit)? = null): APIResult {
         prune()
         val binding = bindings[localID] ?: throw HostedFailure.Unavailable
         if (binding.disabled) throw HostedFailure.Unavailable
         val key = "${purpose.wireValue}:$logicalID"
         binding.attempts[key]?.let {
-            try { return deliver(binding, key, it) }
+            try { return deliver(binding, key, it, onText) }
             catch (failure: Exception) { if (!HostedHelperRetry.isConfirmedNotAdmitted(failure)) throw failure }
         }
         if (binding.attempts.size >= 128) throw HostedFailure.Unavailable
+        lateinit var attempt: Attempt
         val request = helpersScope.async(start = CoroutineStart.LAZY) {
             val ended = binding.endedAt
             if (ended != null) {
@@ -149,22 +153,30 @@ class HostedConversationBindings(private val scope: CoroutineScope, private val 
                 if (!closeAndConfirm(localID)) throw HostedFailure.Unconfirmed
                 if (now() - ended !in 0 until POST_END_MILLIS) throw HostedFailure.Unavailable
             }
-            binding.lease.teaching.respond(instructions, input, schema, search, purpose)
+            if (onText != null && purpose == HelperPurpose.MEANING) {
+                binding.lease.teaching.streamMeaning(instructions, input) { partial ->
+                    attempt.partial = partial
+                    attempt.listeners.toList().forEach { it(partial) }
+                }
+            } else binding.lease.teaching.respond(instructions, input, schema, search, purpose)
         }
-        val attempt = Attempt(request)
+        attempt = Attempt(request)
         binding.attempts[key] = attempt
         request.start()
-        return deliver(binding, key, attempt)
+        return deliver(binding, key, attempt, onText)
     }
 
-    private suspend fun deliver(binding: Binding, key: String, attempt: Attempt): APIResult {
-        val result = try { attempt.result.await() }
+    private suspend fun deliver(binding: Binding, key: String, attempt: Attempt, onText: ((String) -> Unit)?): APIResult {
+        val result = try {
+            if (onText != null) { attempt.listeners.add(onText); attempt.partial?.let(onText) }
+            attempt.result.await()
+        }
         catch (failure: Exception) {
             // A concurrent waiter must not remove a later successful retry for this logical request.
             if (HostedHelperRetry.isConfirmedNotAdmitted(failure) && binding.attempts[key] === attempt)
                 binding.attempts.remove(key)
             throw failure
-        }
+        } finally { if (onText != null) attempt.listeners.remove(onText) }
         return if (attempt.usageDelivered) result.copy(usage = APIUsage())
         else { attempt.usageDelivered = true; result }
     }

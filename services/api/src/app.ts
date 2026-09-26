@@ -390,10 +390,50 @@ export function createApp(services: Services) {
     if (Object.keys(objectBody(request)).length) throw new ServiceError('invalid_request');
     return services.hosted.close(account, uuid((request.params as { id: string }).id));
   });
-  app.post('/v1/live/sessions/:id/helpers', { bodyLimit: HOSTED_HELPER_BODY_LIMIT }, async request => {
+  app.post('/v1/live/sessions/:id/helpers', { bodyLimit: HOSTED_HELPER_BODY_LIMIT }, async (request, reply) => {
     if (!services.hosted?.minuteFunded || !services.hostedHelpers) throw new ServiceError('hosted_helpers_not_ready', 503);
     const account = await authenticate(db, request.headers.authorization, true);
-    return services.hostedHelpers.request(account, uuid((request.params as { id: string }).id), request.body);
+    const sessionID = uuid((request.params as { id: string }).id);
+    // Streaming is explicit opt-in; wildcard clients keep the existing JSON contract.
+    const wantsStream = request.headers.accept?.split(',').some(value => {
+      const [type, ...parameters] = value.split(';').map(part => part.trim());
+      if (type?.toLowerCase() !== 'text/event-stream') return false;
+      const weights = parameters.filter(part => /^q\s*=/i.test(part));
+      if (!weights.length) return true;
+      const quality = weights[0]!.slice(weights[0]!.indexOf('=') + 1).trim();
+      return weights.length === 1 && /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(quality) && Number(quality) > 0;
+    });
+    if (!wantsStream) return services.hostedHelpers.request(account, sessionID, request.body);
+    let started = false, previous = '';
+    const emit = (event: object) => {
+      if (reply.raw.destroyed || reply.raw.writableEnded) return;
+      if (!started) {
+        started = true; reply.hijack();
+        reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff', 'X-Accel-Buffering': 'no' });
+      }
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+    try {
+      // Admission errors remain normal HTTP errors. Once admitted, client disconnects must
+      // not restart the funded request or prevent final usage settlement.
+      const result = await services.hostedHelpers.request(account, sessionID, request.body, text => {
+        const delta = text.slice(previous.length); previous = text;
+        emit({ type: 'mural.meaning.delta', delta });
+      });
+      emit({ type: 'mural.meaning.completed', result });
+      if (!reply.raw.destroyed) reply.raw.end();
+      return reply;
+    } catch (error) {
+      if (!started) throw error;
+      const reference = errorReference(request.id);
+      failed.add(request);
+      diagnostics.record('request_failed', { operation: operation(request), reference,
+        status: error instanceof ServiceError ? error.status : 502, durationMilliseconds: reply.elapsedTime }, error);
+      emit({ type: 'mural.meaning.error', code: error instanceof ServiceError ? error.code : 'helper_response_uncertain', reference });
+      if (!reply.raw.destroyed) reply.raw.end();
+      return reply;
+    }
   });
   app.get('/payment-return', async (_request, reply) => reply.type('text/html').send('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Mural sandbox</title><body><h1>Return to Mural</h1><p>This is a sandbox payment test. The app checks payment confirmation independently.</p></body></html>'));
   return app;

@@ -76,10 +76,10 @@ final class LearningTests: XCTestCase {
         s = fixture(); s.assessments[0].words[0].quote = "Jeg kan fly."
         XCTAssertEqual(LearningEngine.validate(s.assessments[0], session: s)?.words.count, 0)
     }
-    func testQuoteAcrossBareFragmentBoundaryIsKept() {
+    func testQuoteAcrossProviderWordBoundaryIsKept() {
         var session = SessionRecord(languageID: "es")
         session.append(Fragment(id: "f1", speaker: .user, text: "Me gusta", startMS: 0, endMS: 500))
-        session.append(Fragment(id: "f2", speaker: .user, text: "el café", startMS: 600, endMS: 1200))
+        session.append(Fragment(id: "f2", speaker: .user, text: " el café", startMS: 600, endMS: 1200))
         let passage = session.passages[0]
         XCTAssertEqual(passage.text, "Me gusta el café")
         session.assessments = [Assessment(

@@ -20,16 +20,18 @@ object LearningEngine {
         val passage=session.passages.firstOrNull { it.id==proposal.passageID && it.speaker==Speaker.user } ?: return null
         if (passage.revisionKey != proposal.revisionKey || proposal.suggestedLevel !in 0..5 || proposal.words.size>12) return null
         val allowed=passage.fragments.map { it.id }.toSet()
+        val join: (List<String>) -> String = if (proposal.textAssemblyVersion == null) Passage::legacyJoin else Passage::join
+        val evidenceText = join(passage.fragments.map { it.text })
         val words=proposal.words.mapNotNull { word ->
             if (word.language != session.languageID || word.sourceIDs.isEmpty() || !allowed.containsAll(word.sourceIDs) ||
                 !word.confidence.isFinite() || word.confidence !in 0.8..1.0 || word.lemma.isEmpty() || word.lemma.length>=100 ||
                 word.meaning.isEmpty() || word.meaning.length>=180 || word.form.isEmpty() || word.quote.isEmpty() ||
-                !passage.text.containsCanonical(word.quote) || !word.quote.containsCanonical(word.form)) return@mapNotNull null
-            val refs=Passage.join(passage.fragments.filter { word.sourceIDs.contains(it.id) }.map { it.text })
+                !evidenceText.containsCanonical(word.quote) || !word.quote.containsCanonical(word.form)) return@mapNotNull null
+            val refs=join(passage.fragments.filter { word.sourceIDs.contains(it.id) }.map { it.text })
             if (!refs.containsCanonical(word.quote)) return@mapNotNull null
             var out=word
             if (out.kind==EvidenceKind.independent) {
-                val modeled=session.passages.any { p -> p.speaker==Speaker.assistant && p.startMS<=passage.startMS && passage.startMS-p.endMS<90000 && p.text.containsCanonical(word.form) }
+                val modeled=session.passages.any { p -> p.speaker==Speaker.assistant && p.startMS<=passage.startMS && passage.startMS-p.endMS<90000 && join(p.fragments.map { it.text }).containsCanonical(word.form) }
                 if (passage.fragments.any { it.meaningVisible || it.typed } || modeled) out=out.copy(kind=EvidenceKind.assisted)
             }
             out

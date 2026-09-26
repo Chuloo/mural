@@ -36,6 +36,9 @@ public enum LearningEngine {
               passage.revisionKey == proposal.revisionKey,
               (0...5).contains(proposal.suggestedLevel), proposal.words.count <= 12 else { return nil }
         let allowed = Set(passage.fragments.map(\.id))
+        // Re-evaluate saved evidence with the same assembly it was originally judged against.
+        let join = proposal.textAssemblyVersion == nil ? Passage.legacyJoin : Passage.join
+        let evidenceText = join(passage.fragments.map(\.text))
         var validated = proposal
         validated.nextGoal = String(validated.nextGoal.prefix(300))
         validated.capability = String(validated.capability.prefix(160))
@@ -45,16 +48,16 @@ public enum LearningEngine {
                   word.confidence.isFinite, word.confidence >= 0.8, word.confidence <= 1,
                   !word.lemma.isEmpty, word.lemma.count < 100, !word.meaning.isEmpty, word.meaning.count < 180,
                   !word.form.isEmpty, !word.quote.isEmpty,
-                  passage.text.localizedCaseInsensitiveContains(word.quote),
+                  evidenceText.localizedCaseInsensitiveContains(word.quote),
                   word.quote.localizedCaseInsensitiveContains(word.form) else { return nil }
-            let refs = Passage.join(passage.fragments.filter { word.sourceIDs.contains($0.id) }.map(\.text))
+            let refs = join(passage.fragments.filter { word.sourceIDs.contains($0.id) }.map(\.text))
             guard refs.localizedCaseInsensitiveContains(word.quote) else { return nil }
             var result = word
             if result.kind == .independent {
                 // A visible meaning or immediate imitation is supporting evidence, never independent recall.
                 let recentlyModeled = session.passages.contains {
                     $0.speaker == .assistant && $0.startMS <= passage.startMS && passage.startMS - $0.endMS < 90_000 &&
-                    $0.text.localizedCaseInsensitiveContains(word.form)
+                    join($0.fragments.map(\.text)).localizedCaseInsensitiveContains(word.form)
                 }
                 if passage.fragments.contains(where: { $0.meaningVisible || $0.typed }) || recentlyModeled { result.kind = .assisted }
             }
