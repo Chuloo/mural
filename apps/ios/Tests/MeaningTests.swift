@@ -121,10 +121,11 @@ import XCTest
 
     func testContinuousFragmentsWaitForQuietThenTranslateLatestText() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .milliseconds(30), incompleteDelay: .milliseconds(30), minimumSpacing: .zero, translate: translator.translate)
+        // The simulated gaps must stay well below the quiet window even on a busy CI runner.
+        let controller = MeaningController(delay: .seconds(1), incompleteDelay: .seconds(1), minimumSpacing: .zero, translate: translator.translate)
         for revision in 0..<12 {
             controller.update(request(String(repeating: "hei ", count: revision + 1), revision: revision))
-            try? await Task.sleep(for: .milliseconds(10))
+            if revision < 11 { try? await Task.sleep(for: .milliseconds(10)) }
         }
         XCTAssertEqual(translator.requests.count, 0)
         await waitUntil { translator.requests.count == 1 }
