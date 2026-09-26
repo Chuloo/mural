@@ -21,16 +21,18 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import chat.mural.R
 
 @Composable
-internal fun SettingsSheetHeader(title: String, onDismiss: () -> Unit) {
+internal fun SettingsSheetHeader(title: String, onDismiss: () -> Unit, actionLabel: Int = R.string.settings_done) {
     Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 14.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
         MuralTextButton(onDismiss, Modifier.testTag("settings-done")) {
-            Text(stringResource(R.string.settings_done), color = MuralColors.Secondary)
+            Text(stringResource(actionLabel), color = MuralColors.Secondary)
         }
     }
 }
@@ -58,10 +60,27 @@ internal fun SettingsRow(title: String, value: String = "", enabled: Boolean = t
         .heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         symbol?.let { SettingsIcon(it, if (enabled) tint else MuralColors.Secondary.copy(alpha = .5f)) }
-        Text(title, Modifier.weight(if (value.isBlank()) 1f else .53f), style = MaterialTheme.typography.bodyLarge,
-            color = if (enabled) tint else MuralColors.Secondary.copy(alpha = .55f))
-        if (value.isNotBlank()) Text(value, Modifier.weight(.47f), style = MaterialTheme.typography.bodyMedium,
-            color = MuralColors.Secondary.copy(alpha = if (enabled) 1f else .55f), textAlign = TextAlign.End)
+        val titleColor = if (enabled) tint else MuralColors.Secondary.copy(alpha = .55f)
+        val valueColor = MuralColors.Secondary.copy(alpha = if (enabled) 1f else .55f)
+        val titleStyle = MaterialTheme.typography.bodyLarge
+        val valueStyle = MaterialTheme.typography.bodyMedium
+        val measurer = rememberTextMeasurer()
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val requiredWidth = measurer.measure(AnnotatedString(title), titleStyle, maxLines = 1).size.width +
+                measurer.measure(AnnotatedString(value), valueStyle, maxLines = 1).size.width + with(density) { 16.dp.roundToPx() }
+            if (value.isNotBlank() && requiredWidth > constraints.maxWidth) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, style = titleStyle, color = titleColor)
+                    Text(value, style = valueStyle, color = valueColor)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(title, Modifier.weight(1f), style = titleStyle, color = titleColor)
+                    if (value.isNotBlank()) Text(value, style = valueStyle, color = valueColor, textAlign = TextAlign.End)
+                }
+            }
+        }
         if (chevron) MuralIcon(MuralSymbol.ChevronRight, Modifier.size(13.dp), color = MuralColors.Secondary.copy(alpha = .6f))
     }
 }

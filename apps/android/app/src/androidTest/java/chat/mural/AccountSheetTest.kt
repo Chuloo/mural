@@ -1,5 +1,6 @@
 package chat.mural
 
+import android.graphics.Bitmap
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ClipboardManager
@@ -21,10 +22,17 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class AccountSheetTest {
     @get:Rule val compose = createComposeRule()
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: error("Screenshot unavailable")
+        val directory = File(context.filesDir, "settings-review").apply { mkdirs() }
+        File(directory, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
     @Test fun unavailableGoogleDoesNotLaunchAndExplainsGuestAccess() {
         var signIns = 0
         compose.setContent { MuralTheme {
@@ -39,9 +47,12 @@ class AccountSheetTest {
         var deletions = 0
         val state = AccountState(googleAvailable = true, accountID = "synthetic-account", email = "preview@example.test",
             minutes = MinuteBalance("milliseconds", "connected-conversation-time", 1_800_000, 0, 1_800_000))
-        compose.setContent { MuralTheme { AccountSheet(state, {}, {}, {}, { deletions++ }, {}) } }
-        compose.onNodeWithTag("account-minute-balance").assertTextEquals("30 minutes")
-        compose.onNodeWithText("Delete account").performScrollTo().performClick()
+        compose.setContent { MuralTheme { AccountSheet(state, {}, {}, {}, { deletions++ }, {},
+            provider = ConversationProvider.HOSTED_MINUTES) } }
+        compose.onNodeWithTag("account-minute-balance").assertTextEquals("30 min 0 sec")
+        compose.onNodeWithText(context.getString(R.string.account_provider_google)).assertIsDisplayed()
+        capture("09-member-account")
+        compose.onNodeWithText(context.getString(R.string.account_delete_action)).performScrollTo().performClick()
         assertEquals(0, deletions)
         compose.onNodeWithText("Delete your Mural account", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("account-confirm-delete").performClick()
@@ -52,31 +63,33 @@ class AccountSheetTest {
         minutes = MinuteBalance("milliseconds", "connected-conversation-time", 5_000, 0, 5_000))
 
     @Test fun finalSecondsAreVisibleAndAnUnavailableStoreDoesNotOfferPurchases() {
-        compose.setContent { MuralTheme { AccountSheet(member, {}, {}, {}, {}, {}) } }
-        compose.onNodeWithTag("account-minute-balance").assertTextEquals(context.getString(R.string.account_seconds_value, "5"))
+        compose.setContent { MuralTheme { AccountSheet(member, {}, {}, {}, {}, {},
+            provider = ConversationProvider.HOSTED_MINUTES) } }
+        compose.onNodeWithTag("account-minute-balance").assertTextEquals("0 min 5 sec")
         compose.onNodeWithTag("account-buy-minutes").assertDoesNotExist()
         compose.onNodeWithTag("account-conversation-source").assertDoesNotExist()
     }
 
-    @Test fun minutesRequireAnExplicitChoiceAndCannotChangeDuringAConversation() {
+    @Test fun personalKeyAccountHidesMinutesAndAccessChoiceAndBlocksActionsDuringAConversation() {
         val running = mutableStateOf(false)
         val provider = mutableStateOf(ConversationProvider.PERSONAL_KEY)
         compose.setContent { MuralTheme {
-            AccountSheet(member, {}, {}, {}, {}, {}, provider = provider.value, hostedAvailable = true,
-                conversationRunning = running.value, onSelectProvider = { provider.value = it })
+            AccountSheet(member, {}, {}, {}, {}, {}, provider = provider.value,
+                conversationRunning = running.value)
         } }
         compose.runOnIdle { assertEquals(ConversationProvider.PERSONAL_KEY, provider.value) }
-        compose.onNodeWithTag("account-conversation-source").performScrollTo().performClick()
-        compose.onNodeWithTag("account-conversation-source-HOSTED_MINUTES").performClick()
-        compose.onNodeWithText(context.getString(R.string.hosted_minimum_charge_disclosure)).performScrollTo().assertIsDisplayed()
-        compose.runOnIdle { assertEquals(ConversationProvider.HOSTED_MINUTES, provider.value); running.value = true }
-        compose.onNodeWithTag("account-conversation-source").assertIsNotEnabled()
+        compose.onNodeWithTag("account-conversation-source").assertDoesNotExist()
+        compose.onNodeWithTag("account-minute-balance").assertDoesNotExist()
+        capture("10-personal-key-account")
+        compose.runOnIdle { running.value = true }
+        compose.onNodeWithTag("account-sign-out").assertDoesNotExist()
     }
 
     @Test fun accountTransitionDisablesAnotherSignInOrPurchase() {
         var purchases = 0
         compose.setContent { MuralTheme {
-            AccountSheet(member, {}, {}, {}, {}, {}, transitionBusy = true, onBuyMinutes = { purchases++ })
+            AccountSheet(member, {}, {}, {}, {}, {}, transitionBusy = true,
+                provider = ConversationProvider.HOSTED_MINUTES, onBuyMinutes = { purchases++ })
         } }
         compose.onNodeWithTag("account-buy-minutes").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText(context.getString(R.string.account_sign_out)).assertDoesNotExist()
@@ -132,7 +145,7 @@ class AccountSheetTest {
         var deletions = 0
         val state = mutableStateOf(member)
         compose.setContent { MuralTheme { AccountSheet(state.value, {}, {}, {}, { deletions++ }, {}) } }
-        compose.onNodeWithText(context.getString(R.string.account_delete)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.account_delete_action)).performScrollTo().performClick()
         compose.onNodeWithTag("account-request-deletion").performClick()
         compose.onNodeWithTag("account-deletion-request").assertExists()
         compose.onNodeWithTag("account-confirm-delete").assertDoesNotExist()
@@ -147,7 +160,7 @@ class AccountSheetTest {
             AccountSheet(member.copy(minutes = MinuteBalance("milliseconds", "connected-conversation-time", 0, 0, 0)),
                 {}, {}, {}, { deletions++ }, {})
         } }
-        compose.onNodeWithText(context.getString(R.string.account_delete)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.account_delete_action)).performScrollTo().performClick()
         compose.runOnIdle { assertEquals(0, deletions) }
         compose.onNodeWithTag("account-confirm-delete").performClick()
         compose.runOnIdle { assertEquals(1, deletions) }

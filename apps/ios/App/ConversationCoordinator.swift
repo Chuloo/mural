@@ -18,14 +18,18 @@ import MuralCore
     var meaning: String { meanings.text }
     var translating: Bool { meanings.isLoading }
     var meaningError: String? { meanings.error }
+    var canRetryMeaning: Bool { meanings.canRetry }
     private(set) var working = false
     var error: String?
     var typedReplyError: String?
     var notice: String?
     private(set) var conversationProvider: ConversationProvider
-    private(set) var hostedBalanceMilliseconds: Int?
-    private(set) var hostedBalanceLoading = false
+    private(set) var personalKeyFailure: ProviderFailure?
+    var hostedAccessFailure: HostedError?
     var showSettings = false
+    var requestHostedSwitch = false
+    var requestAdvancedFocus = false
+    var requestAccountFocus = false
     var showAIConsent = false
     private var startAfterConsent = false
     private let api: APIClient
@@ -54,8 +58,17 @@ import MuralCore
     init(store: LearningStore) {
         self.store = store
         let savedProvider = UserDefaults.standard.string(forKey: "mural.conversation-provider")
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--preview") {
+            conversationProvider = ProcessInfo.processInfo.arguments.contains("--preview-key") ? .personalKey : .hosted
+        } else {
+            conversationProvider = savedProvider.flatMap(ConversationProvider.init(rawValue:))
+                ?? (CredentialStore.hasKey ? .personalKey : .hosted)
+        }
+        #else
         conversationProvider = savedProvider.flatMap(ConversationProvider.init(rawValue:))
             ?? (CredentialStore.hasKey ? .personalKey : .hosted)
+        #endif
         let api = APIClient(); self.api = api
         finalAssessments = FinalAssessmentQueue { snapshot, passage in
             guard store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested else { throw AIProcessingConsent.ConsentError.required }
@@ -64,8 +77,12 @@ import MuralCore
         meanings = MeaningController(streaming: { request, onText in
             guard store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested else { throw AIProcessingConsent.ConsentError.required }
             guard let language = LanguageRegistry.module(for: request.learningLanguageID) else { throw ArchiveError.unsupportedLanguage }
-            let result = try await api.respond(instructions: TeachingPolicy.translation(language: language, meaningLanguage: request.meaningLanguage), input: request.translationInput, onText: onText)
-            return MeaningResult(text: result.text, inputTokens: result.usage.input, outputTokens: result.usage.output)
+            do {
+                let result = try await api.respond(instructions: TeachingPolicy.translation(language: language, meaningLanguage: request.meaningLanguage), input: request.translationInput, onText: onText)
+                return MeaningResult(text: result.text, inputTokens: result.usage.input, outputTokens: result.usage.output)
+            } catch let error as HostedError {
+                throw error.meaningGuidance
+            }
         })
         api.conversationProvider = conversationProvider
         meanings.onResult = { [weak self] request, result in
@@ -115,22 +132,15 @@ import MuralCore
         case .failed: "Let’s try again"
         }
     }
-    var microphoneLabel: String {
-        switch state {
-        case .active: isMuted ? "Microphone muted" : "Microphone on"
-        case .connecting: "Connecting microphone"
-        default: "Microphone off"
-        }
-    }
     func start() {
         guard !isRunning else { return }
         guard hasAIConsent else { startAfterConsent = true; showAIConsent = true; return }
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--preview") { showSettings = true; return }
         #endif
-        guard conversationProvider != .personalKey || CredentialStore.hasKey else { showSettings = true; return }
+        guard conversationProvider != .personalKey || CredentialStore.hasKey else { requestAdvancedFocus = true; showSettings = true; return }
         cancelReset(); meanings.reset()
-        error = nil; notice = nil; lastAssessmentKey = ""
+        error = nil; hostedAccessFailure = nil; notice = nil; lastAssessmentKey = ""
         lastLanguageCheck = ""; pendingCommands = [:]
         state = .connecting; isMuted = false
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
@@ -145,6 +155,7 @@ import MuralCore
         api.hostedLease = nil
         connectionTask = Task { [weak self] in
             guard let self else { return }
+            var checkingHostedAccess = self.conversationProvider == .hosted
             do {
                 var hosted: HostedConnectRequest?
                 if self.conversationProvider == .hosted {
@@ -156,18 +167,21 @@ import MuralCore
                     let owner = try await GuestAccess.shared.owner(member: member)
                     guard try await client.available(owner) else { throw HostedError.unavailable }
                     let balance = try await client.balance(owner)
-                    self.hostedBalanceMilliseconds = balance.availableMilliseconds
-                    self.hostedBalanceLoading = false
                     guard balance.availableMilliseconds > 0 else { throw HostedError.noMinutes }
                     hosted = HostedConnectRequest(client: client, owner: owner, language: self.language.locale,
                                                   requestedMilliseconds: self.store.preferences.sessionMinutes * 60_000)
                 }
                 guard self.session?.id == generation, self.state == .connecting else { return }
+                checkingHostedAccess = false
                 try await self.transport.connect(api: self.api, instructions: instructions, history: history, hosted: hosted)
             }
             catch is CancellationError { return }
             catch {
                 guard self.session?.id == generation, self.state == .connecting || self.state == .active else { return }
+                if self.conversationProvider == .personalKey { self.personalKeyFailure = error as? ProviderFailure }
+                if self.conversationProvider == .hosted {
+                    self.hostedAccessFailure = (error as? HostedError) ?? (checkingHostedAccess ? .unavailable : nil)
+                }
                 self.fail(error.localizedDescription)
             }
         }
@@ -178,34 +192,30 @@ import MuralCore
         UserDefaults.standard.set(provider.rawValue, forKey: "mural.conversation-provider")
         api.conversationProvider = provider
         api.hostedLease = nil
-        hostedBalanceMilliseconds = nil
-        hostedBalanceLoading = false
-        error = nil; notice = nil
+        error = nil; hostedAccessFailure = nil; notice = nil
     }
-    func refreshHostedBalance() async {
-        guard conversationProvider == .hosted, !isRunning else { return }
+    func clearPersonalKeyFailure() { personalKeyFailure = nil }
+    /// Checks the hosted wallet without selecting it or opening a voice lease.
+    func hostedBalanceForSwitch() async -> Int? {
         #if DEBUG && targetEnvironment(simulator)
-        if ScreenshotPreview.screen == .settings {
-            hostedBalanceMilliseconds = 600_000
-            return
-        }
+        if ProcessInfo.processInfo.arguments.contains("--preview") { return 534_000 }
         #endif
-        hostedBalanceMilliseconds = nil
-        hostedBalanceLoading = true
-        defer { hostedBalanceLoading = false }
+        guard !isRunning, let client = HostedClient.shared else { return nil }
         do {
-            guard let client = HostedClient.shared else { throw HostedError.unavailable }
             let member: ManagedAccountSession?
             if let config = ManagedAccountConfiguration.load() {
                 member = try ManagedAccountKeychain(scope: config.storageScope).load()
             } else { member = nil }
             let owner = try await GuestAccess.shared.owner(member: member)
             let balance = try await client.balance(owner)
-            guard conversationProvider == .hosted, !isRunning else { return }
-            hostedBalanceMilliseconds = balance.availableMilliseconds
-        } catch {
-            hostedBalanceMilliseconds = nil
-        }
+            guard !isRunning, conversationProvider == .personalKey else { return nil }
+            let currentMember: ManagedAccountSession?
+            if let config = ManagedAccountConfiguration.load() {
+                currentMember = try ManagedAccountKeychain(scope: config.storageScope).load()
+            } else { currentMember = nil }
+            guard try await GuestAccess.shared.owner(member: currentMember).accountID == owner.accountID else { return nil }
+            return balance.availableMilliseconds
+        } catch { return nil }
     }
     private var hasAIConsent: Bool {
         store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested
@@ -300,8 +310,6 @@ import MuralCore
         assessmentTask?.cancel(); saveTask?.cancel(); saveTask = nil
         delegationTasks.values.forEach { $0.cancel() }; delegationTasks.removeAll()
         transport.disconnect(); pendingCommands = [:]; working = false
-        hostedBalanceMilliseconds = nil
-        hostedBalanceLoading = false
         session?.endedAt = .now; session?.usageFinal = final
         save(); state = .ended
         if let session { finalAssessments.submit(session) }
@@ -346,6 +354,7 @@ import MuralCore
         case "session.started":
             guard state == .connecting else { return }
             state = .active; activity = ConversationActivity(now: activityNow); conversationPace = ConversationPace(); inactivitySeconds = nil
+            if conversationProvider == .personalKey { personalKeyFailure = nil }
             session?.providerID = (event["session"] as? [String: Any])?["id"] as? String
             append("instructions", TeachingPolicy.greeting(language: language))
             startDurationChecks(); save()
@@ -372,6 +381,12 @@ import MuralCore
         case "error":
             let details = event["error"] as? [String: Any]
             if let id = details?["client_event_id"] as? String { pendingCommands.removeValue(forKey: id) }
+            if conversationProvider == .personalKey,
+               let failure = ProviderFailure.fromRealtime(code: details?["code"] as? String) {
+                personalKeyFailure = failure
+                fail(failure.localizedDescription)
+                return
+            }
             notice = "A voice update was rejected. If Mural stops responding, end this conversation and start again."
         default:
             if type.hasSuffix(".appended"), let id = event["client_event_id"] as? String { pendingCommands.removeValue(forKey: id) }
@@ -401,7 +416,7 @@ import MuralCore
     private func scheduleTranslation() {
         guard store.preferences.meaningVisible, let session, let passage = assistantPassage else { return }
         let request = MeaningRequest(sessionID: session.id, passage: passage, learningLanguageID: session.languageID, meaningLanguage: store.preferences.meaningLanguage)
-        meanings.update(request, cached: session.translations[request.cacheKey])
+        meanings.update(request, cached: session.translations[request.cacheKey], conversationEnded: state == .ended)
     }
     func retryMeaning() { scheduleTranslation(); meanings.retry() }
     func resetConversation() {
@@ -464,8 +479,20 @@ import MuralCore
             activity = ConversationActivity(now: activityNow - 25)
             inactivitySeconds = 5
             if args.contains("--preview-inactivity-timer") { startDurationChecks() }
+        } else if args.contains("--preview-meaning-error") || args.contains("--preview-meaning-limit") {
+            prepareScreenshot(.conversation)
+            let failure = HostedError.server(args.contains("--preview-meaning-limit") ? "helper_session_limit" : "helper_budget_exhausted", retryable: false).meaningGuidance
+            meanings.preparePreviewFailure(failure.localizedDescription, canRetry: failure.retryMeaningAllowed)
         } else if args.contains("--preview-provider-quota") {
-            error = ProviderFailure(status: 429, body: Data(#"{"error":{"code":"insufficient_quota","message":"private"}}"#.utf8), reference: "req_support_fixture").localizedDescription
+            let failure = ProviderFailure(status: 429, body: Data(#"{"error":{"code":"insufficient_quota","message":"private"}}"#.utf8), reference: "req_support_fixture")
+            if conversationProvider == .personalKey { personalKeyFailure = failure }
+            error = failure.localizedDescription
+        } else if args.contains("--preview-hosted-no-minutes") {
+            hostedAccessFailure = .noMinutes
+            error = hostedAccessFailure?.localizedDescription
+        } else if args.contains("--preview-hosted-sign-in") {
+            hostedAccessFailure = .signInRequired
+            error = hostedAccessFailure?.localizedDescription
         }
     }
     func prepareScreenshot(_ screen: ScreenshotPreview.Screen) {

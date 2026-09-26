@@ -27,7 +27,22 @@ final class ManagedAccountStore {
         client = configuration.map(ManagedAccountClient.init)
         keychain = configuration.map { ManagedAccountKeychain(scope: $0.storageScope) }
         // Screenshot and UI-test fixtures never read a real account or create a server session.
-        if !isPreview {
+        if isPreview {
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--preview-member") || arguments.contains("--preview-apple") {
+                let apple = arguments.contains("--preview-apple")
+                let id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                let exchangeData = Data("{\"accountID\":\"\(id)\",\"accessToken\":\"\(String(repeating: "x", count: 43))\",\"expiresInSeconds\":86400}".utf8)
+                if let exchange = try? JSONDecoder().decode(ManagedAuthExchange.self, from: exchangeData) {
+                    session = try? ManagedAccountSession(exchange: exchange, provider: apple ? .apple : .google,
+                                                         scope: configuration?.storageScope ?? "preview")
+                }
+                let address = apple ? "a.very.long.private.relay.address.for.layout@privaterelay.appleid.com" : "preview@example.test"
+                let profileData = Data("{\"accountID\":\"\(id)\",\"email\":\"\(address)\",\"providers\":[\"\(apple ? "apple" : "google")\"],\"createdAt\":\"2026-09-25T12:00:00Z\"}".utf8)
+                profile = try? JSONDecoder().decode(ManagedAccountProfile.self, from: profileData)
+                hostedBalanceMilliseconds = 534_000
+            }
+        } else {
             do { session = try keychain?.load() }
             catch { message = Self.message(for: error) }
         }
@@ -65,7 +80,9 @@ final class ManagedAccountStore {
         }
     }
     func refresh() {
+        guard !isPreview else { return }
         guard !isBusy, let client, let session else { return }
+        hostedBalanceMilliseconds = nil
         run { [self] token in
             let result = try await client.profile(session: session)
             guard gate.accepts(token) else { return }
@@ -77,7 +94,12 @@ final class ManagedAccountStore {
             }
         }
     }
+    func refreshAndWait() async {
+        refresh()
+        await operation?.value
+    }
     func signOut() {
+        guard !isPreview else { message = "Preview account actions don’t change a real account."; return }
         guard !isBusy, let client, let session, let keychain else { return }
         run { [self] token in
             var remoteFailed = false
@@ -91,6 +113,7 @@ final class ManagedAccountStore {
         }
     }
     func deleteAccount() {
+        guard !isPreview else { message = "Preview account actions don’t change a real account."; return }
         guard !isBusy, let client, let session, let keychain else { return }
         run { [self] token in
             var code: String?

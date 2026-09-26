@@ -6,17 +6,23 @@ import MuralCore
 enum ConversationProvider: String, Hashable { case hosted, personalKey }
 
 enum HostedError: LocalizedError {
-    case unavailable, invalidResponse, secureStorage, signInRequired, noMinutes, unconfirmed, personalKeyRequired, server(String)
+    case unavailable, invalidResponse, secureStorage, signInRequired, noMinutes, unconfirmed, personalKeyRequired, server(String, retryable: Bool)
+    var needsSignInRecovery: Bool {
+        switch self {
+        case .signInRequired, .server("sign_in_required", _), .server("sign_in_to_continue", _): true
+        default: false
+        }
+    }
     var errorDescription: String? {
         return switch self {
-        case .unavailable: "Mural’s free conversations are unavailable right now. Try again later or use your own OpenAI key."
+        case .unavailable: "Mural’s free conversations are unavailable right now. Try again later or use your own API key."
         case .invalidResponse: "Mural couldn’t verify the server response. Please try again."
         case .secureStorage: "Mural couldn’t read this iPhone’s secure trial record. Unlock your iPhone and try again."
-        case .signInRequired: "Sign in to continue using Mural minutes, or use your own OpenAI key."
-        case .noMinutes: "Your free minutes have been used. You can keep practising with your own OpenAI key."
+        case .signInRequired: "Sign in to continue using Mural minutes, or use your own API key."
+        case .noMinutes: "Your free minutes have been used. You can keep practising with your own API key."
         case .unconfirmed: "Mural is checking an earlier conversation. Please try again shortly."
-        case .personalKeyRequired: "Current topics need your OpenAI key. Add one in Settings and switch to Your key."
-        case .server(let code):
+        case .personalKeyRequired: "Current topics need your API key. Add one in Settings and switch to Your key."
+        case .server(let code, _):
             switch code {
             case "insufficient_minutes", "insufficient_credit": HostedError.noMinutes.errorDescription
             case "sign_in_required", "sign_in_to_continue": HostedError.signInRequired.errorDescription
@@ -25,6 +31,39 @@ enum HostedError: LocalizedError {
             }
         }
     }
+    var meaningGuidance: MeaningRequestFailure {
+        switch self {
+        case .server("helper_session_limit", let retryable):
+            return retryable
+                ? MeaningRequestFailure("Meaning is busy. Wait a moment, then try again.")
+                : MeaningRequestFailure("This conversation has reached its limit for extra meanings.", canRetry: false)
+        case .server("helper_concurrency_limit", _):
+            return MeaningRequestFailure("Meaning is busy. Wait a moment, then try again.")
+        case .server("helper_budget_exhausted", _):
+            return MeaningRequestFailure("Meaning isn’t available yet. Keep talking, then try again.")
+        case .server("helper_session_window_closed", _):
+            return MeaningRequestFailure("Start a new conversation for more meanings.", canRetry: false)
+        case .server("helper_session_funding_unavailable", _):
+            return MeaningRequestFailure("Extra meanings aren’t available in this conversation.", canRetry: false)
+        case .server("helper_output_refused", _):
+            return MeaningRequestFailure("Mural couldn’t explain that passage. Try another one.", canRetry: false)
+        case .server("helper_output_incomplete", _):
+            return MeaningRequestFailure("That meaning was incomplete. Please try again.")
+        case .signInRequired, .server("sign_in_required", _), .server("sign_in_to_continue", _):
+            return MeaningRequestFailure("Sign in to keep using Mural meanings.", canRetry: false)
+        default:
+            return MeaningRequestFailure("Meaning is temporarily unavailable. You can keep talking and try again.")
+        }
+    }
+}
+
+struct MeaningRequestFailure: LocalizedError, MeaningRetryGuidance {
+    let message: String
+    let retryMeaningAllowed: Bool
+    init(_ message: String, canRetry: Bool = true) {
+        self.message = message; retryMeaningAllowed = canRetry
+    }
+    var errorDescription: String? { message }
 }
 
 struct HostedOwner: Codable, Sendable {
@@ -94,7 +133,8 @@ struct HostedLease {
         guard (200..<300).contains(response.statusCode) else {
             let code = (value["error"] as? [String: Any])?["code"] as? String ?? "service_unavailable"
             if response.statusCode == 401 && code != "invalid_guest_session" { throw HostedError.signInRequired }
-            throw HostedError.server(code)
+            let retryable = (value["error"] as? [String: Any])?["retryable"] as? Bool == true
+            throw HostedError.server(code, retryable: retryable)
         }
         return value
     }
@@ -254,7 +294,7 @@ private struct GuestRecord: Codable {
         let client = try HostedClient.shared.unwrap()
         let response: [String: Any]
         do { response = try await client.linkGuest(guest, guestID: guest.accountID, member: member) }
-        catch HostedError.server("invalid_guest_session") {
+        catch HostedError.server("invalid_guest_session", _) {
             if let renewed = try? Self.grantedOwner(await client.guest(installationToken: record.installationToken)) {
                 guard renewed.accountID == guest.accountID else { throw HostedError.unconfirmed }
                 guest = renewed; record.owner = renewed; try save(record)

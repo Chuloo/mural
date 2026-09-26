@@ -40,7 +40,7 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
             onText?(result.text)
             return result
         }
-        var body: [String: Any] = ["model": "gpt-5.6-luna", "store": false, "instructions": instructions,
+        var body: [String: Any] = ["model": "gpt-6-luna", "store": false, "instructions": instructions,
                                   "input": [["role": "user", "content": input]], "max_output_tokens": schema == nil ? 1400 : 2200,
                                   "reasoning": ["effort": "low"]]
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "mural_result", "strict": true, "schema": schema]] }

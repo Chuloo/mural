@@ -9,6 +9,9 @@ struct RootView: View {
     init(store: LearningStore) {
         let coordinator = ConversationCoordinator(store: store)
         #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--preview-onboarding") {
+            store.updatePreferences { $0.hasOnboarded = false }
+        }
         if ProcessInfo.processInfo.arguments.contains("--preview"), ProcessInfo.processInfo.arguments.contains("--preview-existing-user") {
             store.updatePreferences { $0.hasOnboarded = true }
         }
@@ -29,13 +32,34 @@ struct RootView: View {
             Tab("Words", systemImage: "book", value: 2) { shell { WordsView(coordinator: coordinator) } }
         }
         .tint(MuralColor.ink)
-        .sheet(isPresented: $coordinator.showSettings) { SettingsView(coordinator: coordinator) }
+        .sheet(isPresented: $coordinator.showSettings) {
+            SettingsView(coordinator: coordinator)
+                .presentationDetents([.large])
+        }
         .sheet(isPresented: $coordinator.showAIConsent, onDismiss: { coordinator.resumeAfterAIConsent() }) {
             AIConsentView(agree: { coordinator.acceptAIConsent() }, decline: { coordinator.declineAIConsent() })
         }
         .fullScreenCover(isPresented: $onboarding) { OnboardingView(coordinator: coordinator) { coordinator.store.updatePreferences { $0.hasOnboarded = true }; onboarding = false } }
-        .alert("A little interruption", isPresented: Binding(get: { coordinator.error != nil || coordinator.store.error != nil }, set: { if !$0 { coordinator.error = nil; coordinator.store.error = nil } })) {
-            Button("OK", role: .cancel) { coordinator.error = nil; coordinator.store.error = nil }
+        .alert("A little interruption", isPresented: Binding(get: { coordinator.error != nil || coordinator.store.error != nil }, set: { if !$0 { coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil } })) {
+            if coordinator.personalKeyFailure != nil {
+                Button("Review in Advanced") {
+                    coordinator.error = nil; coordinator.store.error = nil
+                    coordinator.requestAdvancedFocus = true; coordinator.showSettings = true
+                }
+            }
+            if let hostedFailure = coordinator.hostedAccessFailure {
+                if hostedFailure.needsSignInRecovery {
+                    Button("Sign in") {
+                        coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil
+                        coordinator.requestAccountFocus = true; coordinator.showSettings = true
+                    }
+                }
+                Button("Use my API key") {
+                    coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil
+                    coordinator.requestAdvancedFocus = true; coordinator.showSettings = true
+                }
+            }
+            Button("OK", role: .cancel) { coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil }
         } message: { Text(coordinator.error ?? coordinator.store.error ?? "") }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
@@ -138,31 +162,33 @@ struct TalkView: View {
             captionArea(scrollPage: scrollPage)
                 .frame(maxHeight: scrollPage ? nil : .infinity)
             controls.padding(.top, compact ? 8 : 12)
-            Text(coordinator.microphoneLabel).font(.caption2).foregroundStyle(MuralColor.secondary).padding(.top, 10)
-                .accessibilityIdentifier("microphone-status")
-            HStack(spacing: 24) {
-                if coordinator.state == .active {
-                    Button("Type instead", systemImage: "keyboard") { typing = true }
-                    Button("A little help", systemImage: "sparkles") { coordinator.help() }
-                } else if coordinator.session == nil {
-                    Text("Reply in whichever language comes to you.").foregroundStyle(MuralColor.secondary)
-                } else if !coordinator.isRunning {
-                    Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
-                        .accessibilityIdentifier("new-conversation")
-                }
-            }.font(.caption).padding(.top, 6).padding(.bottom, 12)
-            if let notice = coordinator.notice {
-                Text(notice).font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center).padding(.bottom, 12)
-            }
+            Group {
+                HStack(spacing: 24) {
+                    if coordinator.state == .active {
+                        Button("Type instead", systemImage: "keyboard") { typing = true }
+                        Button("A little help", systemImage: "sparkles") { coordinator.help() }
+                    } else if coordinator.session != nil && !coordinator.isRunning {
+                        Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
+                            .accessibilityIdentifier("new-conversation")
+                    }
+                }.font(.caption)
+            }.frame(height: compact ? 28 : 42).accessibilityHidden(coordinator.state != .active && coordinator.session == nil)
         }.padding(.horizontal, 30).frame(maxWidth: .infinity)
     }
     private func captionArea(scrollPage: Bool) -> some View {
         VStack(spacing: 12) {
-            if scrollPage { targetPassage }
-            else { scrollingPassage { targetPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("target-passage-scroll") }
-            if coordinator.store.preferences.meaningVisible {
-                if scrollPage { meaningPassage }
-                else { scrollingPassage { meaningPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("meaning-passage-scroll") }
+            if coordinator.assistantPassage == nil && !scrollPage {
+                VStack(spacing: 14) {
+                    targetPassage
+                    if coordinator.store.preferences.meaningVisible { meaningPassage }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                if scrollPage { targetPassage }
+                else { scrollingPassage { targetPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("target-passage-scroll") }
+                if coordinator.store.preferences.meaningVisible {
+                    if scrollPage { meaningPassage }
+                    else { scrollingPassage { meaningPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("meaning-passage-scroll") }
+                }
             }
             if let user = coordinator.userPassage {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -173,6 +199,14 @@ struct TalkView: View {
             if coordinator.working { ProgressView("Checking that for you…").font(.caption).tint(MuralColor.secondary) }
             if let sources = coordinator.session?.topics.last?.sources, !sources.isEmpty {
                 Button("Sources", systemImage: "link") { transcript = coordinator.session }.font(.caption)
+            }
+            if coordinator.conversationProvider == .personalKey && coordinator.personalKeyFailure != nil && !coordinator.isRunning {
+                Button("Review API issue in Advanced") {
+                    coordinator.requestAdvancedFocus = true; coordinator.showSettings = true
+                }.font(.footnote).accessibilityIdentifier("talk-open-advanced")
+            }
+            if let notice = coordinator.notice {
+                Text(notice).font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
             }
         }.frame(minHeight: typeSize.isAccessibilitySize ? 100 : 105).frame(maxWidth: .infinity)
     }
@@ -193,10 +227,12 @@ struct TalkView: View {
                 .font(.subheadline).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                 .accessibilityIdentifier("meaning-caption")
             if let error = coordinator.meaningError {
-                Text(error).foregroundStyle(MuralColor.secondary)
-                Button("Try meaning again") { coordinator.retryMeaning() }
+                Text(error).foregroundStyle(MuralColor.secondary).accessibilityIdentifier("meaning-error")
+                if coordinator.canRetryMeaning {
+                    Button("Try meaning again") { coordinator.retryMeaning() }
+                }
             }
-        }.font(.caption).frame(maxWidth: .infinity)
+        }.font(.footnote).frame(maxWidth: .infinity)
     }
     private func scrollingPassage<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
         GeometryReader { geometry in
