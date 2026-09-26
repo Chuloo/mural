@@ -4,7 +4,7 @@ import MuralCore
 
 /// Sample content for native simulator captures. Never loaded on a physical device.
 @MainActor enum ScreenshotPreview {
-    enum Screen: String { case greeting, conversation, themes, words }
+    enum Screen: String { case greeting, conversation, themes, words, mandarin, italian, settings, meaning }
     static var screen: Screen? {
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("--preview"),

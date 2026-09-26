@@ -7,9 +7,17 @@ import kotlinx.serialization.json.*
 /** Choice is explicit. An unavailable provider never authorizes use of the other one. */
 enum class ConversationProvider { PERSONAL_KEY, HOSTED_MINUTES }
 
+object MinuteBalanceTime {
+    fun roundedSeconds(milliseconds: Long): Long {
+        val value = milliseconds.coerceAtLeast(0)
+        return value / 1_000 + if (value % 1_000 == 0L) 0L else 1L
+    }
+    fun isEligible(milliseconds: Long): Boolean = milliseconds > 0
+}
+
 data class HostedReadiness(val accountID: String? = null, val availableMilliseconds: Long = 0,
-    val enabled: Boolean = false, val checking: Boolean = false) {
-    val ready get() = enabled && accountID != null && availableMilliseconds > 0 && !checking
+    val enabled: Boolean = false, val checking: Boolean = false, val verified: Boolean = false) {
+    val ready get() = enabled && accountID != null && MinuteBalanceTime.isEligible(availableMilliseconds) && !checking
 }
 
 object ConversationProviderPolicy {

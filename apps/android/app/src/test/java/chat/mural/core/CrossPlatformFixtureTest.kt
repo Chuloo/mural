@@ -11,6 +11,24 @@ class CrossPlatformFixtureTest {
     private val expected = Json.parseToJsonElement(File(dir, "archive-expected.json").readText()).jsonObject
     private val archive = ArchiveCodec.decode(source)
 
+    @Test fun accountAccessMatchesSharedBalanceAndFailureCases() {
+        val root = Json.parseToJsonElement(File(dir, "account-access-cases.json").readText()).jsonObject
+        val balances = root.getValue("balances").jsonArray
+        val failures = root.getValue("providerFailures").jsonArray
+        assertTrue(balances.isNotEmpty()); assertTrue(failures.isNotEmpty())
+        for (item in balances.map { it.jsonObject }) {
+            val milliseconds = item.getValue("milliseconds").jsonPrimitive.long
+            assertEquals(item.getValue("seconds").jsonPrimitive.long, MinuteBalanceTime.roundedSeconds(milliseconds))
+            assertEquals(item.getValue("eligible").jsonPrimitive.boolean, MinuteBalanceTime.isEligible(milliseconds))
+        }
+        for (item in failures.map { it.jsonObject }) {
+            val status = item.getValue("status").jsonPrimitive.int
+            val code = item.getValue("code").jsonPrimitive.content
+            assertEquals(code, item.getValue("kind").jsonPrimitive.content,
+                ProviderFailureKind.classify(status, code).name)
+        }
+    }
+
     @Test fun redirectDecisionsMatchTheSharedCases() {
         val cases = Json.parseToJsonElement(File(dir, "redirect-cases.json").readText()).jsonObject.getValue("cases").jsonArray
         assertTrue(cases.isNotEmpty())

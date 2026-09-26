@@ -35,6 +35,8 @@ class CaptionParityTest {
     private lateinit var vm: MuralViewModel
     private lateinit var original: String
     private lateinit var originalAPI: APIClient
+    private lateinit var originalProvider: ConversationProvider
+    private lateinit var originalReadiness: HostedReadiness
     private var originalHasKey = false
     private val requests = LinkedBlockingQueue<String>()
     @Volatile private var responseGate: CountDownLatch? = null
@@ -49,6 +51,7 @@ class CaptionParityTest {
         vm = compose.awaitHistoryLoaded()
         compose.runOnIdle {
             original = ArchiveCodec.encode(vm.archive); originalHasKey = vm.hasKey
+            originalProvider = vm.conversationProvider; originalReadiness = vm.hostedReadiness
             val field = MuralViewModel::class.java.getDeclaredField("api").apply { isAccessible = true }
             originalAPI = field.get(vm) as APIClient
             // An application interceptor returns before DNS or a socket can be used. No provider key or network is involved.
@@ -115,6 +118,8 @@ class CaptionParityTest {
             MuralViewModel::class.java.getDeclaredField("voiceSession").apply { isAccessible = true }.setBoolean(vm, false)
             MuralViewModel::class.java.getDeclaredField("api").apply { isAccessible = true }.set(vm, originalAPI)
             state("hasKey", originalHasKey)
+            state("conversationProvider", originalProvider)
+            state("hostedReadiness", originalReadiness)
             val restored = ArchiveCodec.decode(original)
             state("archive", restored); vm.updatePreferences(restored.preferences)
         }
@@ -187,6 +192,42 @@ class CaptionParityTest {
         ParcelFileDescriptor.AutoCloseInputStream(InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("pkill -INT screenrecord")).use { it.readBytes() }
         Thread.sleep(800); recorder?.close(); recorder = null
+    }
+
+    @Test fun compactIdleGreetingAndMeaningStayFullyVisibleWithMicStateChange() {
+        compose.runOnIdle {
+            state("session", null)
+            state("state", "idle")
+            state("conversationProvider", ConversationProvider.HOSTED_MINUTES)
+            state("hostedReadiness", HostedReadiness("guest", 534_000, enabled = true, verified = true))
+            vm.updatePreferences(vm.archive.preferences.copy(learningLanguageID = "nb", meaningLanguage = "English",
+                meaningVisible = true))
+        }
+        compose.onNodeWithTag("target-caption").assertTextEquals("Hei!")
+        compose.onNodeWithTag("meaning-caption").assertTextEquals("Hi!")
+        compose.onNodeWithTag("talk-guest-minutes").assertDoesNotExist()
+        compose.onNodeWithText("8 min 54 sec of Mural minutes remaining").assertDoesNotExist()
+        compose.onNodeWithText("Microphone off").assertDoesNotExist()
+        compose.onNodeWithText("Reply in whichever language comes to you.").assertDoesNotExist()
+        compose.onNodeWithTag("start-conversation").assertContentDescriptionEquals("Start conversation")
+        assertTextVisible("target-caption", true)
+        assertTextVisible("meaning-caption", true)
+        val target = compose.onNodeWithTag("target-caption").fetchSemanticsNode().boundsInRoot
+        val meaning = compose.onNodeWithTag("meaning-caption").fetchSemanticsNode().boundsInRoot
+        val microphone = compose.onNodeWithTag("start-conversation").fetchSemanticsNode().boundsInRoot
+        val orb = compose.onNodeWithTag("talk-orb").fetchSemanticsNode().boundsInRoot
+        capture("compact-idle-greeting")
+        assertTrue("Greeting and meaning overlap: target=$target meaning=$meaning", target.bottom <= meaning.top)
+        assertTrue("Meaning overlaps microphone: meaning=$meaning microphone=$microphone", meaning.bottom <= microphone.top)
+        assertTrue("Orb shrank below 120 dp", orb.width / compose.density.density >= 119f)
+        compose.runOnIdle { state("hostedReadiness", HostedReadiness()) }
+        compose.onNodeWithText("Couldn’t check your Mural minutes.").assertDoesNotExist()
+        compose.runOnIdle {
+            MuralViewModel::class.java.getDeclaredField("voiceSession").apply { isAccessible = true }.setBoolean(vm, true)
+            state("state", "active")
+        }
+        compose.onNodeWithTag("start-conversation").assertContentDescriptionEquals("Mute microphone")
+        capture("active-voice-mic")
     }
 
     @Test fun mandarinCaptionToggleAndContextualLookupMatchIOS() {
@@ -477,6 +518,8 @@ class CaptionParityTest {
         android.util.Log.i("MuralCaptionCheck", "Long caption: render")
         show("zh", sentence, "Hello! Nice to meet you. Your Chinese is good. We can go to a café, then the bank, and buy a few things. What do you think?")
         assertTextVisible("target-caption", false); assertTextVisible("meaning-caption", false)
+        val orb = compose.onNodeWithTag("talk-orb").fetchSemanticsNode().boundsInRoot
+        assertTrue("Orb shrank below 120 dp", orb.width / compose.density.density >= 119f)
         android.util.Log.i("MuralCaptionCheck", "Long caption: capture")
         capture("mandarin-long-caption")
         android.util.Log.i("MuralCaptionCheck", "Long caption: scroll reading")

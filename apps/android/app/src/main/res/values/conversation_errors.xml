@@ -1,5 +1,5 @@
 <resources>
-    <string name="error_provider_quota">Your OpenAI project has no available API credit. Check its billing and usage limit before trying again.</string>
+    <string name="error_provider_quota">OpenAI billing needs attention. Check your billing and limits, or use Mural minutes.</string>
     <string name="error_provider_unavailable">The voice or teaching service is temporarily unavailable. Please try again shortly.</string>
     <string name="error_provider_request">The service could not accept this request. If this continues, contact support.</string>
     <string name="error_request_timeout">The request took too long. Check your connection and try again.</string>

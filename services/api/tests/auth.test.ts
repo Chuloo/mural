@@ -55,6 +55,14 @@ test('Google authorized party and multiple audiences cannot authorize another cl
   const authorized = await new SignJWT({ ...claims, azp: 'mural-test-client' }).setProtectedHeader({ alg: 'RS256', kid: 'test-key' }).sign(privateKey);
   assert.equal((await verifyIdentity('google', authorized, digest(nonce), { googleClientID: 'mural-test-client' }, keys)).subject, 'subject');
 });
+test('a second registered iOS client can authenticate without accepting an unregistered party', async () => {
+  const config = { googleClientID: 'mural-test-client', googleIOSClientIDs: ['mural-ios-release'] };
+  const release = await new SignJWT({ nonce }).setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+    .setSubject('same-google-user').setAudience('mural-ios-release').setIssuer('https://accounts.google.com')
+    .setIssuedAt().setExpirationTime('5m').sign(privateKey);
+  assert.equal((await verifyIdentity('google', release, digest(nonce), config, keys)).subject, 'same-google-user');
+  await assert.rejects(verifyIdentity('google', await token({ azp: 'unregistered-ios-client' }), digest(nonce), config, keys));
+});
 test('Android Google tokens require their server audience and an allowlisted Android party', async () => {
   const config = { googleClientID: 'mural-test-client', googleAndroidServerClientID: 'mural-android-server',
     googleAndroidClientIDs: ['mural-android-debug', 'mural-android-play'] };

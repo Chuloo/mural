@@ -118,7 +118,7 @@ class APIClient private constructor(
 
     private fun responseBody(instructions: String, input: String, schema: JsonObject?, search: Boolean): JsonObject {
         return buildJsonObject {
-            put("model", "gpt-5.6-luna")
+            put("model", "gpt-6-luna")
             put("store", false)
             put("instructions", instructions)
             put("input", buildJsonArray {

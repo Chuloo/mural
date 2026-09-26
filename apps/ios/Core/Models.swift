@@ -312,3 +312,11 @@ public enum ArchiveError: Error, LocalizedError {
         }
     }
 }
+
+public enum MinuteBalanceTime {
+    public static func roundedSeconds(_ milliseconds: Int) -> Int {
+        let value = max(0, milliseconds)
+        return value / 1_000 + (value % 1_000 == 0 ? 0 : 1)
+    }
+    public static func isEligible(_ milliseconds: Int) -> Bool { milliseconds > 0 }
+}

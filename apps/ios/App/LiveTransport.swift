@@ -5,10 +5,18 @@ import MuralCore
 
 enum ConnectionState: Equatable { case idle, connecting, active, closing, ended, failed }
 
+struct HostedConnectRequest {
+    let client: HostedClient
+    let owner: HostedOwner
+    let language: String
+    let requestedMilliseconds: Int
+}
+
 @MainActor final class LiveTransport: NSObject {
     var onEvent: (([String: Any]) -> Void)?
     var onLevels: ((Double, Double) -> Void)?
     var onFailure: ((String) -> Void)?
+    var onHostedLease: ((HostedLease) -> Void)?
     private var factory: RTCPeerConnectionFactory?
     private var peer: RTCPeerConnection?
     private var channel: RTCDataChannel?
@@ -27,10 +35,14 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
             self.onFailure?("The network connection was lost. Tap to start a new conversation.")
         }
     }
+    private var hostedLease: HostedLease?
+    private var hostedClient: HostedClient?
+    private var hostedCloseRequested = false
 
-    func connect(api: APIClient, instructions: String, history: [[String: Any]]) async throws {
+    func connect(api: APIClient, instructions: String, history: [[String: Any]], hosted: HostedConnectRequest? = nil) async throws {
         disconnect()
         closing = false
+        hostedCloseRequested = false
         let token = UUID(); attempt = token
         let granted = await AVAudioApplication.requestRecordPermission()
         guard granted else { throw TransportError.microphone }
@@ -81,14 +93,30 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
             guard Date() < deadline else { throw TransportError.timeout }
         }
         guard let sdp = peer.localDescription?.sdp else { throw TransportError.connection }
-        let result = try await api.post("live/sessions", body: [
-            "session": ["model": "gpt-live-1", "instructions": instructions, "input": history,
-                        "store": false, "delegation": ["type": "client"], "audio": ["output": ["voice": "marin"]]],
-            "transport": ["type": "webrtc", "sdp": sdp]
-        ])
+        let answer: String
+        if let hosted {
+            let lease = try await hosted.client.create(owner: hosted.owner, sdp: sdp, language: hosted.language,
+                                                       instructions: instructions, requestedMilliseconds: hosted.requestedMilliseconds,
+                                                       requestID: UUID())
+            guard attempt == token else {
+                Task { try? await hosted.client.close(lease) }
+                throw CancellationError()
+            }
+            self.hostedLease = lease; self.hostedClient = hosted.client
+            onHostedLease?(lease)
+            answer = lease.answerSDP
+            onEvent?(["type": "mural.session.created", "session": ["id": lease.providerSessionID]])
+        } else {
+            let result = try await api.post("live/sessions", body: [
+                "session": ["model": "gpt-live-1", "instructions": instructions, "input": history,
+                            "store": false, "delegation": ["type": "client"], "audio": ["output": ["voice": "marin"]]],
+                "transport": ["type": "webrtc", "sdp": sdp]
+            ])
+            guard let transport = result["transport"] as? [String: Any], let received = transport["sdp"] as? String else { throw TransportError.connection }
+            answer = received
+            if let session = result["session"] as? [String: Any] { onEvent?(["type": "mural.session.created", "session": session]) }
+        }
         guard attempt == token else { throw CancellationError() }
-        guard let transport = result["transport"] as? [String: Any], let answer = transport["sdp"] as? String else { throw TransportError.connection }
-        if let session = result["session"] as? [String: Any] { onEvent?(["type": "mural.session.created", "session": session]) }
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             peer.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: answer)) { error in
                 if let error { c.resume(throwing: error) } else { c.resume() }
@@ -115,9 +143,12 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
         networkRecovery.connected()
         closing = true; localTrack?.isEnabled = false; isMuted = true
         _ = send(["type": "session.close", "event_id": UUID().uuidString])
+        closeHostedSession()
     }
     func disconnect() {
         networkRecovery.connected()
+        closeHostedSession()
+        hostedLease = nil; hostedClient = nil
         attempt = UUID(); meterTask?.cancel(); meterTask = nil
         started = false; closing = true
         localTrack?.isEnabled = false; localTrack = nil
@@ -129,6 +160,11 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
             ownsAudioActivation = false
         }
         lastInput = 0; lastOutput = 0; onLevels?(0, 0)
+    }
+    private func closeHostedSession() {
+        guard !hostedCloseRequested, let lease = hostedLease, let client = hostedClient else { return }
+        hostedCloseRequested = true
+        Task { try? await client.close(lease) }
     }
     private func startMetering() {
         meterTask?.cancel()

@@ -1,5 +1,7 @@
 # How to release Mural through Apple
 
+**Current status, September 25, 2026:** Mural 1.0 (2) is uploaded for internal TestFlight testing, and its App Store version is a saved draft. The checklist below records the September 12 preparation state and should not be used as the current status. See [the build 2 release record](testflight-2026-09-25.md) before another upload or review submission.
+
 Use this checklist for the uploaded build, not just the source checkout. Requirements were checked against Apple’s official documentation on 12 September 2026.
 
 The current completed work and remaining credentials, code and verification tasks are summarized in [release status](README.md). An unsigned archive does not complete the distribution or review steps below.

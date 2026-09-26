@@ -2,6 +2,7 @@ package chat.mural
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -41,6 +42,8 @@ class OpenSourceNoticesTest {
     @Test fun settingsOpenEveryBundledNoticeIncludingWebRtc() {
         val label = compose.activity.getString(R.string.settings_open_source_notices)
         compose.onNodeWithTag("tab-settings").performClick()
+        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-about"))
+        compose.onNodeWithTag("settings-about").performClick()
         compose.onNodeWithTag("settings-screen").performScrollToNode(hasText(label))
         compose.onNode(hasText(label)).performClick()
         compose.waitUntil(timeoutMillis = 10_000) {

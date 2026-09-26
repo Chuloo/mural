@@ -1,5 +1,5 @@
 <resources>
-    <string name="error_provider_quota">Tu proyecto de OpenAI no tiene crédito de API disponible. Revisa la facturación y el límite de uso antes de volver a intentarlo.</string>
+    <string name="error_provider_quota">La facturación de OpenAI requiere atención. Revisa la facturación y los límites, o usa los minutos de Mural.</string>
     <string name="error_provider_unavailable">El servicio de voz o de aprendizaje no está disponible temporalmente. Inténtalo de nuevo en unos momentos.</string>
     <string name="error_provider_request">El servicio no pudo aceptar esta solicitud. Si el problema continúa, contacta con soporte.</string>
     <string name="error_request_timeout">La solicitud tardó demasiado. Revisa tu conexión e inténtalo de nuevo.</string>

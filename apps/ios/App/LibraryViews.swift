@@ -76,7 +76,7 @@ struct CurrentTopicView: View {
                         Button("Talk about this", systemImage: "waveform") { coordinator.discuss(brief); selected(); dismiss() }
                             .font(.headline).padding(18).frame(maxWidth: .infinity).background(MuralColor.orange, in: Capsule())
                     }
-                    Text("Search uses your OpenAI API account. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                    Text("Current topics use your API key outside a conversation. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -287,20 +287,36 @@ struct EditableTranscriptView: View {
 struct SettingsView: View {
     let coordinator: ConversationCoordinator
     @Environment(\.dismiss) private var dismiss
-    @State private var key = ""
-    @State private var hasKey = CredentialStore.hasKey
-    @State private var message: String?
-    @State private var exporting = false
-    @State private var importing = false
-    @State private var backup: BackupDocument?
-    @State private var deleting = false
-    @State private var notices = false
-    @State private var showingAPIKey = false
+    @State private var account = ManagedAccountStore()
+    @State private var hasKey = Self.initialHasKey()
+    @State private var showingKey = false
+    @State private var saveAndUseKey = false
+    @State private var confirmingPersonalKey = false
+    @State private var showingHostedSwitch = false
+    @State private var showingAccount = false
     private var store: LearningStore { coordinator.store }
-    private var totalVoiceSeconds: Double { store.sessions.reduce(0) { $0 + $1.voiceSeconds } }
+
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             Form {
+                Section {
+                    NavigationLink {
+                        ManagedAccountView(coordinator: coordinator, store: account)
+                    } label: {
+                        HStack(spacing: 12) {
+                            MuralOrb(active: false).frame(width: 38, height: 38).accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Account")
+                                Text(account.profile?.email ?? (account.session == nil ? "Sign in, if you’d like" : "Signed in"))
+                                    .font(.footnote).foregroundStyle(MuralColor.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                    .disabled(coordinator.isRunning)
+                    .accessibilityIdentifier("managed-account-settings")
+                }
                 Section {
                     LearningLanguagePicker(coordinator: coordinator)
                     Toggle("Meaning subtitles", isOn: Binding(get: { store.preferences.meaningVisible }, set: { value in
@@ -308,95 +324,321 @@ struct SettingsView: View {
                     }))
                     Picker("Meaning language", selection: Binding(get: { store.preferences.meaningLanguage }, set: { coordinator.selectMeaningLanguage($0) })) {
                         ForEach(MeaningLanguages.all, id: \.self) { Text($0) }
-                    }
-                    LabeledContent("Corrections", value: "Gently, as we talk")
-                    TextField("A few things you enjoy", text: Binding(get: { store.preferences.interests }, set: { value in store.updatePreferences { $0.interests = String(value.prefix(500)) } }), axis: .vertical)
-                } header: { Text("Just your pace") } footer: { Text(coordinator.isRunning ? "End this conversation to switch languages. Each language keeps its own words and progress." : "Each language keeps its own words and progress. Mural finds your pace through conversation.") }
-                if ManagedAccountConfiguration.load() != nil {
-                    Section {
-                        NavigationLink { ManagedAccountView() } label: {
-                            Label("Account", systemImage: "person.crop.circle")
-                        }.disabled(coordinator.isRunning).accessibilityIdentifier("managed-account-settings")
-                    }
+                    }.pickerStyle(.menu).disabled(coordinator.isRunning)
+                    NavigationLink("Interests") { InterestsSettingsView(coordinator: coordinator) }
+                        .disabled(coordinator.isRunning)
+                    Text("Corrections happen gently as you talk.")
+                        .font(.footnote).foregroundStyle(MuralColor.secondary)
+                } header: { Text("Your learning") } footer: {
+                    Text(coordinator.isRunning ? "End this conversation to switch languages. Each language keeps its own words and progress." : "Each language keeps its own words and progress.")
                 }
                 Section {
-                    DisclosureGroup(isExpanded: $showingAPIKey) {
-                        if hasKey { Label("Your key is saved on this iPhone", systemImage: "checkmark.shield") }
-                        SecureField(hasKey ? "Replace OpenAI key" : "OpenAI API key", text: $key)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive().accessibilityIdentifier("api-key")
-                        Button(hasKey ? "Save replacement key" : "Save key") {
-                            do { try CredentialStore.save(key); key = ""; hasKey = true; message = "Saved securely. Start a conversation to connect." }
-                            catch { message = error.localizedDescription }
-                        }.disabled(key.isEmpty || coordinator.isRunning)
-                        Link("Open OpenAI API keys", destination: URL(string: "https://platform.openai.com/api-keys")!)
-                        if hasKey {
-                            Button("Remove key", role: .destructive) {
-                                do { try CredentialStore.delete(); hasKey = false; message = "Your key has been removed." }
-                                catch { message = error.localizedDescription }
-                            }.disabled(coordinator.isRunning)
-                        }
-                        Text("Your OpenAI account pays for usage. The key stays in this iPhone’s Keychain and is sent only to OpenAI.")
-                            .font(.footnote).foregroundStyle(MuralColor.secondary)
-                    } label: { Label("Use your own API key", systemImage: "key").accessibilityIdentifier("advanced-api-key") }
-                    if let message { Text(message).font(.footnote).foregroundStyle(MuralColor.secondary) }
-                } header: { Text("Advanced") } footer: {
-                    if !hasKey { Text("This version uses your OpenAI API key to start a conversation.") }
-                }
-                Section {
-                    Picker("Conversation limit", selection: Binding(get: { store.preferences.sessionMinutes }, set: { value in store.updatePreferences { $0.sessionMinutes = value } })) {
+                    Picker("Session limit", selection: Binding(get: { store.preferences.sessionMinutes }, set: { value in store.updatePreferences { $0.sessionMinutes = value } })) {
                         ForEach([5, 10, 15, 20, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
-                    }
-                    LabeledContent("Recorded voice time", value: "\(Int(totalVoiceSeconds / 60)) min \(Int(totalVoiceSeconds) % 60) sec")
-                    LabeledContent("Voice estimate", value: String(format: "$%.2f USD", totalVoiceSeconds / 60 * 0.05))
-                    LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
-                    Link("OpenAI usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
-                } header: { Text("Keep it comfortable") } footer: {
-                    Text("Voice estimate uses $0.05/min as of 11 September 2026. Translation, teaching and search cost extra. Interrupted requests can be billed without a usage record here. Your OpenAI dashboard is authoritative. The time limit is local, not a billing cap.")
+                    }.pickerStyle(.menu).disabled(coordinator.isRunning)
+                } header: { Text("Conversation") } footer: {
+                    Text("Ends one conversation after the selected time. Your available Mural minutes are separate.")
+                }
+                Section("Your data") {
+                    NavigationLink("Learning backup & data") { LearningBackupView(coordinator: coordinator) }
                 }
                 Section {
-                    Button("Export learning backup", systemImage: "square.and.arrow.up") {
-                        do { backup = BackupDocument(data: try store.exportData()); exporting = true } catch { message = error.localizedDescription }
+                    Picker("Conversation access", selection: Binding(get: { coordinator.conversationProvider }, set: chooseProvider)) {
+                        Text("Mural minutes").tag(ConversationProvider.hosted)
+                        Text("My API key").tag(ConversationProvider.personalKey)
+                    }.pickerStyle(.menu).disabled(coordinator.isRunning)
+                        .accessibilityIdentifier("settings-conversation-access")
+                    if coordinator.conversationProvider == .personalKey {
+                        Text("No Mural minute limit. OpenAI bills your account for usage.")
+                            .font(.footnote).foregroundStyle(MuralColor.secondary)
                     }
-                    Button("Import learning backup", systemImage: "square.and.arrow.down") { importing = true }.disabled(coordinator.isRunning)
-                    Button("Delete all conversations and learning", role: .destructive) { deleting = true }.disabled(coordinator.isRunning)
-                } header: { Text("Your words belong to you") } footer: {
-                    Text("Backups include transcripts and learning evidence, never your API key. Import adds conversations with new IDs. Existing conversations stay unchanged. There is no cloud sync.")
-                }
-                Section {
+                    if hasKey || coordinator.conversationProvider == .personalKey {
+                        Button {
+                            saveAndUseKey = coordinator.conversationProvider == .personalKey && !hasKey
+                            showingKey = true
+                        } label: {
+                            LabeledContent("API key", value: hasKey ? "Saved on this iPhone" : "Key required")
+                        }.accessibilityIdentifier("advanced-api-key")
+                    }
+                    if let failure = coordinator.personalKeyFailure {
+                        Button(failure.kind.settingsTitle) { showingKey = true }
+                            .foregroundStyle(MuralColor.secondary)
+                            .accessibilityIdentifier("advanced-provider-issue")
+                    }
+                    if coordinator.conversationProvider == .personalKey {
+                        LabeledContent("Recorded voice time", value: "\(Int(store.sessions.reduce(0) { $0 + $1.voiceSeconds }) / 60) min")
+                        LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
+                        Text("Activity recorded on this iPhone; your OpenAI dashboard is authoritative for usage and charges.")
+                            .font(.footnote).foregroundStyle(MuralColor.secondary)
+                    }
+                } header: { Text("Advanced") }.id("advanced-section")
+                Section("Help & privacy") {
+                    Link("Contact support", destination: URL(string: "https://mural.chat/support/")!)
+                        .accessibilityIdentifier("settings-support")
                     Link("Privacy policy", destination: URL(string: "https://mural.chat/privacy/")!)
                         .accessibilityIdentifier("settings-privacy-policy")
                     Link("Terms of use", destination: URL(string: "https://mural.chat/terms/")!)
                         .accessibilityIdentifier("settings-terms")
-                    Link("Contact support", destination: URL(string: "https://mural.chat/support/")!)
-                        .accessibilityIdentifier("settings-support")
-                } header: { Text("Help and privacy") }
-                Section {
-                    Text("Mural 0.1 · Personal build").font(.footnote)
-                    Text("Voice: GPT-Live-1 · Teacher: GPT-5.6 Luna").font(.footnote)
-                    Link("OpenAI data controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
-                    Text("Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.").font(.footnote)
-                    Button("Open-source notices") { notices = true }
+                    NavigationLink("About Mural") { AboutMuralView() }
                 }
-            }.scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.secondary)
-                .navigationTitle("Make yourself comfortable").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { key = ""; dismiss() } } }
-        }
-        .fileExporter(isPresented: $exporting, document: backup, contentType: .json, defaultFilename: "Mural-learning-backup") { result in if case .failure(let error) = result { message = error.localizedDescription } }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
-            do {
-                let url = try result.get(); let granted = url.startAccessingSecurityScopedResource(); defer { if granted { url.stopAccessingSecurityScopedResource() } }
-                try store.importData(Archive.readImportData(from: url)); message = "Your backup has been imported."
-            } catch { message = error.localizedDescription }
-        }
-        .confirmationDialog("Delete all learning data on this phone?", isPresented: $deleting, titleVisibility: .visible) {
-            Button("Delete all learning data", role: .destructive) { coordinator.deleteLearningData() }
-        } message: { Text("This removes conversations, vocabulary and progress. Export a backup first if you want to keep them. Your API key and preferences remain.") }
-        .sheet(isPresented: $notices) {
-            NavigationStack {
-                ScrollView { Text(Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt").flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "Notices unavailable.").font(.footnote).padding(24).textSelection(.enabled) }
-                    .navigationTitle("Open-source notices").navigationBarTitleDisplayMode(.inline)
+            }
+            .scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.ink)
+            .navigationDestination(isPresented: $showingAccount) {
+                ManagedAccountView(coordinator: coordinator, store: account)
+            }
+            .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .onAppear {
+                if coordinator.requestAccountFocus {
+                    coordinator.requestAccountFocus = false
+                    DispatchQueue.main.async { showingAccount = true }
+                }
+                if coordinator.requestAdvancedFocus {
+                    coordinator.requestAdvancedFocus = false
+                    DispatchQueue.main.async { withAnimation { proxy.scrollTo("advanced-section", anchor: .top) } }
+                }
+            }
             }
         }
+        .sheet(isPresented: $showingKey, onDismiss: {
+            if coordinator.requestHostedSwitch {
+                coordinator.requestHostedSwitch = false
+                showingHostedSwitch = true
+            }
+        }) {
+            NavigationStack {
+                OpenAIKeyView(coordinator: coordinator, hasKey: $hasKey, useAfterSave: saveAndUseKey)
+            }
+        }
+        .sheet(isPresented: $showingHostedSwitch) { HostedAccessSwitchView(coordinator: coordinator) }
+        .confirmationDialog("Use your API key?", isPresented: $confirmingPersonalKey, titleVisibility: .visible) {
+            Button("Use my key") { coordinator.selectConversationProvider(.personalKey) }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("OpenAI bills your account for usage. Mural minutes stay available if you switch back later.") }
+        .task { account.refresh() }
+    }
+    private func chooseProvider(_ provider: ConversationProvider) {
+        guard !coordinator.isRunning, provider != coordinator.conversationProvider else { return }
+        if provider == .hosted { showingHostedSwitch = true }
+        else if hasKey { confirmingPersonalKey = true }
+        else { saveAndUseKey = true; showingKey = true }
+    }
+    private static func initialHasKey() -> Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--preview") {
+            return ProcessInfo.processInfo.arguments.contains("--preview-key")
+        }
+        #endif
+        return CredentialStore.hasKey
+    }
+}
+
+private extension ProviderFailureKind {
+    var settingsTitle: String {
+        switch self {
+        case .creditExhausted: "Credits used up"
+        case .spendLimit: "Spending limit reached"
+        case .usageLimit: "Usage limit reached"
+        case .quota: "Billing needs attention"
+        case .authentication: "Key not accepted"
+        default: "OpenAI needs attention"
+        }
+    }
+}
+
+private struct InterestsSettingsView: View {
+    let coordinator: ConversationCoordinator
+    var body: some View {
+        Form {
+            Section {
+                TextField("A few things you enjoy", text: Binding(get: { coordinator.store.preferences.interests }, set: { value in
+                    coordinator.store.updatePreferences { $0.interests = String(value.prefix(500)) }
+                }), axis: .vertical)
+                .lineLimit(4...10).disabled(coordinator.isRunning)
+                .accessibilityIdentifier("settings-interests")
+            } footer: { Text("Helps Mural suggest conversations that matter to you. Saved as you type on this iPhone.") }
+        }.scrollContentBackground(.hidden).background(MuralColor.cream).navigationTitle("Interests")
+    }
+}
+
+private struct OpenAIKeyView: View {
+    let coordinator: ConversationCoordinator
+    @Binding var hasKey: Bool
+    let useAfterSave: Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var key = ""
+    @State private var message: String?
+    @State private var removing = false
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("API key", value: hasKey ? "Saved on this iPhone" : "No key saved")
+                SecureField(hasKey ? "Replacement key" : "New key", text: $key)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .privacySensitive().accessibilityIdentifier("api-key")
+                Button(useAfterSave ? "Save & use my key" : hasKey ? "Save replacement key" : "Save key") {
+                    do {
+                        #if DEBUG && targetEnvironment(simulator)
+                        if !ProcessInfo.processInfo.arguments.contains("--preview") {
+                            try CredentialStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
+                        }
+                        #else
+                        try CredentialStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
+                        #endif
+                        key = ""; hasKey = true; coordinator.clearPersonalKeyFailure()
+                        if useAfterSave { coordinator.selectConversationProvider(.personalKey) }
+                        message = "Key saved on this iPhone. It will be checked when you start a conversation."
+                    } catch { message = error.localizedDescription }
+                }.disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.isRunning)
+                if hasKey {
+                    Button("Remove key", role: .destructive) { removing = true }
+                        .disabled(coordinator.isRunning)
+                }
+            } footer: { Text("No Mural minute limit. OpenAI bills your account for usage. The key stays in this iPhone’s Keychain and goes only to OpenAI.") }
+            if let failure = coordinator.personalKeyFailure {
+                Section("OpenAI issue") {
+                    Text(failure.localizedDescription)
+                    if coordinator.conversationProvider == .personalKey {
+                        Button("Use Mural minutes") { dismiss(); coordinator.requestHostedSwitch = true }
+                    }
+                }
+            }
+            if let message { Section { Text(message).foregroundStyle(MuralColor.secondary) } }
+            Section {
+                Link("Manage API keys", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                Link("Usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
+            }
+        }.scrollContentBackground(.hidden).background(MuralColor.cream)
+            .navigationTitle("API key").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { key = ""; dismiss() } } }
+            .confirmationDialog("Remove the saved key?", isPresented: $removing, titleVisibility: .visible) {
+                Button("Remove key", role: .destructive) {
+                    do {
+                        #if DEBUG && targetEnvironment(simulator)
+                        if !ProcessInfo.processInfo.arguments.contains("--preview") { try CredentialStore.delete() }
+                        #else
+                        try CredentialStore.delete()
+                        #endif
+                        hasKey = false; key = ""
+                        coordinator.clearPersonalKeyFailure()
+                        message = coordinator.conversationProvider == .personalKey
+                            ? "Key removed. Add a key or choose Mural minutes before talking."
+                            : "Key removed."
+                    } catch { message = error.localizedDescription }
+                }
+            } message: { Text("If this key is selected for conversations, Mural will wait for a new key or your explicit choice to use Mural minutes.") }
+    }
+}
+
+private struct HostedAccessSwitchView: View {
+    let coordinator: ConversationCoordinator
+    @Environment(\.dismiss) private var dismiss
+    @State private var available: Int?
+    @State private var checking = true
+    @State private var failed = false
+    @State private var switchTask: Task<Void, Never>?
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    if checking { ProgressView("Checking your minutes…") }
+                    else if let available, MinuteBalanceTime.isEligible(available) {
+                        let seconds = MinuteBalanceTime.roundedSeconds(available)
+                        LabeledContent("Available", value: "\(seconds / 60) min \(seconds % 60) sec")
+                    } else if available == 0 { Text("No Mural minutes remaining.") }
+                    else { Text("Couldn’t check your minutes. Try again.") }
+                    if failed { Text("Your minutes changed. Check again before switching.").foregroundStyle(MuralColor.secondary) }
+                    if !checking && available == nil { Button("Try again") { Task { await check() } } }
+                } header: { Text("Mural minutes") } footer: { Text("Your saved OpenAI key will remain on this iPhone. Switching changes the next conversation only.") }
+                if let available, MinuteBalanceTime.isEligible(available), !checking {
+                    Section {
+                        Button("Use Mural minutes") {
+                            switchTask = Task {
+                                checking = true
+                                guard let latest = await coordinator.hostedBalanceForSwitch(), MinuteBalanceTime.isEligible(latest),
+                                      !Task.isCancelled, coordinator.conversationProvider == .personalKey,
+                                      !coordinator.isRunning else {
+                                    self.available = nil; failed = true; checking = false; return
+                                }
+                                coordinator.selectConversationProvider(.hosted)
+                                dismiss()
+                            }
+                        }.frame(maxWidth: .infinity).fontWeight(.semibold)
+                    }
+                }
+            }.scrollContentBackground(.hidden).background(MuralColor.cream)
+                .navigationTitle("Conversation access").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+        .task { await check() }
+        .onDisappear { switchTask?.cancel() }
+    }
+    private func check() async {
+        checking = true; failed = false
+        available = await coordinator.hostedBalanceForSwitch()
+        checking = false
+    }
+}
+
+private struct LearningBackupView: View {
+    let coordinator: ConversationCoordinator
+    @State private var backup: BackupDocument?
+    @State private var exporting = false
+    @State private var importing = false
+    @State private var deleting = false
+    @State private var message: String?
+    var body: some View {
+        Form {
+            Section {
+                Button("Export learning backup", systemImage: "square.and.arrow.up") {
+                    do { backup = BackupDocument(data: try coordinator.store.exportData()); exporting = true }
+                    catch { message = error.localizedDescription }
+                }
+                Button("Import learning backup", systemImage: "square.and.arrow.down") { importing = true }
+                    .disabled(coordinator.isRunning)
+                Button("Delete all conversations and learning", role: .destructive) { deleting = true }
+                    .disabled(coordinator.isRunning)
+            } footer: { Text("Backups include transcripts and learning evidence, never your API key. Import adds conversations with new IDs. Learning stays on this iPhone unless you export it.") }
+            if let message { Section { Text(message) } }
+        }.scrollContentBackground(.hidden).background(MuralColor.cream).navigationTitle("Learning data")
+            .fileExporter(isPresented: $exporting, document: backup, contentType: .json, defaultFilename: "Mural-learning-backup") { result in
+                if case .failure(let error) = result { message = error.localizedDescription }
+            }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+                do {
+                    let url = try result.get(); let granted = url.startAccessingSecurityScopedResource()
+                    defer { if granted { url.stopAccessingSecurityScopedResource() } }
+                    try coordinator.store.importData(Archive.readImportData(from: url)); message = "Your backup has been imported."
+                } catch { message = error.localizedDescription }
+            }
+            .confirmationDialog("Delete all learning data on this phone?", isPresented: $deleting, titleVisibility: .visible) {
+                Button("Delete all learning data", role: .destructive) { coordinator.deleteLearningData() }
+            } message: { Text("This removes conversations, vocabulary and progress. Export a backup first if you want to keep them. Your key and account remain.") }
+    }
+}
+
+private struct AboutMuralView: View {
+    @State private var notices = false
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                Link("AI Data Controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                Button("Open-source notices") { notices = true }
+            }
+            Section {
+                Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.")
+            }
+        }.scrollContentBackground(.hidden).background(MuralColor.cream).navigationTitle("About Mural")
+            .sheet(isPresented: $notices) {
+                NavigationStack {
+                    ScrollView {
+                        Text(Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt")
+                            .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "Notices unavailable.")
+                            .font(.footnote).padding(24).textSelection(.enabled)
+                    }.navigationTitle("Open-source notices").navigationBarTitleDisplayMode(.inline)
+                }
+            }
     }
 }
 

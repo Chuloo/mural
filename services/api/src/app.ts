@@ -193,7 +193,7 @@ export function createApp(services: Services) {
       return reply.code(202).send({ accepted: true });
     }
   });
-  app.get('/v1/auth/providers', async () => ({ google: Boolean(services.accounts && services.auth.googleClientID),
+  app.get('/v1/auth/providers', async () => ({ google: Boolean(services.accounts && (services.auth.googleClientID || services.auth.googleIOSClientIDs?.length)),
     googleAndroid: Boolean(services.accounts && services.auth.googleAndroidServerClientID && services.auth.googleAndroidClientIDs?.length),
     apple: Boolean(services.accounts && services.auth.appleClientID && services.appleRevoker) }));
   app.get('/v1/feedback/capabilities', async () => ({ aiReports: Boolean(services.aiReports?.config) }));
