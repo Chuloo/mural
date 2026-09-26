@@ -112,4 +112,17 @@ class MandarinPinyinTest {
         }
         assertEquals(listOf<String>(), CaptionWords.segments("2026 — ☕️", "en", reader).mapNotNull { it.lookup })
     }
+
+    @Test fun ThaiCaptionsUsePlatformWordBoundariesWhenTheLanguageRequestsThem() {
+        val thaiReader = object : HanReader {
+            override fun words(text: String) = listOf(text)
+            override fun languageWords(text: String, languageID: String) =
+                if (languageID == "th") listOf("ฉัน", "อยาก", "ไป", "ตลาด") else null
+            override fun reading(word: String) = null
+        }
+        val text = "ฉันอยากไปตลาด"
+        val segments = CaptionWords.segments(text, "th", thaiReader)
+        assertEquals(text, segments.joinToString("") { it.text })
+        assertEquals(listOf("ฉัน", "อยาก", "ไป", "ตลาด"), segments.mapNotNull { it.lookup })
+    }
 }

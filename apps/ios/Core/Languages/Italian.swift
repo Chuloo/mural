@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let italian = LanguageModule(
-        id: "it", name: "Italian", nativeName: "Italiano", variety: "Italy", locale: "it-IT",
+        id: "it", name: "Italian", nativeName: "Italiano", variety: "Italy", locale: "it-IT", usesPlatformWordSegmentation: false,
         greeting: "Ciao!", greetingWord: "ciao",
         speechGuidance: "Use clear, natural Standard Italian pronunciation. Use tu for friendly conversation and Lei when the situation calls for formality. Model vowel sounds, word stress and consonant length naturally. Accept valid regional accents and vocabulary without treating regional variation or a non-native accent alone as an error. Do not infer a pronunciation error from spelling alone.",
         writingGuidance: "Use standard Italian spelling, accents, apostrophes and punctuation. Preserve meaningful contrasts such as e and è. Match the register to the situation and accept valid regional usage.",

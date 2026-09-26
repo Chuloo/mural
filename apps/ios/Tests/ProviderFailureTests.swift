@@ -22,4 +22,9 @@ final class ProviderFailureTests: XCTestCase {
         XCTAssertEqual(ProviderFailure(status: 401, body: Data(#"{"error":{"code":"insufficient_quota"}}"#.utf8)).kind, .authentication)
         XCTAssertEqual(ProviderFailure(status: 403).kind, .modelAccess)
     }
+    func testProviderNameIsRenderedInSafeRecoveryAdvice() {
+        let error = ProviderFailure(status: 401, providerName: "Google AI Studio")
+        XCTAssertTrue(error.errorDescription!.contains("Google AI Studio"))
+        XCTAssertFalse(error.errorDescription!.contains("(providerName)"))
+    }
 }

@@ -67,6 +67,7 @@ class LiveTransport(
 
     private val applicationContext = context.applicationContext
     private val audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val gemini = GeminiLiveTransport(applicationContext, scope)
     private val generation = AtomicLong(0)
     private val lock = Any()
     private val retiredAttempts = ArrayDeque<Attempt>()
@@ -75,9 +76,20 @@ class LiveTransport(
     @Volatile private var activeAttempt: Attempt? = null
     @Volatile private var startedState = false
     @Volatile private var mutedState = false
+    @Volatile private var geminiActive = false
+    @Volatile private var geminiAudioAttempt: Attempt? = null
 
     val started: Boolean get() = startedState
     val isMuted: Boolean get() = mutedState
+
+    init {
+        gemini.onEvent = { event ->
+            if (event["type"]?.jsonPrimitive?.contentOrNull == "session.started") startedState = true
+            scope.launch { if (geminiActive) onEvent?.invoke(event) }
+        }
+        gemini.onFailure = { message -> scope.launch { if (geminiActive) onFailure?.invoke(message) } }
+        gemini.onLevels = { input, output -> scope.launch { if (geminiActive) onLevels?.invoke(input, output) } }
+    }
 
     suspend fun connect(
         api: LiveSessionProvider,
@@ -85,6 +97,39 @@ class LiveTransport(
         history: JsonArray = JsonArray(emptyList()),
         language: String? = null,
     ) = withContext(AUDIO_DISPATCHER) {
+        if (api is APIClient && api.provider == AIProvider.GOOGLE_AI_STUDIO) {
+            disconnect()
+            drainRetiredAttempts()
+            if (applicationContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                throw microphoneException()
+            }
+            val key = CredentialStore(applicationContext).read(AIProvider.GOOGLE_AI_STUDIO) ?: throw APIClient.APIException.MissingKey
+            val attemptGeneration = generation.get()
+            val audioAttempt = Attempt(
+                id = attemptGeneration,
+                ownership = LiveSessionOwnership(audioScope),
+                previousAudioMode = audioManager.mode,
+                previousSpeakerphone = if (Build.VERSION.SDK_INT < 31) legacySpeakerphoneState() else false,
+            )
+            synchronized(lock) {
+                if (generation.get() != attemptGeneration) throw CancellationException("Voice connection superseded")
+                geminiAudioAttempt = audioAttempt
+                geminiActive = true
+                startedState = false; mutedState = false
+            }
+            try {
+                configureAudio(audioAttempt)
+                gemini.connect(key, instructions, history)
+                return@withContext
+            } catch (error: Throwable) {
+                geminiActive = false; gemini.disconnect(); cleanupIfCurrent(audioAttempt)
+                throw error
+            }
+        }
+        if (geminiActive || geminiAudioAttempt != null) {
+            gemini.disconnect(); geminiActive = false
+            synchronized(lock) { geminiAudioAttempt?.let { retiredAttempts.addLast(it); geminiAudioAttempt = null } }
+        }
         val attemptGeneration = detachAttempt()
         drainRetiredAttempts()
         emitZeroLevels(attemptGeneration)
@@ -153,6 +198,7 @@ class LiveTransport(
 
     /** True means accepted for delivery; every native operation runs on the audio worker. */
     fun send(event: JsonObject): Boolean {
+        if (geminiActive) return gemini.send(event)
         val attempt = activeAttempt ?: return false
         if (!isCurrent(attempt) || !attempt.channelOpen.get()) return false
         audioScope.launch {
@@ -173,6 +219,7 @@ class LiveTransport(
     }
 
     fun mute(muted: Boolean) {
+        if (geminiActive) { mutedState = muted; gemini.mute(muted); return }
         val attempt = activeAttempt ?: return
         mutedState = muted
         audioScope.launch {
@@ -186,6 +233,7 @@ class LiveTransport(
     }
 
     fun close() {
+        if (geminiActive) { mutedState = true; gemini.close(); return }
         val attempt = activeAttempt ?: return
         attempt.closing.set(true)
         attempt.ownership.close()
@@ -201,6 +249,8 @@ class LiveTransport(
     }
 
     fun disconnect() {
+        if (geminiActive) { gemini.disconnect(); geminiActive = false }
+        synchronized(lock) { geminiAudioAttempt?.let { retiredAttempts.addLast(it); geminiAudioAttempt = null } }
         val detached = detachAttempt()
         // This scope outlives the ViewModel so clearing the screen cannot cancel native cleanup.
         audioScope.launch { drainRetiredAttempts() }
@@ -532,11 +582,12 @@ class LiveTransport(
 
     private fun cleanupIfCurrent(attempt: Attempt): Long? {
         val cleanupGeneration = synchronized(lock) {
-            if (activeAttempt !== attempt) null
+            if (activeAttempt !== attempt && geminiAudioAttempt !== attempt) null
             else {
                 val nextGeneration = generation.incrementAndGet()
                 retiredAttempts.addLast(attempt)
-                activeAttempt = null
+                if (activeAttempt === attempt) activeAttempt = null
+                if (geminiAudioAttempt === attempt) geminiAudioAttempt = null
                 startedState = false
                 mutedState = false
                 nextGeneration
@@ -606,7 +657,7 @@ class LiveTransport(
     }
 
     private fun isCurrent(attempt: Attempt): Boolean =
-        activeAttempt === attempt && generation.get() == attempt.id && !attempt.cleaned.get()
+        (activeAttempt === attempt || geminiAudioAttempt === attempt) && generation.get() == attempt.id && !attempt.cleaned.get()
 
     private fun requireCurrent(attempt: Attempt) {
         if (!isCurrent(attempt)) throw CancellationException("Voice connection superseded")

@@ -15,6 +15,7 @@ KOTLIN_DEST = 'apps/android/app/src/main/java/chat/mural/core/Languages.kt'
 # Fields whose value is a nested structure (array/dict), extracted separately from the
 # simple quoted-string fields.
 STRUCTURED_FIELDS = ('teachingFocus', 'themeOverrides')
+DEFAULTED_FIELDS = {'usesPlatformWordSegmentation'}
 
 
 def quoted(text):
@@ -94,6 +95,7 @@ def generate(core):
              'object Themes { val shared = listOf(', ',\n'.join('    ' + x for x in shared_themes), ') }', '',
              '''data class LanguageModule(
     val id: String, val name: String, val nativeName: String, val variety: String, val locale: String,
+    val usesPlatformWordSegmentation: Boolean = false,
     val greeting: String, val greetingWord: String, val speechGuidance: String, val writingGuidance: String,
     val lemmaGuidance: String, val teachingFocus: List<String>, val topicPlaceholder: String,
     val lookupUnavailableReply: String, val themeOverrides: Map<String, ConversationTheme> = emptyMap()
@@ -115,8 +117,14 @@ def generate(core):
         module_names.append(module_name)
         args = []
         for key in simple_fields:
+            boolean_match = re.search(r'\b' + key + r':\s*(true|false)', text)
+            if boolean_match:
+                args.append(f'        {key} = {boolean_match.group(1)}')
+                continue
             match = re.search(r'\b' + key + r':\s*("(?:[^"\\]|\\.)*")', text)
             if not match:
+                if key in DEFAULTED_FIELDS:
+                    continue
                 raise SystemExit(f'LanguageModule field {key} not found in {path}. Add it or update {KOTLIN_DEST}.')
             args.append(f'        {key} = {quoted(json.loads(match.group(1)))}')
         focus_match = re.search(r'teachingFocus:\s*\[(.*?)\]', text, re.S)

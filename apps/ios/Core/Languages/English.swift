@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let english = LanguageModule(
-        id: "en", name: "English", nativeName: "English", variety: "International", locale: "en",
+        id: "en", name: "English", nativeName: "English", variety: "International", locale: "en", usesPlatformWordSegmentation: false,
         greeting: "Hi!", greetingWord: "hi",
         speechGuidance: "Use clear, broadly intelligible English with a consistent, natural pronunciation. Accept valid regional accents, vocabulary and grammar, including British and American forms. Do not treat an accent difference as an error or require imitation of a native accent. Correct pronunciation only when meaning is unclear and the audio supports the correction.",
         writingGuidance: "Use standard English spelling and punctuation. Keep one spelling convention within your own reply, but accept valid regional spelling and usage from the learner.",

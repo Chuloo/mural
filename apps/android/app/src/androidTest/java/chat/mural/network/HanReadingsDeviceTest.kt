@@ -57,4 +57,11 @@ class HanReadingsDeviceTest {
         for (word in listOf("行", "重", "还", "教")) assertNull(word, reader.reading(word))
         assertEquals(listOf("教", "我", "中文"), CaptionWords.segments("教我中文", "zh", reader).mapNotNull { it.lookup })
     }
+
+    @Test fun thaiCaptionLinksUseIcuWordBoundaries() {
+        val text = "ฉันอยากไปตลาด"
+        val words = reader.languageWords(text, "th") ?: error("Thai ICU segmentation unavailable")
+        assertEquals(text, words.joinToString(""))
+        assertEquals(listOf("ฉัน", "อยาก", "ไป", "ตลาด"), CaptionWords.segments(text, "th", reader).mapNotNull { it.lookup })
+    }
 }

@@ -83,6 +83,20 @@ class APIClientTest {
         assertFalse(body["store"]!!.jsonPrimitive.boolean)
         assertEquals("Hola",result.text); assertEquals(APIUsage(12,7,0),result.usage)
     }
+    @Test fun googleProviderUsesGemmaEndpointGoogleAuthGroundingSourcesAndSearchSuggestions() = runBlocking {
+        val google = APIClient("AIza-fake-test-only-credential", OkHttpClient.Builder().followRedirects(false).build(), server.url("/v1/"), server.url("/v1/"))
+        google.provider = AIProvider.GOOGLE_AI_STUDIO
+        server.enqueue(MockResponse().setBody("""{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"สวัสดี"}]},"groundingMetadata":{"webSearchQueries":["thai news","thai culture"],"searchEntryPoint":{"renderedContent":"<a href=\"https://www.google.com/search?q=thai+news\">Search suggestions</a>"},"groundingChunks":[{"web":{"uri":"https://example.com","title":"Example"}}]}}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":4}}"""))
+        val result = google.respond("policy", "hello", search = true)
+        val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+        assertEquals("/v1/models/gemma-4-31b-it:generateContent", request.path)
+        assertEquals("AIza-fake-test-only-credential", request.getHeader("x-goog-api-key"))
+        assertNull(request.getHeader("Authorization"))
+        assertEquals("สวัสดี", result.text)
+        assertEquals(APIUsage(3, 4, 2), result.usage)
+        assertEquals("https://example.com", result.sources.single().url)
+        assertTrue(result.searchEntryPointHTML.orEmpty().contains("Search suggestions"))
+    }
     @Test fun rejectsRedirectWithoutFollowingOrLeakingCredentials() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(302).setHeader("Location",server.url("/other")))
         try { api.post("responses",buildJsonObject{}); fail("accepted redirect") } catch (e: APIClient.APIException.Http) { assertEquals(302,e.status) }

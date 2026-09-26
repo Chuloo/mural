@@ -97,7 +97,7 @@ class CaptionParityTest {
             field.set(vm, APIClient("fixture-only", client, "https://offline.invalid/v1/".toHttpUrl()))
             state("hasKey", true)
             vm.updatePreferences(vm.archive.preferences.copy(learningLanguageID = "zh", meaningLanguage = "English",
-                meaningVisible = true, hasOnboarded = true, aiConsentVersion = 1))
+                meaningVisible = true, hasOnboarded = true, aiConsentVersion = AI_CONSENT_VERSION))
         }
     }
     @Suppress("UNCHECKED_CAST")

@@ -20,6 +20,21 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
     private var closing = false
     private var ownsAudioActivation = false
     private var lastInput = 0.0, lastOutput = 0.0
+    private var usingGemini = false
+    private lazy var gemini: GeminiLiveTransport = {
+        let transport = GeminiLiveTransport()
+        transport.onEvent = { [weak self] event in
+            guard let self else { return }
+            if event["type"] as? String == "session.started" { self.started = true }
+            self.onEvent?(event)
+        }
+        transport.onLevels = { [weak self] input, output in self?.onLevels?(input, output) }
+        transport.onFailure = { [weak self] message in
+            guard let self, self.usingGemini else { return }
+            self.onFailure?(message)
+        }
+        return transport
+    }()
     private lazy var networkRecovery = makeNetworkRecovery()
     private func makeNetworkRecovery(timeout: Duration = .seconds(8)) -> VoiceConnectionRecovery {
         VoiceConnectionRecovery(timeout: timeout) { [weak self] in
@@ -32,6 +47,18 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
         disconnect()
         closing = false
         let token = UUID(); attempt = token
+        if api.provider == .googleAIStudio {
+            guard let key = CredentialStore.read(.googleAIStudio) else { throw APIClient.APIError.missingKey }
+            usingGemini = true; started = false
+            do {
+                try await gemini.connect(key: key, instructions: instructions, history: history)
+                guard attempt == token else { gemini.disconnect(); usingGemini = false; throw CancellationError() }
+                return
+            } catch {
+                gemini.disconnect(); usingGemini = false
+                throw error
+            }
+        }
         let granted = await AVAudioApplication.requestRecordPermission()
         guard granted else { throw TransportError.microphone }
         try Task.checkCancellation()
@@ -104,19 +131,24 @@ enum ConnectionState: Equatable { case idle, connecting, active, closing, ended,
     }
 
     @discardableResult func send(_ event: [String: Any]) -> Bool {
+        if usingGemini { return gemini.send(event) }
         guard let channel, channel.readyState == .open, let data = try? JSONSerialization.data(withJSONObject: event) else { return false }
         return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
     }
     func mute(_ muted: Bool) {
+        if usingGemini { gemini.mute(muted); isMuted = muted; return }
         isMuted = muted; localTrack?.isEnabled = !muted
         _ = send(["type": muted ? "session.input_audio.mute" : "session.input_audio.unmute", "event_id": UUID().uuidString])
     }
     func close() {
+        if usingGemini { closing = true; isMuted = true; gemini.close(); return }
         networkRecovery.connected()
         closing = true; localTrack?.isEnabled = false; isMuted = true
         _ = send(["type": "session.close", "event_id": UUID().uuidString])
     }
     func disconnect() {
+        gemini.disconnect()
+        usingGemini = false
         networkRecovery.connected()
         attempt = UUID(); meterTask?.cancel(); meterTask = nil
         started = false; closing = true

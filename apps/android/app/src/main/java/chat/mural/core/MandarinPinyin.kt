@@ -9,6 +9,9 @@ interface HanReader {
     /** Splits text into consecutive pieces whose concatenation is the original text. */
     fun words(text: String): List<String>
 
+    /** Platform word boundaries for languages whose writing system normally omits spaces. */
+    fun languageWords(text: String, languageID: String): List<String>? = null
+
     /** A Latin transcription of one word, or null when the platform has none. */
     fun reading(word: String): String?
 
@@ -85,6 +88,12 @@ object CaptionWords {
             if (text.isEmpty()) return emptyList()
             val words = MandarinPinyin.words(text, reader) ?: return listOf(CaptionSegment(text, null))
             return words.map { CaptionSegment(it, it.takeIf(::containsLetter)) }
+        }
+        if (LanguageRegistry.get(languageID)?.usesPlatformWordSegmentation == true) {
+            val words = reader?.languageWords(languageID = languageID, text = text)
+                ?.takeIf { it.joinToString("") == text }
+                ?: return listOf(CaptionSegment(text, null))
+            return words.map(::segment)
         }
         val result = mutableListOf<CaptionSegment>()
         val run = StringBuilder()

@@ -17,7 +17,7 @@ struct ManagedAccountView: View {
                         .font(.subheadline).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                 }
                 if store.configuration == nil {
-                    Text("Accounts aren’t available in this build yet. You can keep practising with your own OpenAI API key in Settings.")
+                    Text("Accounts aren’t available in this build yet. You can keep practising with your own AI provider key in Settings.")
                         .font(.body).multilineTextAlignment(.center)
                         .padding(24).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 24))
                         .accessibilityIdentifier("managedAccountUnavailable")

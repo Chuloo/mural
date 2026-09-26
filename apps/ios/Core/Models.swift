@@ -139,9 +139,12 @@ public struct TopicBrief: Codable, Identifiable, Sendable {
     public var query: String
     public var text: String
     public var sources: [SourceLink]
+    public var searchEntryPointHTML: String?
     public var retrievedAt = Date()
     public var isFresh: Bool { Date().timeIntervalSince(retrievedAt) < 6 * 3600 }
-    public init(languageID: String, query: String, text: String, sources: [SourceLink]) { self.languageID = languageID; self.query = query; self.text = text; self.sources = sources }
+    public init(languageID: String, query: String, text: String, sources: [SourceLink], searchEntryPointHTML: String? = nil) {
+        self.languageID = languageID; self.query = query; self.text = text; self.sources = sources; self.searchEntryPointHTML = searchEntryPointHTML
+    }
 }
 
 public struct SessionRecord: Codable, Identifiable, Sendable {

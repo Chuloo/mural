@@ -31,6 +31,7 @@ object Themes { val shared = listOf(
 
 data class LanguageModule(
     val id: String, val name: String, val nativeName: String, val variety: String, val locale: String,
+    val usesPlatformWordSegmentation: Boolean = false,
     val greeting: String, val greetingWord: String, val speechGuidance: String, val writingGuidance: String,
     val lemmaGuidance: String, val teachingFocus: List<String>, val topicPlaceholder: String,
     val lookupUnavailableReply: String, val themeOverrides: Map<String, ConversationTheme> = emptyMap()
@@ -49,6 +50,7 @@ object LanguageRegistry {
         nativeName = "Norsk",
         variety = "Bokmål",
         locale = "nb-NO",
+        usesPlatformWordSegmentation = false,
         greeting = "Hei!",
         greetingWord = "hei",
         speechGuidance = "Use natural Eastern Norwegian pronunciation. Accept other Norwegian dialects without treating dialect differences as errors.",
@@ -69,6 +71,7 @@ object LanguageRegistry {
         nativeName = "Español",
         variety = "Spain",
         locale = "es-ES",
+        usesPlatformWordSegmentation = false,
         greeting = "¡Hola!",
         greetingWord = "hola",
         speechGuidance = "Use clear Spanish from Spain, with a natural distinction between s and z/soft c, tú for friendly singular address and vosotros for informal plural address. Accept seseo, ustedes, voseo and other valid regional forms without marking them wrong. Do not imitate a regional caricature.",
@@ -89,6 +92,7 @@ object LanguageRegistry {
         nativeName = "English",
         variety = "International",
         locale = "en",
+        usesPlatformWordSegmentation = false,
         greeting = "Hi!",
         greetingWord = "hi",
         speechGuidance = "Use clear, broadly intelligible English with a consistent, natural pronunciation. Accept valid regional accents, vocabulary and grammar, including British and American forms. Do not treat an accent difference as an error or require imitation of a native accent. Correct pronunciation only when meaning is unclear and the audio supports the correction.",
@@ -107,6 +111,7 @@ object LanguageRegistry {
         nativeName = "Français",
         variety = "France",
         locale = "fr-FR",
+        usesPlatformWordSegmentation = false,
         greeting = "Salut !",
         greetingWord = "salut",
         speechGuidance = "Use clear, natural metropolitan French pronunciation. Use tu in a friendly conversation and vous when the situation calls for formality or plural address. Accept valid regional accents, vocabulary and grammar from across the French-speaking world. Do not treat regional variation, informal omission of ne or a non-native accent alone as an error. Do not imitate a regional caricature.",
@@ -127,6 +132,7 @@ object LanguageRegistry {
         nativeName = "Deutsch",
         variety = "Germany",
         locale = "de-DE",
+        usesPlatformWordSegmentation = false,
         greeting = "Hallo!",
         greetingWord = "hallo",
         speechGuidance = "Use clear, natural Standard German as spoken in Germany. Use du for friendly conversation and Sie when the situation calls for formality. Accept valid Austrian, Swiss and other regional pronunciation, vocabulary and grammar. Do not treat a regional difference or a non-native accent alone as an error. Correct pronunciation only when supported by the audio, not a transcript alone.",
@@ -147,6 +153,7 @@ object LanguageRegistry {
         nativeName = "Italiano",
         variety = "Italy",
         locale = "it-IT",
+        usesPlatformWordSegmentation = false,
         greeting = "Ciao!",
         greetingWord = "ciao",
         speechGuidance = "Use clear, natural Standard Italian pronunciation. Use tu for friendly conversation and Lei when the situation calls for formality. Model vowel sounds, word stress and consonant length naturally. Accept valid regional accents and vocabulary without treating regional variation or a non-native accent alone as an error. Do not infer a pronunciation error from spelling alone.",
@@ -167,6 +174,7 @@ object LanguageRegistry {
         nativeName = "Português",
         variety = "Brazil",
         locale = "pt-BR",
+        usesPlatformWordSegmentation = false,
         greeting = "Olá!",
         greetingWord = "olá",
         speechGuidance = "Use clear, natural Brazilian Portuguese with broadly intelligible pronunciation and consistent Brazilian vocabulary. Use você in friendly conversation and formal address when appropriate. Accept valid uses of tu, regional Brazilian accents and grammar, and European, African and other Portuguese varieties without marking them wrong. Do not imitate a regional caricature or infer pronunciation errors from a transcript alone.",
@@ -187,6 +195,7 @@ object LanguageRegistry {
         nativeName = "普通话",
         variety = "Mainland China",
         locale = "zh-CN",
+        usesPlatformWordSegmentation = false,
         greeting = "你好！",
         greetingWord = "你好",
         speechGuidance = "Use clear, natural Standard Mandarin pronunciation. Treat tones, tone changes, retroflex and non-retroflex sounds, and distinctions between initials and finals as meaningful when they affect understanding. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
@@ -201,11 +210,32 @@ object LanguageRegistry {
             "cabin" to ConversationTheme("cabin", "周末出游", "A change of scene", "mountain.2", "Local life", "一起设想一个周末旅行，选择城市、海边或乡村，讨论实际安排和喜欢做的事情。", 2),
             "traditions" to ConversationTheme("traditions", "日常习俗", "Small customs, big stories", "flag", "Local life", "用普通话聊日常习俗和节日。比较学习者熟悉的地方，避免把任何一种习惯说成所有人的共同体验。", 2))
     )
-    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin)
+    private val thai = LanguageModule(
+        id = "th",
+        name = "Thai",
+        nativeName = "ภาษาไทย",
+        variety = "Thailand",
+        locale = "th-TH",
+        usesPlatformWordSegmentation = true,
+        greeting = "สวัสดี!",
+        greetingWord = "สวัสดี",
+        speechGuidance = "Use clear, natural Central Thai pronunciation. Treat tones, vowel length, final consonants and polite particles as meaningful when they affect understanding. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
+        writingGuidance = "Use natural modern Thai with Thai script and appropriate spacing between phrases. Keep polite particles and pronouns natural to the learner’s context. Do not append transliteration or translations to ordinary spoken replies; explain pronunciation briefly only when asked.",
+        lemmaGuidance = "Give vocabulary in natural Thai script and preserve the exact observed form and quote. Prefer useful dictionary forms or everyday chunks, and include polite particles only when they are part of the meaningful expression. Do not infer tone or pronunciation accuracy from typed text alone.",
+        topicPlaceholder = "อาหาร การเดินทาง เพลง ชีวิตประจำวัน…",
+        lookupUnavailableReply = "ตอนนี้ฉันยังตรวจสอบเรื่องนี้ไม่ได้ ถ้าคุณต้องการ เราคุยเกี่ยวกับภาพรวมของหัวข้อนี้ก่อนได้นะ",
+        teachingFocus = listOf("Greetings, introductions, names, polite particles and useful everyday chunks such as ผมชื่อ and ฉันอยากได้.", "Everyday questions, classifiers, numbers, food and short present-time exchanges.", "Connected stories, completed actions, time expressions and familiar situations.", "Reasons and opinions, comparisons, requests and natural linking phrases.", "Nuance, conditionals, register, particles and regional variation.", "Flexible advanced discussion with precise, natural Thai and context-appropriate politeness."),
+        themeOverrides = mapOf("coffee" to ConversationTheme("coffee", "ดื่มกาแฟกันไหม", "Something warm, please", "cup.and.saucer", "Everyday", "Meet in a neighbourhood café in Thailand. Order a drink and chat in Thai, following the learner’s interests.", 0),
+            "groceries" to ConversationTheme("groceries", "ไปตลาดกัน", "Find something good", "basket", "Everyday", "Shop for everyday ingredients at a Thai market or supermarket. Practise quantities, prices and polite questions while respecting regional food vocabulary.", 2),
+            "travel" to ConversationTheme("travel", "สถานีต่อไป", "A ticket to somewhere", "tram", "Everyday", "Plan an imagined trip in Thailand. Discuss transport, directions and tickets without inventing current schedules.", 1),
+            "cabin" to ConversationTheme("cabin", "เที่ยวสุดสัปดาห์", "A change of scene", "mountain.2", "Local life", "Imagine a weekend away in a city, by the sea or in the countryside. Discuss practical plans and things the learner enjoys.", 2),
+            "traditions" to ConversationTheme("traditions", "เรื่องเล็ก ๆ ในชีวิตประจำวัน", "Small customs, big stories", "flag", "Local life", "Talk in Thai about everyday customs and festivals. Compare experiences without treating any habit as universal.", 2))
+    )
+    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin, thai)
     fun get(id: String) = all.firstOrNull { it.id == id }
 }
 
 object MeaningLanguages {
-    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian")
-    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"
+    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Thai", "Polish", "Arabic", "Ukrainian")
+    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Thai" to "สวัสดี!", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"
 }

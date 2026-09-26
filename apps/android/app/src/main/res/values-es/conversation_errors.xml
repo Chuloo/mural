@@ -1,10 +1,10 @@
 <resources>
-    <string name="error_provider_quota">Tu proyecto de OpenAI no tiene crédito de API disponible. Revisa la facturación y el límite de uso antes de volver a intentarlo.</string>
+    <string name="error_provider_quota">Tu proyecto del proveedor de IA no tiene crédito de API disponible. Revisa la facturación y el límite de uso antes de volver a intentarlo.</string>
     <string name="error_provider_unavailable">El servicio de voz o de aprendizaje no está disponible temporalmente. Inténtalo de nuevo en unos momentos.</string>
     <string name="error_provider_request">El servicio no pudo aceptar esta solicitud. Si el problema continúa, contacta con soporte.</string>
     <string name="error_request_timeout">La solicitud tardó demasiado. Revisa tu conexión e inténtalo de nuevo.</string>
     <string name="error_request_connection">Mural no pudo conectarse. Revisa tu conexión a internet e inténtalo de nuevo.</string>
-    <string name="error_provider_reference">Referencia de OpenAI: %1$s</string>
+    <string name="error_provider_reference">Referencia del proveedor: %1$s</string>
     <string name="hosted_help_busy">Todavía se está preparando otra explicación. Espera un momento e inténtalo de nuevo.</string>
     <string name="hosted_help_funding">No hay suficiente saldo disponible para esta explicación. Revisa tu saldo en Cuenta.</string>
     <string name="hosted_balance_checking">Mural todavía está comprobando tu saldo tras una solicitud anterior. Inténtalo de nuevo en unos momentos.</string>
