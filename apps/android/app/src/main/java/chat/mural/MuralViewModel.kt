@@ -32,6 +32,9 @@ internal fun errorMessageRes(e: Throwable): Int = when (e) {
     is APIClient.APIException.Http -> when (e.kind) {
         ProviderFailureKind.authentication -> R.string.error_http_401
         ProviderFailureKind.modelAccess -> R.string.error_http_403_404
+        ProviderFailureKind.creditExhausted -> R.string.error_provider_credit_exhausted
+        ProviderFailureKind.spendLimit -> R.string.error_provider_spend_limit
+        ProviderFailureKind.usageLimit -> R.string.error_provider_usage_limit
         ProviderFailureKind.quota -> R.string.error_provider_quota
         ProviderFailureKind.rateLimit -> R.string.error_http_429
         ProviderFailureKind.unavailable -> R.string.error_provider_unavailable
@@ -173,13 +176,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private var reconciliationJob: Job? = null
     var conversationProvider by mutableStateOf(ConversationProvider.PERSONAL_KEY); private set
+    var providerIssue by mutableStateOf<ProviderFailureKind?>(null); private set
     var hostedReadiness by mutableStateOf(HostedReadiness()); private set
     private val readiness = HostedReadinessController(viewModelScope,
         readSession = { availableHostedOwner() },
         fetch = { owner ->
             val enabled = hostedClient(owner.accountID).available()
             val balance = if (enabled) hostedBalance(owner) else null
-            HostedReadiness(owner.accountID, balance?.readinessMilliseconds ?: 0, enabled)
+            HostedReadiness(owner.accountID, balance?.readinessMilliseconds ?: 0, enabled,
+                verified = balance != null)
         }, changed = { hostedReadiness = it })
     var accountChangeBlocked by mutableStateOf(true); private set
 
@@ -386,6 +391,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         error = message; errorNeedsKeySetup = needsKeySetup; errorNeedsAccountSignIn = false
     }
     private fun presentError(e: Throwable, @StringRes fallback: Int) {
+        if (conversationProvider == ConversationProvider.PERSONAL_KEY && e is APIClient.APIException.Http)
+            providerIssue = e.kind
         presentError(resolveMessage(e, fallback), errorNeedsKeySetup(e))
         errorNeedsAccountSignIn = needsAccountRecovery(e)
     }
@@ -409,6 +416,18 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
         }
         if (provider == ConversationProvider.HOSTED_MINUTES) refreshHostedReadiness()
+    }
+    /** A source preview never creates a hosted lease or changes who pays. */
+    suspend fun checkHostedBalanceForSwitch(): Long? {
+        if (isRunning || accountChangeBlocked || !storageReady) return null
+        return try {
+            if (availableHostedOwner() == null) guests?.acquire()
+            val owner = availableHostedOwner() ?: return null
+            val enabled = hostedClient(owner.accountID).available()
+            val balance = if (enabled) hostedBalance(owner) else return null
+            balance.availableMilliseconds.takeIf { availableHostedOwner() == owner && !isRunning }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
     }
 
     fun onAccountChanged(account: AccountState) {
@@ -626,14 +645,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         lookupJob?.cancel()
         lookupJob = null; lookupResult = null; lookupError = null; lookupLoading = false
     }
-    fun saveKey(key: String) {
+    fun saveKey(key: String, useAfterSave: Boolean = true) {
         if (isRunning) return
-        try { credentials.save(key); hasKey = credentials.hasKey; selectConversationProvider(ConversationProvider.PERSONAL_KEY); recoverFinalAssessments(); notice = getApplication<Application>().getString(R.string.notice_key_saved) }
+        try { credentials.save(key); hasKey = credentials.hasKey; providerIssue = null; if (useAfterSave) selectConversationProvider(ConversationProvider.PERSONAL_KEY); recoverFinalAssessments(); notice = getApplication<Application>().getString(R.string.notice_key_saved) }
         catch (e: Exception) { presentError(e, R.string.error_key_save_failed) }
     }
     fun deleteKey() {
         if (isRunning) return
-        try { credentials.delete(); hasKey = false }
+        try { credentials.delete(); hasKey = false; providerIssue = null }
         catch (e: Exception) { presentError(e, R.string.error_key_delete_failed) }
         finally { hasKey = credentials.hasKey }
     }
@@ -835,6 +854,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun fail(message: String, needsKeySetup: Boolean = false) { finish(false); resetJob?.cancel(); state = "failed"; presentError(message, needsKeySetup) }
     private fun fail(e: Throwable, @StringRes fallback: Int) {
+        if (conversationProvider == ConversationProvider.PERSONAL_KEY && e is APIClient.APIException.Http)
+            providerIssue = e.kind
         fail(resolveMessage(e, fallback), errorNeedsKeySetup(e))
         errorNeedsAccountSignIn = needsAccountRecovery(e)
     }
@@ -866,6 +887,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             "mural.session.created" -> updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content; it.voiceSeconds = 15.0 }
             "session.started" -> if (state == "connecting") {
                 state = "active"; activity = ConversationActivity(activityNow()); conversationPace = ConversationPace(); inactivitySeconds = null
+                if (conversationProvider == ConversationProvider.PERSONAL_KEY) providerIssue = null
                 updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content ?: it.providerID }
                 command("instructions", TeachingPolicy.greeting(language), respond = true); startDurationChecks()
             }
@@ -891,7 +913,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 if (seconds != null && seconds.isFinite() && seconds in 0.0..31536000.0) updateSession { it.voiceSeconds = seconds }
                 if (event["type"]?.jsonPrimitive?.content == "session.closed") finish(true)
             }
-            "error" -> { notice = getApplication<Application>().getString(R.string.notice_voice_update_rejected) }
+            "error" -> {
+                val code = (event["error"] as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull
+                val issue = if (conversationProvider == ConversationProvider.PERSONAL_KEY)
+                    ProviderFailureKind.realtimeCode(code) else null
+                if (issue != null) {
+                    val status = if (issue == ProviderFailureKind.authentication) 401 else 429
+                    fail(APIClient.APIException.Http(status, code), R.string.error_voice_connect_failed)
+                } else notice = getApplication<Application>().getString(R.string.notice_voice_update_rejected)
+            }
         }
     }
     private fun startDurationChecks() {

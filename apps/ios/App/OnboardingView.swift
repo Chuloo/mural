@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @State private var meaningLanguage: String
     @State private var hasChosenMeaning: Bool
     @State private var greetingIndex = 0
+    @State private var adultConfirmed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
@@ -69,6 +70,7 @@ struct OnboardingView: View {
                     .font(.system(.headline, design: .rounded)).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity).padding(.vertical, 19)
                     .background(MuralColor.orange, in: Capsule())
+                    .disabled(step == 1 && !adultConfirmed)
                     .accessibilityIdentifier("onboarding-continue")
                 if !typeSize.isAccessibilitySize {
                     Text(step == 0 ? "We’ll find your pace through conversation." : "You can change both languages in Settings.")
@@ -95,6 +97,8 @@ struct OnboardingView: View {
 
     private var consentDetails: some View {
         VStack(spacing: 12) {
+            Toggle("I’m 18 or older", isOn: $adultConfirmed)
+                .font(.footnote).accessibilityIdentifier("onboarding-adult-confirmation")
             Text(AIProcessingConsent.summary)
                 .font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -109,26 +113,31 @@ struct OnboardingView: View {
             Text("What would you\nlike to speak?")
                 .font(.system(.title2, design: .rounded, weight: .semibold)).tracking(-0.5)
                 .multilineTextAlignment(.center).accessibilityIdentifier("onboarding-language-title")
-            VStack(spacing: 10) {
+            Menu {
                 ForEach(LanguageRegistry.all) { language in
                     Button { targetID = language.id } label: {
-                        HStack(spacing: 14) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(language.nativeName).font(.system(.headline, design: .rounded))
-                                Text(language.settingsTitle).font(.caption).foregroundStyle(MuralColor.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: targetID == language.id ? "checkmark.circle.fill" : "circle")
-                                .font(.title3).foregroundStyle(targetID == language.id ? MuralColor.orange : MuralColor.secondary.opacity(0.4))
-                        }.padding(.horizontal, 18).padding(.vertical, 13).frame(maxWidth: .infinity)
-                            .background(targetID == language.id ? .white.opacity(0.92) : .white.opacity(0.52), in: RoundedRectangle(cornerRadius: 22))
-                            .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(targetID == language.id ? MuralColor.orange.opacity(0.55) : .clear, lineWidth: 1.5) }
-                    }.buttonStyle(.plain)
-                        .accessibilityLabel(language.settingsTitle)
-                        .accessibilityAddTraits(targetID == language.id ? .isSelected : [])
-                        .accessibilityIdentifier("onboarding-language-\(language.id)")
+                        if targetID == language.id {
+                            Label(language.settingsTitle, systemImage: "checkmark")
+                        } else {
+                            Text(language.settingsTitle)
+                        }
+                    }.accessibilityIdentifier("onboarding-language-\(language.id)")
                 }
+            } label: {
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(target.nativeName).font(.system(.title3, design: .rounded, weight: .medium))
+                        Text(target.settingsTitle).font(.caption).foregroundStyle(MuralColor.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.system(.subheadline, weight: .semibold))
+                        .foregroundStyle(MuralColor.secondary)
+                }.padding(.horizontal, 22).padding(.vertical, 18).frame(maxWidth: .infinity)
+                    .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 24))
+                    .overlay { RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.9), lineWidth: 1) }
             }
+            .accessibilityLabel("Learning language, \(target.settingsTitle)")
+            .accessibilityIdentifier("onboarding-language-picker")
         }
     }
 
@@ -185,7 +194,7 @@ struct OnboardingView: View {
 
 enum AIProcessingConsent {
     static let version = 1
-    static let summary = "With your permission, Mural sends audio and selected text to OpenAI to provide conversations and meanings. Provider retention rules apply."
+    static let summary = "With your permission, Mural sends audio and selected text to OpenAI for conversations and meanings. Mural minutes pass through our server; your own key connects directly. Provider retention rules apply."
     enum ConsentError: LocalizedError {
         case required
         var errorDescription: String? { "Before using AI features, open Talk and tap the microphone to review how OpenAI processes your audio and text." }

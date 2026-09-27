@@ -87,13 +87,16 @@ try {
   await pruneAuthenticationRecords(db);
   await pruneAIReports(db);
   const googleAndroidClientIDs = (process.env.GOOGLE_ANDROID_CLIENT_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
+  const googleIOSClientIDs = (process.env.GOOGLE_IOS_CLIENT_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
   const googleAndroidServerClientID = process.env.GOOGLE_ANDROID_SERVER_CLIENT_ID;
   if (Boolean(googleAndroidServerClientID) !== Boolean(googleAndroidClientIDs.length) || googleAndroidClientIDs.length > 10 ||
     [googleAndroidServerClientID, ...googleAndroidClientIDs].filter(Boolean).some(id => !/^[A-Za-z0-9-]+\.apps\.googleusercontent\.com$/.test(id!)))
     throw new Error('Android Google identity configuration is incomplete.');
-  if (accounts && !hasGoogleSignIn({ googleClientID: process.env.GOOGLE_CLIENT_ID, googleAndroidServerClientID, googleAndroidClientIDs }) &&
+  if (googleIOSClientIDs.length > 5 || googleIOSClientIDs.some(id => !/^[A-Za-z0-9-]+\.apps\.googleusercontent\.com$/.test(id)))
+    throw new Error('iOS Google identity configuration is invalid.');
+  if (accounts && !hasGoogleSignIn({ googleClientID: process.env.GOOGLE_CLIENT_ID, googleIOSClientIDs, googleAndroidServerClientID, googleAndroidClientIDs }) &&
     !(appleClient && appleRevoker)) throw new Error('No account identity provider configured.');
-  const app = createApp({ db, auth: { googleClientID: process.env.GOOGLE_CLIENT_ID, appleClientID: appleClient,
+  const app = createApp({ db, auth: { googleClientID: process.env.GOOGLE_CLIENT_ID, googleIOSClientIDs, appleClientID: appleClient,
     googleAndroidServerClientID, googleAndroidClientIDs }, payments, appleRevoker, hosted, hostedHelpers,
     minuteCommerce, accessRequests, accounts, aiReports,guestMinuteAttestor,
     diagnostics });

@@ -1,6 +1,6 @@
 # Use an OpenAI-compatible endpoint
 
-Mural can send conversations to your own OpenAI-compatible server instead of OpenAI. Open **Settings → Advanced → Custom endpoint**, fill in the fields, turn on **Use this endpoint** and save. Turn it off to go back to your OpenAI key; both stay saved.
+Mural can send conversations to your own OpenAI-compatible server instead of OpenAI. It replaces OpenAI for your own key, so set **Conversation access** to your API key first. Then open **Settings → API key → Custom endpoint** on Android or **Settings → Advanced → Custom endpoint** on iOS, fill in the fields, turn on **Use this endpoint** and save. Turn it off to go back to your OpenAI key; both stay saved. Mural minutes always run on Mural's own server.
 
 ## What the server must offer
 
@@ -36,4 +36,4 @@ python scripts/check_custom_endpoint.py --base-url https://example.com/v1 \
 ## Not available with a custom endpoint
 
 - Web search, so **current topics** can't find sourced articles.
-- The voice-cost estimate in Settings, which prices OpenAI voice only and is hidden while the endpoint is on. Your server's own dashboard or logs are authoritative.
+- The OpenAI usage and billing link in Settings, hidden while the endpoint is on. Your server's own dashboard or logs are authoritative for usage.

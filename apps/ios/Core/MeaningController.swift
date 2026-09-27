@@ -32,36 +32,69 @@ public struct MeaningResult: Sendable {
     }
 }
 
-/// Keeps one translation in flight while coalescing growing transcript fragments.
+public protocol MeaningRetryGuidance: Error {
+    var retryMeaningAllowed: Bool { get }
+}
+
+/// Waits for a sentence or quiet transcript and keeps one translation in flight.
 @MainActor @Observable public final class MeaningController {
     public private(set) var text = ""
     public private(set) var isLoading = false
     public private(set) var error: String?
+    public private(set) var canRetry = true
     @ObservationIgnored public var onResult: ((MeaningRequest, MeaningResult) -> Void)?
     @ObservationIgnored private let translate: @MainActor (MeaningRequest, @escaping @MainActor (String) -> Void) async throws -> MeaningResult
     @ObservationIgnored private let delay: Duration
+    @ObservationIgnored private let incompleteDelay: Duration
+    @ObservationIgnored private let minimumSpacing: Duration
     @ObservationIgnored private var desired: MeaningRequest?
     @ObservationIgnored private var rendered: MeaningRequest?
     @ObservationIgnored private var displayed: MeaningRequest?
     @ObservationIgnored private var lastDispatchedAt: ContinuousClock.Instant?
+    @ObservationIgnored private var desiredUpdatedAt: ContinuousClock.Instant?
+    @ObservationIgnored private var finalRequested = false
     @ObservationIgnored private var translationID: UUID?
     @ObservationIgnored private var worker: Task<Void, Never>?
+    @ObservationIgnored private var translating = false
     @ObservationIgnored private var generation = UUID()
 
-    public init(delay: Duration = .milliseconds(450), translate: @escaping @MainActor (MeaningRequest) async throws -> MeaningResult) {
-        self.delay = delay; self.translate = { request, _ in try await translate(request) }
+    public init(delay: Duration = .milliseconds(450), incompleteDelay: Duration = .milliseconds(1800),
+                minimumSpacing: Duration = .milliseconds(2500),
+                translate: @escaping @MainActor (MeaningRequest) async throws -> MeaningResult) {
+        self.delay = delay; self.incompleteDelay = incompleteDelay; self.minimumSpacing = minimumSpacing
+        self.translate = { request, _ in try await translate(request) }
     }
-    public init(delay: Duration = .milliseconds(450), streaming: @escaping @MainActor (MeaningRequest, @escaping @MainActor (String) -> Void) async throws -> MeaningResult) {
-        self.delay = delay; self.translate = streaming
+    public init(delay: Duration = .milliseconds(450), incompleteDelay: Duration = .milliseconds(1800),
+                minimumSpacing: Duration = .milliseconds(2500),
+                streaming: @escaping @MainActor (MeaningRequest, @escaping @MainActor (String) -> Void) async throws -> MeaningResult) {
+        self.delay = delay; self.incompleteDelay = incompleteDelay; self.minimumSpacing = minimumSpacing
+        self.translate = streaming
     }
     deinit { worker?.cancel() }
 
-    public func update(_ request: MeaningRequest, cached: String? = nil) {
+    public func update(_ request: MeaningRequest, cached: String? = nil, conversationEnded: Bool = false) {
         let changedContext = desired.map { !$0.sharesContext(with: request) } ?? true
-        if changedContext { reset() }
+        if changedContext {
+            let sameConversation = desired.map {
+                $0.sessionID == request.sessionID && $0.learningLanguageID == request.learningLanguageID &&
+                $0.meaningLanguage == request.meaningLanguage
+            } ?? false
+            if translating && sameConversation {
+                // Let an admitted request finish before asking for the next passage.
+                rendered = nil; displayed = nil; text = ""; error = nil; canRetry = true; finalRequested = false
+            } else {
+                let priorDispatch = sameConversation ? lastDispatchedAt : nil
+                reset()
+                lastDispatchedAt = priorDispatch
+            }
+        }
+        if desired != request { desiredUpdatedAt = .now; finalRequested = false }
         desired = request
+        if conversationEnded { finalRequested = true }
         if let cached, !cached.isEmpty {
-            cancelWorker(); text = cached; rendered = request; displayed = request; error = nil; return
+            if !translating { cancelWorker() }
+            text = cached; rendered = request; displayed = request; error = nil; canRetry = true
+            isLoading = false; return
         }
         if rendered == request { return }
         // Do not display a translation of text that was subsequently corrected.
@@ -69,32 +102,48 @@ public struct MeaningResult: Sendable {
         if worker == nil && error == nil { begin() }
     }
     public func reset() {
-        cancelWorker(); desired = nil; rendered = nil; displayed = nil; lastDispatchedAt = nil; text = ""; error = nil
+        cancelWorker(); desired = nil; rendered = nil; displayed = nil; lastDispatchedAt = nil; desiredUpdatedAt = nil
+        finalRequested = false; text = ""; error = nil; canRetry = true
     }
     public func retry() {
-        guard desired != nil else { return }
-        cancelWorker(); error = nil; begin()
+        guard desired != nil, !translating else { return }
+        guard canRetry else { return }
+        cancelWorker(); error = nil; finalRequested = true; begin()
     }
+    #if DEBUG
+    public func preparePreviewFailure(_ message: String, canRetry: Bool) {
+        cancelWorker(); text = ""; error = message; self.canRetry = canRetry
+    }
+    #endif
     private func cancelWorker() {
-        generation = UUID(); translationID = nil; worker?.cancel(); worker = nil; isLoading = false
+        generation = UUID(); translationID = nil; worker?.cancel(); worker = nil; isLoading = false; translating = false
     }
     private func begin() {
-        guard desired != nil, worker == nil else { return }
+        guard desired != nil, rendered != desired, worker == nil else { return }
         isLoading = true
         let token = generation
         worker = Task { [weak self] in
             guard let self else { return }
+            var dispatched: MeaningRequest?
             do {
-                let elapsed = self.lastDispatchedAt.map { $0.duration(to: .now) } ?? .zero
-                try await Task.sleep(for: max(.zero, self.delay - elapsed))
+                while true {
+                    guard token == self.generation, !Task.isCancelled, let pending = self.desired else { return }
+                    let now = ContinuousClock.now
+                    let quietUntil = (self.desiredUpdatedAt ?? now) + (self.finalRequested ? .zero : Self.endsSentence(pending.text) ? self.delay : self.incompleteDelay)
+                    let pacedUntil = self.lastDispatchedAt.map { $0 + self.minimumSpacing } ?? now
+                    let wait = max(max(.zero, now.duration(to: quietUntil)), max(.zero, now.duration(to: pacedUntil)))
+                    if wait == .zero { break }
+                    try await Task.sleep(for: wait)
+                }
                 guard token == self.generation, !Task.isCancelled, let request = self.desired else { return }
                 self.lastDispatchedAt = .now
                 let translationID = UUID(); self.translationID = translationID
+                self.translating = true; dispatched = request
                 // Retain the readable prefix until the next stream has caught up.
                 let minimumPartialLength = self.text.count
                 let result = try await self.translate(request) { [weak self] partial in
                     guard let self, token == self.generation, self.translationID == translationID, !Task.isCancelled,
-                          let latest = self.desired, latest.sharesContext(with: request),
+                          let latest = self.desired, self.rendered != latest, latest.sharesContext(with: request),
                           latest.text.hasPrefix(request.text), !partial.isEmpty, partial.count >= minimumPartialLength else { return }
                     self.text = partial; self.displayed = request
                 }
@@ -102,18 +151,29 @@ public struct MeaningResult: Sendable {
                 self.translationID = nil
                 guard !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MeaningError.empty }
                 self.onResult?(request, result)
-                if latest.sharesContext(with: request), latest.text.hasPrefix(request.text) {
+                if self.rendered != latest, latest.sharesContext(with: request), latest.text.hasPrefix(request.text) {
                     self.text = result.text; self.rendered = request; self.displayed = request
                 }
-                self.worker = nil; self.isLoading = false
+                self.worker = nil; self.isLoading = false; self.translating = false
+                self.canRetry = true
                 if latest != request { self.begin() }
             } catch {
                 guard token == self.generation, !Task.isCancelled else { return }
-                self.translationID = nil; self.worker = nil; self.isLoading = false
+                self.translationID = nil; self.worker = nil; self.isLoading = false; self.translating = false
+                if self.rendered == self.desired { self.error = nil; return }
+                if let dispatched, let latest = self.desired, !latest.sharesContext(with: dispatched) {
+                    self.begin(); return
+                }
                 if self.rendered != self.desired { self.text = ""; self.displayed = nil }
                 self.error = error.localizedDescription
+                self.canRetry = (error as? MeaningRetryGuidance)?.retryMeaningAllowed ?? true
             }
         }
+    }
+    private static func endsSentence(_ text: String) -> Bool {
+        let ending = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'”’»)"))
+        return ending.last.map { ".!?。！？…".contains($0) } ?? false
     }
     private enum MeaningError: LocalizedError {
         case empty

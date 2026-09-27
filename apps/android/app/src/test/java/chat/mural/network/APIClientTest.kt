@@ -79,7 +79,7 @@ class APIClientTest {
         val request = server.takeRequest(2,TimeUnit.SECONDS)!!
         assertEquals("/v1/responses",request.path)
         val body=Json.parseToJsonElement(request.body.readUtf8()).jsonObject
-        assertEquals("gpt-5.6-luna",body["model"]!!.jsonPrimitive.content)
+        assertEquals("gpt-6-luna",body["model"]!!.jsonPrimitive.content)
         assertFalse(body["store"]!!.jsonPrimitive.boolean)
         assertEquals("Hola",result.text); assertEquals(APIUsage(12,7,0),result.usage)
     }

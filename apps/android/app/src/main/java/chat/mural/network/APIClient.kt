@@ -274,7 +274,7 @@ class APIClient internal constructor(
     }
 
     companion object {
-        const val TEACHER_MODEL = "gpt-5.6-luna"
+        const val TEACHER_MODEL = "gpt-6-luna"
         private val API_BASE_URL = HttpUrl.Builder()
             .scheme("https")
             .host("api.openai.com")

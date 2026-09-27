@@ -36,6 +36,9 @@
     <string name="error_http_401">Tu clave de OpenAI no fue aceptada. Revísala en Ajustes.</string>
     <string name="error_http_403_404">Esta clave de API puede no tener acceso al modelo solicitado. Revisa tu proyecto de OpenAI.</string>
     <string name="error_http_429">OpenAI está limitando las solicitudes. Espera un momento e inténtalo de nuevo. Si el problema continúa, revisa la facturación y los límites de tu proyecto.</string>
+    <string name="error_provider_credit_exhausted">Se agotaron los créditos de OpenAI. Revisa la facturación de OpenAI o usa los minutos de Mural.</string>
+    <string name="error_provider_spend_limit">Se alcanzó el límite de gasto de OpenAI. Revisa el límite del proyecto o de la organización, o usa los minutos de Mural.</string>
+    <string name="error_provider_usage_limit">Se alcanzó el límite de uso de OpenAI. Revisa el límite de tu organización o usa los minutos de Mural.</string>
     <string name="error_http_generic">OpenAI no pudo completar la solicitud (HTTP %1$d). Inténtalo de nuevo.</string>
     <string name="error_backup_too_large">La copia supera el límite de 30 MB.</string>
     <string name="error_file_open_failed">No se pudo abrir el archivo elegido.</string>
@@ -77,7 +80,6 @@
     <string name="talk_transcript_label">Texto</string>
     <string name="talk_type_button">Escribir</string>
     <string name="talk_help_button">Una pista</string>
-    <string name="talk_lookup_button">Buscar palabra</string>
     <string name="talk_open_phone_settings">Abrir ajustes del teléfono</string>
     <string name="talk_new_conversation_button">Nueva conversación</string>
     <string name="talk_typed_reply_title">Dilo a tu manera.</string>
@@ -87,8 +89,6 @@
     <string name="talk_lookup_dialog_title">Un pequeño significado</string>
     <string name="talk_pinyin_show">Mostrar pinyin</string>
     <string name="talk_pinyin_hide">Ocultar pinyin</string>
-    <string name="talk_lookup_field_label">Palabra o expresión</string>
-    <string name="talk_lookup_button_action">Buscar</string>
     <string name="talk_status_connecting">Preparando la conversación…</string>
     <string name="talk_status_muted">Micrófono en pausa</string>
     <string name="talk_status_listening">Te escucho</string>
@@ -96,8 +96,6 @@
     <string name="talk_status_ended">Conversación terminada</string>
     <string name="talk_status_failed">La conversación se interrumpió</string>
     <string name="talk_status_idle">Cuando quieras</string>
-    <string name="talk_orb_listening_desc">Mural está escuchando</string>
-    <string name="talk_orb_idle_desc">Orbe de Mural</string>
 
     <!-- Topics screen -->
     <string name="topics_tab_title">Temas</string>
@@ -156,48 +154,33 @@
 
     <!-- Settings screen -->
     <string name="settings_tab_title">Ajustes</string>
-    <string name="settings_eyebrow">Tu espacio</string>
-    <string name="settings_title">Ajustes</string>
-    <string name="settings_subtitle">Haz que Mural se sienta cómodo para ti.</string>
     <string name="settings_section_conversation">Conversación</string>
     <string name="settings_learning_language">Idioma que practicas</string>
-    <string name="settings_conversation_limit">Duración orientativa</string>
-    <string name="settings_minutes_value">%1$d min</string>
+    <string name="settings_conversation_limit">Límite de sesión</string>
     <string name="settings_meaning_language">Idioma de los significados</string>
-    <string name="settings_interests_label">Tus intereses</string>
-    <string name="settings_interests_support">Ayudan a proponer conversaciones que te importan.</string>
-    <string name="settings_section_openai_account">Cuenta de OpenAI</string>
-    <string name="settings_key_saved_notice">Hay una clave guardada de forma segura en este dispositivo.</string>
-    <string name="settings_key_missing_notice">Añade una clave para conversar, buscar significados y consultar temas actuales.</string>
+    <string name="settings_interests_label">Intereses</string>
     <string name="settings_save_key">Guardar clave</string>
     <string name="settings_replace_key">Reemplazar clave</string>
     <string name="settings_remove_key">Eliminar clave</string>
-    <string name="settings_section_usage">Uso</string>
     <string name="settings_voice_time_label">Tiempo de voz registrado</string>
-    <string name="settings_voice_estimate_label">Estimación de voz</string>
     <string name="settings_search_calls_label">Búsquedas registradas</string>
-    <string name="settings_usage_billing_link">Uso y facturación de OpenAI</string>
-    <string name="settings_usage_footer">La estimación de voz usa 0,05 USD/min a fecha de 11 de septiembre de 2026. La traducción, la enseñanza y las búsquedas se cobran aparte. Una solicitud interrumpida puede cobrarse sin quedar registrada aquí. Tu panel de OpenAI es la referencia. La duración orientativa es local, no un tope de gasto.</string>
+    <string name="settings_usage_billing_link">Uso y facturación</string>
     <string name="settings_section_ai_permission">Permiso para IA</string>
     <string name="settings_ai_consent_accepted">Aceptado para esta versión</string>
     <string name="settings_ai_consent_not_accepted">No aceptado</string>
     <string name="settings_ai_permission_summary">Con permiso, Mural envía audio y el texto elegido a OpenAI. Puedes usar el historial y las palabras sin concederlo.</string>
     <string name="settings_revoke_consent_button">Retirar permiso</string>
     <string name="settings_review_consent_button">Revisar y aceptar</string>
-    <string name="settings_section_your_data">Tus datos</string>
     <string name="settings_export_backup">Exportar copia de aprendizaje</string>
     <string name="settings_import_backup">Importar copia de aprendizaje</string>
     <string name="settings_backup_footer">La copia incluye conversaciones y progreso, pero nunca tu clave. La importación acepta hasta 30 MB y conserva los registros existentes.</string>
     <string name="settings_delete_all_data">Eliminar conversaciones y aprendizaje</string>
     <string name="settings_section_help_privacy">Ayuda y privacidad</string>
-    <string name="settings_openai_data_controls">Controles de datos de OpenAI</string>
+    <string name="settings_openai_data_controls">Controles de datos de IA</string>
     <string name="settings_open_source_notices">Avisos de código abierto</string>
     <string name="settings_data_use_footer">El audio y el texto elegido se envían a OpenAI durante la práctica. Mural no guarda audio sin procesar.</string>
     <string name="settings_app_version_footer">Mural %1$s · Android</string>
-    <string name="settings_corrections_label">Correcciones</string>
-    <string name="settings_corrections_value">Con suavidad, mientras hablamos</string>
-    <string name="settings_open_api_keys">Abrir las claves de API de OpenAI</string>
-    <string name="settings_models_footer">Voz: GPT-Live-1 · Profesor: GPT-5.6 Luna</string>
+    <string name="settings_open_api_keys">Administrar claves de API</string>
     <string name="settings_delete_key_confirm_title">¿Eliminar la clave guardada?</string>
     <string name="settings_delete_key_confirm_message">Necesitarás otra clave para volver a usar las funciones de IA.</string>
     <string name="settings_delete_all_confirm_title">¿Eliminar todo el aprendizaje?</string>
@@ -205,7 +188,7 @@
     <string name="settings_delete_all_confirm_button">Eliminar todo</string>
     <string name="settings_revoke_consent_confirm_title">¿Retirar el permiso para IA?</string>
     <string name="settings_revoke_consent_confirm_message">Las conversaciones, búsquedas y significados en línea quedarán desactivados. Tu historial local seguirá disponible.</string>
-    <string name="settings_key_dialog_title">Clave de OpenAI</string>
+    <string name="settings_key_dialog_title">Clave de API</string>
     <string name="settings_key_dialog_note">Se guarda cifrada por Android y no forma parte de las copias.</string>
     <string name="settings_key_dialog_field_label">Nueva clave</string>
     <string name="settings_backup_exported_toast">Copia exportada</string>

@@ -11,6 +11,25 @@ final class CrossPlatformFixtureTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
+    func testAccountAccessMatchesSharedBalanceAndFailureCases() throws {
+        let data = try Data(contentsOf: directory.appendingPathComponent("account-access-cases.json"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let balances = try XCTUnwrap(root["balances"] as? [[String: Any]])
+        let failures = try XCTUnwrap(root["providerFailures"] as? [[String: Any]])
+        XCTAssertFalse(balances.isEmpty); XCTAssertFalse(failures.isEmpty)
+        for item in balances {
+            let milliseconds = try XCTUnwrap(item["milliseconds"] as? Int)
+            XCTAssertEqual(MinuteBalanceTime.roundedSeconds(milliseconds), item["seconds"] as? Int)
+            XCTAssertEqual(MinuteBalanceTime.isEligible(milliseconds), item["eligible"] as? Bool)
+        }
+        for item in failures {
+            let status = try XCTUnwrap(item["status"] as? Int)
+            let code = try XCTUnwrap(item["code"] as? String)
+            XCTAssertEqual(ProviderFailureKind.classify(status: status, code: code).rawValue,
+                           item["kind"] as? String, code)
+        }
+    }
+
     func testRedirectDecisionsMatchTheSharedCases() throws {
         let data = try Data(contentsOf: directory.appendingPathComponent("redirect-cases.json"))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

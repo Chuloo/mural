@@ -76,10 +76,12 @@ import chat.mural.MuralViewModel
 import chat.mural.R
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
+import chat.mural.core.ConversationProvider
 
 @Composable
 fun TalkScreen(
     vm: MuralViewModel,
+    onOpenAdvanced: () -> Unit = {},
     microphoneMessage: String?,
     onMicrophone: () -> Unit,
     onOpenAppSettings: (() -> Unit)?,
@@ -114,8 +116,8 @@ fun TalkScreen(
     )
     val orbSize = when {
         scrollPage -> 170.dp
-        compact -> minOf(150.dp, maxHeight * .24f) - 26.dp * readingSpace
-        else -> 220.dp - 64.dp * readingSpace
+        compact -> maxOf(120.dp, minOf(150.dp, maxHeight * .24f) - 26.dp * readingSpace)
+        else -> maxOf(150.dp, minOf(220.dp, maxHeight * .27f) - 64.dp * readingSpace)
     }
     Column(
         Modifier
@@ -136,7 +138,7 @@ fun TalkScreen(
             energy = maxOf(vm.outputLevel.toFloat(), vm.inputLevel.toFloat() * .45f),
             listening = vm.state == "active" && vm.isVoiceSession && !vm.isMuted,
             active = vm.state != "closing",
-            modifier = Modifier.size(orbSize),
+            modifier = Modifier.size(orbSize).testTag("talk-orb"),
         )
         Box(Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 12.dp).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
             val status = statusText(vm.state, vm.isMuted, vm.isVoiceSession, vm.inactivitySeconds)
@@ -168,7 +170,7 @@ fun TalkScreen(
             verticalArrangement = Arrangement.Center,
         ) {
         Column(
-            modifier = (if (scrollPage) Modifier else Modifier.weight(1f, fill = false).passageScroll(targetScroll))
+            modifier = (if (scrollPage || passage == null) Modifier else Modifier.weight(1f, fill = false).passageScroll(targetScroll))
                 .fillMaxWidth().testTag("target-passage-scroll"),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -187,7 +189,7 @@ fun TalkScreen(
         if (vm.archive.preferences.meaningVisible) {
             Spacer(Modifier.height(10.dp))
             Column(
-                modifier = (if (scrollPage) Modifier else Modifier.weight(.72f, fill = false).passageScroll(meaningScroll))
+                modifier = (if (scrollPage || passage == null) Modifier else Modifier.weight(.72f, fill = false).passageScroll(meaningScroll))
                     .fillMaxWidth().testTag("meaning-passage-scroll"),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -254,8 +256,11 @@ fun TalkScreen(
                 stringResource(if (vm.isRunning) R.string.talk_end_label else R.string.talk_transcript_label),
                 enabled = vm.session != null, onClick = { if (vm.isRunning) vm.end() else transcript = vm.session })
         }
-        Text(stringResource(if (vm.state == "active" && vm.isVoiceSession && !vm.isMuted) R.string.talk_microphone_on else R.string.talk_microphone_off),
-            style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary, modifier = Modifier.padding(top = 6.dp))
+        if (vm.conversationProvider == ConversationProvider.PERSONAL_KEY && vm.providerIssue != null && !vm.isRunning) {
+            MuralTextButton(onClick = onOpenAdvanced, modifier = Modifier.testTag("talk-open-advanced")) {
+                Text(stringResource(R.string.talk_review_openai_issue))
+            }
+        }
         if (vm.state == "active" || microphoneMessage != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 MuralTextButton(onClick = { typing = true }, enabled = !busy && !vm.working) {
@@ -267,9 +272,6 @@ fun TalkScreen(
                     Text(stringResource(R.string.talk_help_button), style = MaterialTheme.typography.bodySmall, color = MuralColors.Ink)
                 }
             }
-        } else if (vm.session == null) {
-            Text(stringResource(R.string.talk_reply_any_language), style = MaterialTheme.typography.bodySmall,
-                color = MuralColors.Secondary, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 7.dp, bottom = 8.dp))
         }
 
         microphoneMessage?.let {

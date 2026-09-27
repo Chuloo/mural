@@ -41,6 +41,8 @@ struct CustomEndpoint: Codable, Equatable {
 }
 
 @MainActor final class APIClient {
+    var conversationProvider: ConversationProvider = .personalKey
+    var hostedLease: HostedLease?
     private let session: URLSession
     private struct Target { var base: URL; var key: String?; var endpoint: CustomEndpoint? }
     init() {
@@ -50,8 +52,8 @@ struct CustomEndpoint: Codable, Equatable {
         session = URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
     }
     private func resolveTarget() throws -> Target {
-        // A custom server may need no key; OpenAI always does.
-        if let endpoint = CustomEndpoint.active, let base = endpoint.url {
+        // A custom server may need no key; OpenAI always does. Hosted minutes never use the learner's endpoint.
+        if conversationProvider == .personalKey, let endpoint = CustomEndpoint.active, let base = endpoint.url {
             return Target(base: base, key: CredentialStore.read(service: CredentialStore.customEndpoint), endpoint: endpoint)
         }
         guard let key = CredentialStore.read() else { throw APIError.missingKey }
@@ -121,7 +123,15 @@ struct CustomEndpoint: Codable, Equatable {
         let body: [String: Any] = ["model": endpoint.speechModel, "voice": endpoint.voice, "input": text, "response_format": "wav"]
         return try await send(target, "audio/speech", body: try JSONSerialization.data(withJSONObject: body), contentType: "application/json", limit: Self.audioLimit)
     }
-    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false, onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
+    func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false,
+                 purpose: String = "meaning", onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
+        if conversationProvider == .hosted {
+            guard let hostedLease, let client = HostedClient.shared else { throw HostedError.unavailable }
+            let result = try await client.helper(hostedLease, purpose: purpose, instructions: instructions, input: input,
+                                                 schema: schema, search: search)
+            onText?(result.text)
+            return result
+        }
         let target = try resolveTarget()
         if let endpoint = target.endpoint, endpoint.style == .chatCompletions {
             // No standard web search exists in Chat Completions, so `search` is ignored and topics stay unsourced.
@@ -133,7 +143,7 @@ struct CustomEndpoint: Codable, Equatable {
             onText?(result.text) // A custom endpoint answers in one piece.
             return result
         }
-        var body: [String: Any] = ["model": target.endpoint?.model ?? "gpt-5.6-luna", "store": false, "instructions": instructions,
+        var body: [String: Any] = ["model": target.endpoint?.model ?? "gpt-6-luna", "store": false, "instructions": instructions,
                                   "input": [["role": "user", "content": input]], "max_output_tokens": schema == nil ? 1400 : 2200,
                                   "reasoning": ["effort": "low"]]
         if let schema { body["text"] = ["format": ["type": "json_schema", "name": "mural_result", "strict": true, "schema": schema]] }

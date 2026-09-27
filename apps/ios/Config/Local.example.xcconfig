@@ -1,2 +1,2 @@
-// Copy to Local.xcconfig and replace this with your Apple development team ID.
-DEVELOPMENT_TEAM = YOUR_TEAM_ID
+// The Hackmamba release team is configured in the project generator.
+// Put local development overrides here only when needed.
