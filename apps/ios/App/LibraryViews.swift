@@ -713,7 +713,9 @@ private struct AboutMuralView: View {
         Form {
             Section {
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                Link("AI Data Controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                if !usesEndpoint {
+                    Link("AI Data Controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                }
                 Button("Open-source notices") { notices = true }
             }
             Section {
