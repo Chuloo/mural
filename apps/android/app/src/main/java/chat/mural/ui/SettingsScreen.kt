@@ -207,7 +207,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     chat.mural.core.ConversationProvider.PERSONAL_KEY.name to stringResource(R.string.settings_my_openai_key)),
                                 "settings-conversation-access", !vm.isRunning, ::chooseSource)
                             if (vm.conversationProvider == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
-                                Text(stringResource(if (vm.endpoint.enabled) R.string.settings_personal_key_note_endpoint
+                                Text(stringResource(if (vm.usesCustomEndpoint) R.string.settings_personal_key_note_endpoint
                                     else R.string.settings_personal_key_note), style = MaterialTheme.typography.bodySmall,
                                     color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                             }
@@ -218,6 +218,11 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     symbol = SettingsSymbol.KEY, chevron = true, modifier = Modifier.testTag("advanced-api-key"),
                                     onClick = { page = "key" })
                             }
+                            SettingsDivider()
+                            SettingsRow(stringResource(R.string.settings_endpoint_title),
+                                vm.endpoint.url?.host?.takeIf { vm.endpoint.enabled } ?: stringResource(R.string.settings_endpoint_off),
+                                enabled = !vm.isRunning, chevron = true, modifier = Modifier.testTag("custom-endpoint"),
+                                onClick = { endpointDialog = true })
                             vm.providerIssue?.let { issue ->
                                 SettingsDivider()
                                 SettingsRow(stringResource(R.string.settings_provider_issue), issueLabel(issue, context),
@@ -271,7 +276,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 }
                 "key" -> item {
                     // A custom endpoint replaces OpenAI for this conversation source.
-                    SettingsGroup(footer = stringResource(if (vm.endpoint.enabled) R.string.settings_usage_footer_endpoint
+                    SettingsGroup(footer = stringResource(if (vm.usesCustomEndpoint) R.string.settings_usage_footer_endpoint
                         else R.string.settings_key_owner_footer)) {
                         SettingsRow(stringResource(R.string.settings_openai_key),
                             stringResource(if (vm.hasKey) R.string.settings_key_saved_short else R.string.settings_key_required))
@@ -283,11 +288,6 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                             })
                         SettingsDivider()
                         SettingsRow(stringResource(R.string.settings_open_api_keys), onClick = { open("https://platform.openai.com/api-keys") })
-                        SettingsDivider()
-                        SettingsRow(stringResource(R.string.settings_endpoint_title),
-                            vm.endpoint.url?.host?.takeIf { vm.endpoint.enabled } ?: stringResource(R.string.settings_endpoint_off),
-                            enabled = !vm.isRunning, chevron = true, modifier = Modifier.testTag("custom-endpoint"),
-                            onClick = { endpointDialog = true })
                         if (vm.hasKey) {
                             SettingsDivider()
                             SettingsRow(stringResource(R.string.settings_remove_key), enabled = !vm.isRunning,
@@ -302,7 +302,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     pendingSource = chat.mural.core.ConversationProvider.HOSTED_MINUTES; sourceDialog = true
                                 })
                         }
-                        if (!vm.endpoint.enabled) {
+                        if (!vm.usesCustomEndpoint) {
                             SettingsDivider()
                             SettingsRow(stringResource(R.string.settings_usage_billing_link),
                                 onClick = { open("https://platform.openai.com/usage") })
@@ -314,7 +314,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                             SettingsDivider()
                             SettingsRow(stringResource(R.string.settings_search_calls_label), usage.searchCalls.toString())
                             // The group footer names the endpoint as the reference, so skip the OpenAI wording.
-                            if (!vm.endpoint.enabled)
+                            if (!vm.usesCustomEndpoint)
                                 Text(stringResource(R.string.settings_recorded_here), style = MaterialTheme.typography.bodySmall,
                                     color = MuralColors.Secondary, modifier = Modifier.padding(16.dp))
                         }
@@ -329,9 +329,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         SettingsRow(stringResource(R.string.settings_section_ai_permission), chevron = true,
                             modifier = Modifier.testTag("settings-ai-permission"), onClick = { permissionDetails = true })
                         SettingsDivider()
-                        if (!vm.endpoint.enabled) SettingsRow(stringResource(R.string.settings_openai_data_controls),
+                        if (!vm.usesCustomEndpoint) SettingsRow(stringResource(R.string.settings_openai_data_controls),
                             onClick = { open("https://developers.openai.com/api/docs/guides/your-data") })
-                        Text(stringResource(if (vm.endpoint.enabled) R.string.settings_data_use_footer_endpoint
+                        Text(stringResource(if (vm.usesCustomEndpoint) R.string.settings_data_use_footer_endpoint
                             else R.string.settings_data_use_footer), style = MaterialTheme.typography.bodySmall,
                             color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                         SettingsDivider()
@@ -548,7 +548,7 @@ private fun EndpointDialog(vm: MuralViewModel, onDismiss: () -> Unit) {
                 field(draft.speechModel, R.string.settings_endpoint_speech_model, "endpoint-speech-model") { draft = draft.copy(speechModel = it) }
                 field(draft.voice, R.string.settings_endpoint_voice, "endpoint-voice") { draft = draft.copy(voice = it) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (vm.endpoint != CustomEndpoint()) MuralTextButton(onClick = { key = ""; vm.deleteEndpoint(); onDismiss() }, Modifier.testTag("endpoint-remove")) {
+                    if (vm.endpoint != CustomEndpoint()) MuralTextButton(onClick = { if (vm.deleteEndpoint()) { key = ""; onDismiss() } }, Modifier.testTag("endpoint-remove")) {
                         Text(stringResource(R.string.settings_endpoint_remove), color = MuralColors.Red)
                     }
                     Spacer(Modifier.weight(1f))

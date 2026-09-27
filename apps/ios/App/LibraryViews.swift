@@ -61,7 +61,7 @@ struct CurrentTopicView: View {
     @State private var loading = false
     @State private var error: String?
     /// Topic search relies on OpenAI's web search, which a custom endpoint doesn't have, so every search would fail.
-    private let searchAvailable = CustomEndpoint.active == nil
+    private var searchAvailable: Bool { !coordinator.usesCustomEndpoint }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -300,6 +300,8 @@ struct SettingsView: View {
     @State private var showingAccount = false
     @State private var endpoint = CustomEndpoint.load()
     private var store: LearningStore { coordinator.store }
+    /// Hosted conversations never use the endpoint, however it is configured.
+    private var usesEndpoint: Bool { coordinator.conversationProvider == .personalKey && endpoint.enabled }
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -353,7 +355,7 @@ struct SettingsView: View {
                     }.pickerStyle(.menu).disabled(coordinator.isRunning)
                         .accessibilityIdentifier("settings-conversation-access")
                     if coordinator.conversationProvider == .personalKey {
-                        Text(endpoint.enabled ? "No Mural minute limit. Your custom endpoint bills or limits usage."
+                        Text(usesEndpoint ? "No Mural minute limit. Your custom endpoint bills or limits usage."
                              : "No Mural minute limit. OpenAI bills your account for usage.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     }
@@ -365,13 +367,11 @@ struct SettingsView: View {
                             LabeledContent("API key", value: hasKey ? "Saved on this iPhone" : "Key required")
                         }.accessibilityIdentifier("advanced-api-key")
                     }
-                    if coordinator.conversationProvider == .personalKey {
-                        NavigationLink {
-                            CustomEndpointView(coordinator: coordinator, saved: $endpoint)
-                        } label: {
-                            LabeledContent("Custom endpoint", value: endpoint.enabled ? endpoint.model : "Off")
-                        }.disabled(coordinator.isRunning).accessibilityIdentifier("custom-endpoint")
-                    }
+                    NavigationLink {
+                        CustomEndpointView(coordinator: coordinator, saved: $endpoint)
+                    } label: {
+                        LabeledContent("Custom endpoint", value: endpoint.enabled ? endpoint.model : "Off")
+                    }.disabled(coordinator.isRunning).accessibilityIdentifier("custom-endpoint")
                     if let failure = coordinator.personalKeyFailure {
                         Button(failure.kind.settingsTitle) { showingKey = true }
                             .foregroundStyle(MuralColor.secondary)
@@ -380,7 +380,7 @@ struct SettingsView: View {
                     if coordinator.conversationProvider == .personalKey {
                         LabeledContent("Recorded voice time", value: "\(Int(store.sessions.reduce(0) { $0 + $1.voiceSeconds }) / 60) min")
                         LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
-                        Text(endpoint.enabled
+                        Text(usesEndpoint
                              ? "Activity recorded on this iPhone; your custom endpoint bills or limits usage, so its own dashboard or logs are authoritative."
                              : "Activity recorded on this iPhone; your OpenAI dashboard is authoritative for usage and charges.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
@@ -393,7 +393,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settings-privacy-policy")
                     Link("Terms of use", destination: URL(string: "https://mural.chat/terms/")!)
                         .accessibilityIdentifier("settings-terms")
-                    NavigationLink("About Mural") { AboutMuralView() }
+                    NavigationLink("About Mural") { AboutMuralView(usesEndpoint: usesEndpoint) }
                 }
             }
             .scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.ink)
@@ -609,7 +609,10 @@ private struct CustomEndpointView: View {
             // A blank key keeps the saved one; the Keychain value never returns to the view.
             if !entered.isEmpty { try CredentialStore.save(entered, service: CredentialStore.customEndpoint) }
             try clean.save(); endpoint = clean; saved = clean; key = ""
-            message = "Endpoint saved."
+            if clean.enabled {
+                coordinator.selectConversationProvider(.personalKey)
+                message = "Endpoint saved. Conversations now use it instead of OpenAI."
+            } else { message = "Endpoint saved." }
         } catch CredentialStore.KeyError.invalid {
             message = "Enter the API key without spaces or line breaks."
         } catch { message = error.localizedDescription }
@@ -704,6 +707,7 @@ private struct LearningBackupView: View {
 }
 
 private struct AboutMuralView: View {
+    let usesEndpoint: Bool
     @State private var notices = false
     var body: some View {
         Form {
@@ -713,7 +717,7 @@ private struct AboutMuralView: View {
                 Button("Open-source notices") { notices = true }
             }
             Section {
-                if CustomEndpoint.active == nil {
+                if !usesEndpoint {
                     Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.")
                 } else {
                     Text("Audio and selected text go to your custom endpoint while you practise, under that server’s retention rules. Raw audio is not saved by Mural.")

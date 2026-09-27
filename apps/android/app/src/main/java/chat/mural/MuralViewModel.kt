@@ -132,6 +132,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var endpoint by mutableStateOf(CustomEndpoint()); private set
     /** A personal conversation goes to the enabled custom endpoint, otherwise to OpenAI with the saved key. */
     val personalReady get() = if (endpoint.enabled) endpoint.textReady else hasKey
+    /** Hosted conversations never use the endpoint, however it is configured. */
+    val usesCustomEndpoint get() = conversationProvider == ConversationProvider.PERSONAL_KEY && endpoint.enabled
     val language get() = LanguageRegistry.get(archive.preferences.learningLanguageID)!!
     val learner get() = LearningEngine.project(archive.sessions, language.id, archive.preferences.hiddenWords)
     val isRunning get() = state in listOf("connecting", "active", "closing")
@@ -683,10 +685,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { presentError(e, R.string.error_key_save_failed) }
         return false
     }
-    fun deleteEndpoint() {
-        if (isRunning) return
-        try { endpoints.delete(); endpoint = CustomEndpoint() }
-        catch (e: Exception) { presentError(e, R.string.error_key_delete_failed) }
+    /** Returns false when the endpoint is still saved, so the form can stay open with the error. */
+    fun deleteEndpoint(): Boolean {
+        if (isRunning) return false
+        return try { endpoints.delete(); endpoint = CustomEndpoint(); true }
+        catch (e: Exception) { presentError(e, R.string.error_key_delete_failed); false }
     }
     fun updatePreferences(preferences: Preferences) {
         if (isRunning || !storageReady) return

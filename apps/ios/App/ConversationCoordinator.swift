@@ -41,6 +41,8 @@ import MuralCore
         if usesTurns { return turns }
         return transport
     }
+    /// True when personal requests go to the learner's own server, so notices and topic search can follow.
+    var usesCustomEndpoint: Bool { conversationProvider == .personalKey && CustomEndpoint.active != nil }
     private var connectionTask: Task<Void, Never>?
     private var assessmentTask: Task<Void, Never>?
     private var delegationTasks: [String: Task<Void, Never>] = [:]
@@ -608,7 +610,9 @@ import MuralCore
         guard let snapshot = session, snapshot.id == sessionID, let targetLanguage = LanguageRegistry.module(for: snapshot.languageID) else { return "" }
         let result = try await api.respond(instructions: instructions + "\n" + TeachingPolicy.spokenReply(language: targetLanguage) + guidance,
                                            input: TeachingPolicy.context(snapshot))
-        if session?.id == sessionID { addUsage(result.usage); scheduleSave() }
+        // A reply that arrives after the conversation starts closing must not speak.
+        guard session?.id == sessionID, state == .active else { return "" }
+        addUsage(result.usage); scheduleSave()
         return result.text
     }
     private func addUsage(_ usage: APIUsage) {
