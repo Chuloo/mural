@@ -10,9 +10,8 @@ import MuralCore
     private struct Record: Codable { var sessionID: UUID?; var requestID: UUID?; var owner: HostedOwner }
     private(set) var needsSignIn = false
     @ObservationIgnored private var active = Set<UUID>()
-    @ObservationIgnored private var running = false
     @ObservationIgnored private var activeRequests = Set<UUID>()
-    @ObservationIgnored private var retry: Task<Void, Never>?
+    @ObservationIgnored private let scheduler = HostedCloseRecoveryScheduler()
     private(set) var revision = 0
     private var query: [String: Any]? {
         guard let client = HostedClient.shared else { return nil }
@@ -66,11 +65,12 @@ import MuralCore
         active.remove(lease.sessionID)
         Task { await resume() }
     }
-    func pause() { retry?.cancel(); retry = nil }
+    func pause() { scheduler.pause() }
     func resume(round: Int = 0) async {
-        guard !running, !ProcessInfo.processInfo.arguments.contains("--preview"), let client = HostedClient.shared else { return }
-        retry?.cancel(); retry = nil
-        running = true; defer { running = false }
+        guard !ProcessInfo.processInfo.arguments.contains("--preview"), let client = HostedClient.shared else { return }
+        await scheduler.run { [weak self] in await self?.recover(client: client, round: round) }
+    }
+    private func recover(client: HostedClient, round: Int) async {
         needsSignIn = false
         for pass in 0..<3 {
             if pass > 0 { try? await Task.sleep(for: .seconds(3)) }
@@ -101,8 +101,7 @@ import MuralCore
             }
         }
         if !needsSignIn, round < 40 {
-            retry = Task { [weak self] in
-                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            scheduler.schedule(after: .seconds(15)) { [weak self] in
                 await self?.resume(round: round + 1)
             }
         }

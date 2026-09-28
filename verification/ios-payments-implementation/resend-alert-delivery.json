@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-09-28T13:08:47.686204+00:00",
+  "provider": "Resend",
+  "domain": "contact.hackmamba.io",
+  "keyID": "7ede71e0-274f-4263-baa9-e7d2f5849a57",
+  "access": "sending only, restricted to contact.hackmamba.io",
+  "sender": "mural@contact.hackmamba.io",
+  "recipient": "hi@hackmamba.io",
+  "transport": "authenticated STARTTLS on port 587",
+  "serverConfigurationMode": "0600",
+  "testInboxMessage": "1a0e81dbc57f0cb6",
+  "operationalInboxMessage": "1a0e82014366193e",
+  "timer": "active every five minutes",
+  "serviceResult": "success",
+  "productionExistingOverdueSessions": 21,
+  "sandboxAlerts": 0,
+  "apiRestartRequired": false,
+  "databaseMutation": false
+}
