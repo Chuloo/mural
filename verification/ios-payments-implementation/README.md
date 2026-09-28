@@ -22,26 +22,26 @@ The backend is deployed and both native implementations are available for review
 
 | Area | Result | Evidence |
 | --- | --- | --- |
-| Server full suite | 404 passed; no skips | `/private/tmp/mural-payment-ci-final.log` |
+| Server full suite | 408 passed; no skips | `/private/tmp/mural-pr133-server-review-results.json` |
 | Latest Apple adapter and late-closeout tests | 14 passed; no skips, including the new test added after the full suite | `/private/tmp/mural-apple-closeout-final.log` |
 | Request admission and account tests | 24 passed; no skips | `/private/tmp/mural-payment-admission-regression.log` |
 | Server type checking | Passed | Same focused verification logs |
-| Swift core | 129 passed | `/private/tmp/mural-swift-boundary-race.log` |
+| Swift core | 144 passed | `/private/tmp/mural-close-recovery-full-swift-tests.log` |
 | Payment monitor | 12 focused tests passed; live read-only inspection passed | [Monitor evidence](payment-monitor-dry-run.json) |
 | Final minimal Talk sheets | iOS 2 passed, including largest text; Android 12 launch/conversation/checkout tests passed | `.build/PaymentMinimalHome.xcresult`; `/private/tmp/mural-android-startup-final-ui.log` |
 | iOS full interface suite | 44 passed; zero failures | `.build/PaymentFinalRegression.xcresult` |
 | Final iOS Account and accessibility changes | 2 passed | `.build/PaymentFinalAccountRegression.xcresult` |
-| Android unit tests | 361 passed | `/private/tmp/mural-android-boundary-race-build.log` |
-| Android full interface suite | 77 passed | `/private/tmp/mural-android-release-regression-final2.log` |
+| Android unit tests | 367 passed | `/private/tmp/mural-android-boundary-race-build.log` |
+| Android full interface suite | 80 passed | `/private/tmp/mural-android-release-regression-final2.log` |
 | Final Android Account and checkout changes | 15 passed | `/private/tmp/mural-android-final-account-checkout.log` |
 | Android checkout screenshot capture | 6 passed | `/private/tmp/mural-android-final-visual-capture.log` |
-| Release scripts and shared contracts | 66 passed; generated content and cross-platform checks passed | `/private/tmp/mural-payment-release-contracts.log` |
+| Release scripts and shared contracts | 68 passed; generated content and cross-platform checks passed | `/private/tmp/mural-payment-release-contracts.log` |
 | Android debug/release compilation and lint | Passed | Android build logs and [bundle inspection](android-release-bundle.json) |
 | iOS device build and distribution export | Passed | [Candidate verification](ios-production-candidate.json) |
 
 The native accessibility audit checks contrast, hit regions, descriptions, clipping and traits in checkout and history. Largest iOS text and Spanish Android large text have automated coverage and visual inspection. These checks do not replace the outstanding full VoiceOver/TalkBack walkthrough.
 
-Earlier test failures were resolved: preview continuation needed an explicit simulator fixture, Spanish checkout assertions needed the new title, and the Android report test needed to dismiss its keyboard before selecting consent. The final full iOS run passed. The final Android changes passed the affected 15-test suite after the full 77-test baseline.
+Earlier test failures were resolved: preview continuation needed an explicit simulator fixture, Spanish checkout assertions needed the new title, and the Android report test needed to dismiss its keyboard before selecting consent. The final full iOS run passed. The final Android run passed all 367 unit tests and 80 interface tests. Seven iOS funding checks passed after the continuation changes, and two affected interface checks passed again after the recovery scheduler fix.
 
 ## Security review
 
@@ -64,7 +64,7 @@ CodeQL alerts 60 and 61 report missing rate limits in the new Apple receipt rout
 | Apple partial-refund retry | A fresh NOK 89 purchase returned signed REFUND_PRORATED / 50000 (50%). Normal reconciliation reversed exactly 1,845,000,000 nano-USD and NOK 44.50; prior quantity-2 full-refund result remains unchanged |
 | Paid iPhone voice and helpers | User completed two calls (35 and 43 seconds); 11 helper requests settled; total provider cost $0.068367401; zero reserved value |
 
-The latest audit shows zero reserved value, no unsettled sandbox sessions and total provider test cost of $0.198861469.
+The final review also verified a coffee-themed opening on the physical Samsung: “Hei! Hva vil du bestille i dag?” The session was saved with themeID `coffee`. Provider testing remains below the approved $2 ceiling; the latest audit records exact costs and any temporary helper reservations.
 
 See [sandbox record](sandbox-setup-2026-09-26.json), [latest provider audit](latest-provider-audit.json), [Stripe evidence](stripe-real-sandbox.json), and [catalog/proceeds review](apple-catalog-review.json).
 
@@ -72,32 +72,40 @@ Apple sandbox returned unit price in signed quantity purchases. A narrowly scope
 
 ## Deployment and artifacts
 
-Production source: `0f8a0b106bd2e149be98ed24e1dd82720b9f60d0`.
+Production source: `5dab40e8f0f029cc884199547dded388d48863fa`.
 
-Production image: `sha256:2a97a66affb2f664d6c3d3883c4f0509d55fb8c0fbd0f41812802ce49170d733`.
+Production image: `sha256:931845d5880a348a9003aee988a4233f79d19f04f69e5412393727b1eba0d30a`.
 
-Rollback: `/opt/mural/deploy/before-payment-closeout-20260928T095941Z`. The previous image/configuration and encrypted database backup are retained. Migrations through 030 and runtime grants are applied. Active-call checks preceded migration/restart. Private production configuration was preserved. Health, readiness, authentication and old/new catalog contracts passed; Apple sales are off and existing Stripe sales remain available.
+Rollback: `/opt/mural/deploy/before-payment-lock-review-20260928T131154Z`. The previous image/configuration and encrypted database backup are retained. Migrations through 030 and runtime grants are applied. The final lock-order deployment changed runtime code only; active-call checks preceded the restart and existing migrations/grants were preserved. Private production configuration was preserved. Health, readiness, authentication and old/new catalog contracts passed; Apple sales are off and existing Stripe sales remain available.
 
 Sandbox uses a separate API, database and receipt scope. Its current image and rollback are in the sandbox record. Only the approved test account can spend provider funds, with a $1.50 lifetime exposure cap and 60-second call limit. Observed usage remains within the user's $2 authorization.
 
 The corrected log audit reads both numeric and text severity labels. It detects repeated hangup retries for 21 unresolved production calls from September 14–16. One unpaid Stripe checkout from September 27 remains pending with zero grant; the existing runner labels ordinary pending retries as delivery warnings. These historical records are preserved. The read-only monitor distinguishes pending payments from failed delivery and reports the overdue settlements. See [operations inspection](payment-operations-inspection.json).
 
 - iPhone sandbox build 18 is installed with existing learning data preserved; a pre-test backup is retained privately.
-- iOS 1.1 (19) is exported with distribution signing, production API configuration and Apple sales disabled. It has not been uploaded.
+- iOS 1.1 (23) is exported and its distribution signature, production API configuration and Apple sales gate are verified. TestFlight upload was started during final review; the final handover records processing/distribution status.
 - Android v10 has a staged direct APK using the same signing certificate as v9. It is a release payload with debugging disabled. The matching sandbox code is verified on a physical Samsung Galaxy S9 running Android 10. The production candidate has not been published.
 - The corresponding Android test build points to the isolated sandbox.
 - Public Terms and Privacy were published in website commit `9102c3e`. App Store App Privacy includes purchase history. Play declarations remain a draft for any future paid Play release.
 
 Artifacts are retained locally in `deliverables/mural-payments-candidate-2026-09-28` beside the repository. Signing keys, credentials, receipts and learning backups remain outside Git.
 
-## Remaining release gates
+## Final review corrections
+
+- Selected themes direct the first question and subsequent conversation on both clients. Resume follows the saved conversation instead of restarting introductions.
+- StoreKit rejection cleanup remains on the main actor. Uncertain purchases retain their recovery record.
+- iOS close recovery owns its worker, preserves overlapping wakeups and no longer cancels a scheduled retry as it starts.
+- Every server session-state writer locks the account before the session. Both free and paid contention tests failed before the correction and pass afterward.
+- Deleted-account support review includes retained reservations.
+- Resend alerts use sending-only access restricted to `contact.hackmamba.io`. The delivery test and the first operational alert reached `hi@hackmamba.io`; the five-minute timer is active. See [delivery evidence](resend-alert-delivery.json).
+
+## Remaining Apple/Play activation gates
 
 1. Verify a real prorated refund for quantity 2. The original quantity-2 request returned an explicit full refund; the later quantity-1 retry returned a real 50% refund and passed exact accounting. Multi-quantity partial arithmetic and out-of-order events pass automated tests.
 2. Finish Android purchase → iPhone spend. Apple purchase → Android spend and shared balance updates on both devices pass. The remaining iPhone microphone step requires direct device use.
 3. Exercise fresh Apple-to-Google linking on devices. Server conflict/ownership tests pass; matching email addresses do not merge accounts.
 4. Confirm the same real boundary flow on iPhone. Physical Android now passes free settlement, returned remainder, relaunch recovery and paid continuation. Both native clients have regression coverage for the server-close race.
 5. Complete the full manual VoiceOver/TalkBack, reduced-motion/transparency and device-state matrix from the brief.
-6. Configure and verify email delivery for the tested payment monitor. William approved hi@hackmamba.io, William as owner, and replies within one business day. SMTP provider credentials are still needed; no email service is configured or timer activated. See the [operations runbook](../../release/operations/README.md).
-7. Submit the first Apple consumables with the new app version after acceptance, obtain approval, then obtain separate authorization for the controlled live purchase/refund. Configure and verify production Apple credentials/notifications as part of that activation. Existing pending submissions must stay intact.
+6. Submit the first Apple consumables with the new app version after acceptance, obtain approval, then obtain separate authorization for the controlled live purchase/refund. Configure and verify production Apple credentials/notifications as part of that activation. Existing pending submissions must stay intact.
 
 Recommendation: finish the device gates against the isolated sandbox, then submit the Apple payment release. Keep production Apple sales disabled until store approval and the authorized live verification pass. Google Play sales remain gated pending their separate catalog, acknowledgement-alert and store-specific device checks.
