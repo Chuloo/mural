@@ -136,7 +136,8 @@ final class MuralUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--ended-conversation", "--preview-language=zh"]
         app.launch()
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "我喜欢喝咖啡。")
         XCTAssertEqual(app.staticTexts.matching(identifier: "pinyin-reading").firstMatch.label, "wǒ xǐhuān hē kāfēi。")
         app.buttons["Conversation transcript"].tap()
@@ -145,7 +146,9 @@ final class MuralUITests: XCTestCase {
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Mandarin transcript and pinyin"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["Done"].tap()
-        app.buttons["new-conversation"].tap()
+        let greeting = NSPredicate(format: "label == %@", "你好！")
+        expectation(for: greeting, evaluatedWith: app.staticTexts["target-caption"])
+        waitForExpectations(timeout: 18)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "你好！")
         app.tabBars.buttons["Words"].tap()
         app.buttons["Past conversations"].tap()
@@ -389,6 +392,24 @@ final class MuralUITests: XCTestCase {
     }
     func testFreeBoundaryPreservesConversationAndWaitsForSettlement() { checkFreeBoundary(largeText: false) }
     func testFreeBoundaryAtLargestTextSize() { checkFreeBoundary(largeText: true) }
+    func testSettledInsufficientContinuationOpensAccountWithoutStartingACall() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-member", "--ended-conversation", "--preview-free-boundary", "--preview-continuation-insufficient"]
+        app.launch()
+        let add = app.buttons["continuation-add-minutes"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertTrue(add.isEnabled)
+        XCTAssertFalse(app.buttons["continue-conversation"].exists)
+        XCTAssertTrue(app.staticTexts["Your conversation is saved. You don’t have enough minutes to continue. Add minutes in Account when you’re ready."].exists)
+        app.buttons["Done"].tap()
+        XCTAssertFalse(add.exists)
+        XCTAssertFalse(app.staticTexts["Your conversation is saved. You don’t have enough minutes to continue. Add minutes in Account when you’re ready."].exists)
+        app.buttons["Start conversation"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["End conversation"].exists)
+    }
     private func checkFreeBoundary(largeText: Bool) {
         for pending in [true, false] {
             let app = XCUIApplication()
@@ -648,10 +669,10 @@ final class MuralUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
     }
 
-    func testMeaningLabelWorksAfterEndingAndManualResetKeepsHistory() {
+    func testMeaningLabelWorksAfterEndingAndAutomaticResetKeepsHistory() {
         let app = launch(ended: true)
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["new-conversation"].isHittable)
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         XCTAssertTrue(app.buttons["start-conversation"].isHittable)
         XCTAssertTrue(app.buttons["Conversation transcript"].isHittable)
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "I like coffee.")
@@ -659,7 +680,9 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["meaning-caption"].exists)
         app.buttons["Show meaning subtitles"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.93)).tap()
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "I like coffee.")
-        app.buttons["new-conversation"].tap()
+        let greeting = NSPredicate(format: "label == %@", "Hei!")
+        expectation(for: greeting, evaluatedWith: app.staticTexts["target-caption"])
+        waitForExpectations(timeout: 18)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
         XCTAssertFalse(app.staticTexts["microphone-status"].exists)
         XCTAssertFalse(app.staticTexts["A coffee?"].exists)
@@ -670,7 +693,8 @@ final class MuralUITests: XCTestCase {
 
     func testEndedConversationAutomaticallyReturnsToGreeting() {
         let app = launch(ended: true)
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Jeg liker kaffe.")
         let ready = NSPredicate(format: "label == %@", "Ready when you are")
         expectation(for: ready, evaluatedWith: app.staticTexts["conversation-status"])
@@ -682,7 +706,8 @@ final class MuralUITests: XCTestCase {
 
     func testOpenTranscriptRemainsReadableAfterAutomaticReset() {
         let app = launch(ended: true)
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Conversation transcript"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         app.buttons["Conversation transcript"].tap()
         XCTAssertTrue(app.staticTexts["I like coffee."].exists)
         let delay = expectation(description: "Allow the 15-second reset to finish")

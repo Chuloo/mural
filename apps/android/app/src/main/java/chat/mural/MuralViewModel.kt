@@ -118,11 +118,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private var freeBoundaryOwnerID: String? = null
     var hasContinuation by mutableStateOf(false); private set
     var continuationReady by mutableStateOf(false); private set
+    var continuationNeedsMinutes by mutableStateOf(false); private set
     private val continuationPreferences = application.getSharedPreferences("mural_continuation", android.content.Context.MODE_PRIVATE)
     private val continuationKey = "v1." + BuildConfig.MANAGED_API_ORIGIN
     private fun clearContinuation() {
         continuationSession = null; continuationOwnerID = null; freeBoundaryOwnerID = null
-        hasContinuation = false; continuationReady = false
+        hasContinuation = false; continuationReady = false; continuationNeedsMinutes = false
         continuationPreferences.edit().remove(continuationKey).apply()
     }
     private fun restoreContinuation(accountID: String) {
@@ -132,18 +133,22 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val saved = checkpoint.recover(archive.sessions, accountID, language.id) ?: return
         continuationSession = saved; continuationOwnerID = accountID; hasContinuation = true; continuationReady = false
         session = saved; selectedTheme = language.themes.firstOrNull { it.id == saved.themeID }; topicResult = saved.topics.lastOrNull()
+        if (saved.themeID == "current") selectedTheme = topicResult?.let(::currentTheme)
         state = "ended"; resetJob?.cancel()
         notice = getApplication<Application>().getString(R.string.notice_continue_settling)
     }
     private suspend fun refreshContinuation() {
         val expected = continuationOwnerID ?: return
         if (isRunning) return
-        continuationReady = false
+        continuationReady = false; continuationNeedsMinutes = false
         val owner = availableHostedOwner()?.takeIf { it.accountID == expected } ?: return
         val balance = hostedBalance(owner)
         if (isRunning || continuationOwnerID != expected || availableHostedOwner()?.accountID != expected) return
         continuationReady = !accountChangeBlocked && balance.canStartConversation && balance.presentation?.settlementState == "settled"
-        if (continuationReady) notice = getApplication<Application>().getString(
+        continuationNeedsMinutes = ConversationContinuationPolicy.needsMoreMinutes(balance.presentation?.settlementState,
+            balance.presentation?.availabilityReason)
+        if (continuationNeedsMinutes) notice = getApplication<Application>().getString(R.string.notice_continue_insufficient)
+        else if (continuationReady) notice = getApplication<Application>().getString(
             if (balance.availableMilliseconds > 0) R.string.notice_continue_remaining_free
             else R.string.notice_continue_purchased)
     }
@@ -694,12 +699,16 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun selectLanguage(id: String) {
         if (!isRunning && LanguageRegistry.get(id) != null) updatePreferences(archive.preferences.copy(learningLanguageID = id))
     }
+    private var startingWithHistory = false
     fun chooseTheme(theme: ConversationTheme?) {
         if (!isRunning && session != null) resetConversation()
         selectedTheme = theme
-        if (state == "active") {
+        if (theme?.id != "current") topicResult = null
+        if (state == "active" || state == "connecting") {
             updateSession { it.themeID = theme?.id; it.title = theme?.title ?: language.defaultTitle }
-            command("instructions", TeachingPolicy.theme(theme, language))
+            // The opening instruction applies a selection made while connecting.
+            startingWithHistory = false
+            if (state == "active") command("instructions", TeachingPolicy.theme(theme, language))
         }
     }
     fun toggleMeaning() {
@@ -762,6 +771,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val module = language
         val instructions = TeachingPolicy.voice(module, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage)
         val history = ConversationHistory.messages(continuing ?: session)
+        startingWithHistory = history.isNotEmpty()
         if (choice == ConversationProvider.HOSTED_MINUTES) accountChangeBlocked = true
         connectionJob = viewModelScope.launch {
             try {
@@ -886,7 +896,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 state = "active"; activity = ConversationActivity(activityNow()); conversationPace = ConversationPace(); inactivitySeconds = null
                 if (conversationProvider == ConversationProvider.PERSONAL_KEY) providerIssue = null
                 updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content ?: it.providerID }
-                command("instructions", TeachingPolicy.greeting(language)); startDurationChecks()
+                if (selectedTheme?.id == "current") topicResult?.let { command("thinking", "Sourced context, data: ${it.text}") }
+                command("instructions", TeachingPolicy.greeting(language, selectedTheme, startingWithHistory)); startDurationChecks()
             }
             "session.input_transcript.delta", "session.output_transcript.delta" -> {
                 val text = event["delta"]?.jsonPrimitive?.contentOrNull ?: return
@@ -1152,9 +1163,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun discuss(brief: TopicBrief) {
         if (brief.languageID != language.id) return
         if (state == "active") {
-            updateSession { if (it.topics.none { t -> t.id == brief.id }) it.topics += brief }
+            topicResult = brief; selectedTheme = currentTheme(brief)
+            updateSession {
+                it.themeID = selectedTheme?.id; it.title = brief.query
+                if (it.topics.none { t -> t.id == brief.id }) it.topics += brief
+            }
             if (voiceSession) {
-                command("thinking", "Sourced context, data: ${brief.text}"); command("instructions", "Discuss this topic ONLY in ${language.name}.")
+                command("thinking", "Sourced context, data: ${brief.text}"); command("instructions", TeachingPolicy.theme(selectedTheme, language))
                 return
             }
         } else resetConversation()

@@ -1,4 +1,5 @@
 import XCTest
+import StoreKit
 @testable import MuralCore
 
 final class MinutePurchaseTests: XCTestCase {
@@ -54,6 +55,76 @@ final class MinutePurchaseTests: XCTestCase {
             XCTAssertFalse(restored.canResumeCheckout)
             XCTAssertEqual(restored.orderID, attempt.orderID)
         }
+    }
+    func testPreparingCheckoutReusesUnchangedOrderButReplacesStaleTerms() throws {
+        let originalOffer = try offer(), owner = UUID()
+        var attempt = try ApplePurchaseAttempt(accountID: owner, offer: originalOffer, quantity: 2)
+        attempt.orderID = UUID()
+        let restored = try JSONDecoder().decode(ApplePurchaseAttempt.self, from: JSONEncoder().encode(attempt))
+        XCTAssertEqual(try restored.preparingCheckout(for: originalOffer, quantity: 2), attempt)
+        for (selected, quantity) in [(try offer(["scheduleVersion": "us-v2"]), 2),
+            (try offer(["storefront": "NOR", "currency": "nok", "totalMinor": 8900]), 2), (originalOffer, 1)] {
+            let replacement = try restored.preparingCheckout(for: selected, quantity: quantity)
+            XCTAssertEqual(replacement.accountID, owner)
+            XCTAssertNotEqual(replacement.key, attempt.key)
+            XCTAssertNil(replacement.orderID)
+            XCTAssertTrue(replacement.canResumeCheckout)
+            XCTAssertTrue(replacement.matches(selected, quantity: quantity))
+        }
+        for phase in [ApplePurchaseAttempt.Phase.submitted, .awaitingApproval] {
+            attempt.phase = phase
+            XCTAssertThrowsError(try attempt.preparingCheckout(for: originalOffer, quantity: 2))
+            XCTAssertThrowsError(try attempt.preparingCheckout(for: offer(["scheduleVersion": "us-v2"]), quantity: 1))
+        }
+    }
+    @MainActor func testStoreKitRejectionClearsSubmittedAttemptAcrossRestart() async throws {
+        let rejected: [Error] = [Product.PurchaseError.productUnavailable, Product.PurchaseError.purchaseNotAllowed,
+            Product.PurchaseError.invalidQuantity, Product.PurchaseError.ineligibleForOffer,
+            Product.PurchaseError.invalidOfferIdentifier, Product.PurchaseError.invalidOfferPrice,
+            Product.PurchaseError.invalidOfferSignature, Product.PurchaseError.missingOfferParameters,
+            StoreKitError.userCancelled, StoreKitError.notAvailableInStorefront, StoreKitError.notEntitled]
+        for error in rejected {
+            var attempt = try ApplePurchaseAttempt(accountID: UUID(), offer: offer(), quantity: 2)
+            attempt.orderID = UUID(); attempt.phase = .submitted
+            var saved: Data? = try JSONEncoder().encode(attempt)
+            do {
+                let _: Bool = try await ApplePurchaseSubmission.perform(purchase: { throw error }, clearRejectedAttempt: { saved = nil })
+                XCTFail("Expected StoreKit rejection")
+            } catch { }
+            XCTAssertNil(saved, "A definite rejection must allow another purchase after restart: \(error)")
+        }
+    }
+    @MainActor func testAmbiguousStoreKitFailuresKeepSubmittedOrderForRecovery() async throws {
+        let uncertain: [Error] = [StoreKitError.unknown, StoreKitError.networkError(URLError(.timedOut)),
+            StoreKitError.systemError(NSError(domain: "StoreKitTest", code: 1)), CancellationError(), URLError(.notConnectedToInternet)]
+        for error in uncertain {
+            var attempt = try ApplePurchaseAttempt(accountID: UUID(), offer: offer(), quantity: 2)
+            attempt.orderID = UUID(); attempt.phase = .submitted
+            var saved: Data? = try JSONEncoder().encode(attempt)
+            do {
+                let _: Bool = try await ApplePurchaseSubmission.perform(purchase: { throw error }, clearRejectedAttempt: { saved = nil })
+                XCTFail("Expected uncertain StoreKit failure")
+            } catch { }
+            let restored = try JSONDecoder().decode(ApplePurchaseAttempt.self, from: XCTUnwrap(saved))
+            XCTAssertEqual(restored, attempt)
+            XCTAssertFalse(restored.canResumeCheckout, "An uncertain charge must never launch again")
+        }
+    }
+    @MainActor func testPendingStoreKitResultRetainsRecoveryRecord() async throws {
+        var clearCalled = false
+        let result = try await ApplePurchaseSubmission.perform(purchase: { Product.PurchaseResult.pending },
+            clearRejectedAttempt: { clearCalled = true })
+        guard case .pending = result else { return XCTFail("Pending result was changed") }
+        XCTAssertFalse(clearCalled)
+    }
+    @MainActor func testRejectedAttemptStorageFailureDoesNotPretendItWasCleared() async throws {
+        struct StorageFailure: Error { }
+        do {
+            let _: Bool = try await ApplePurchaseSubmission.perform(purchase: { throw Product.PurchaseError.purchaseNotAllowed },
+                clearRejectedAttempt: { throw StorageFailure() })
+            XCTFail("Expected storage failure")
+        } catch is StorageFailure { }
+        catch { XCTFail("Unexpected error: \(error)") }
     }
     func testServerFulfillmentUnlocksOnlyTheMatchingOwnersCompletedOrder() throws {
         let owner = UUID(), order = UUID()

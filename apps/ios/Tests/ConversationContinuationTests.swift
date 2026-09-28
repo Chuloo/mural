@@ -2,6 +2,16 @@ import XCTest
 @testable import MuralCore
 
 final class ConversationContinuationTests: XCTestCase {
+    func testOnlySettledInsufficientFundingOffersMoreMinutes() {
+        XCTAssertTrue(ConversationContinuation.needsMoreMinutes(settlementState: "settled", availabilityReason: "insufficient_remaining_time"))
+        for state in [nil, "pending", "in_use"] as [String?] {
+            XCTAssertFalse(ConversationContinuation.needsMoreMinutes(settlementState: state, availabilityReason: "insufficient_remaining_time"))
+        }
+        for reason in [nil, "ready", "settling", "active_conversation", "account_action_needed", "service_unavailable"] as [String?] {
+            XCTAssertFalse(ConversationContinuation.needsMoreMinutes(settlementState: "settled", availabilityReason: reason))
+        }
+    }
+
     func testProviderDeadlineBeforeLocalTimerPreservesFreeContinuation() {
         XCTAssertTrue(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: true, endReason: nil, deadlineReached: true))
         XCTAssertFalse(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: true, endReason: nil, deadlineReached: false))

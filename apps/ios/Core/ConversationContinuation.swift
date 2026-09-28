@@ -14,6 +14,10 @@ public struct ConversationContinuationCheckpoint: Codable, Sendable {
 }
 
 public enum ConversationContinuation {
+    public static func needsMoreMinutes(settlementState: String?, availabilityReason: String?) -> Bool {
+        settlementState == "settled" && availabilityReason == "insufficient_remaining_time"
+    }
+
     /// A server close can arrive before the next local timer tick.
     public static func reachedFreeBoundary(hasFreeFunding: Bool, endReason: String?, deadlineReached: Bool) -> Bool {
         hasFreeFunding && (endReason == "Time limit" || endReason == "Reserved conversation time ended" ||

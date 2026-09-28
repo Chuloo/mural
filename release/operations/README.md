@@ -24,12 +24,13 @@ To find an alert's record, hash the order/session UUID with SHA-256 and compare 
 ## Installation and delivery verification
 
 1. Install `scripts/payment_health_monitor.py` as `/opt/mural/operations/payment_health_monitor.py` and copy the two systemd files into `/etc/systemd/system/`.
-2. Store the configuration at `/opt/mural/operations/payment-monitor.json`, owned by root with mode `0600`. Use a verified sender and the existing mail provider's restricted SMTP credentials. The example contains placeholders, not working credentials. TLS with certificate validation is mandatory: `starttls` or `implicit`.
-3. Include only configured provider histories in `expectedProviders`. Production Apple and Play are currently disabled, so neither is expected there. Sandbox Apple is enabled.
-4. Run the monitor with `--dry-run` and review the sanitized output. This mode sends no email and changes no monitor state.
-5. Run with `--test-email`. SMTP acceptance is not inbox delivery: confirm receipt at hi@hackmamba.io before marking delivery verified.
-6. Enable the timer only after the test succeeds. Inspect `systemctl status mural-payment-monitor.timer` and the service journal. Alert content is deliberately absent from the journal.
-7. Verify host-health monitoring separately. This process cannot email when the host or its outbound mail service is unavailable.
+2. Use the approved Resend service and a sending-only key restricted to the verified Hackmamba subdomain. Set `smtp.resend.com`, port `587`, `starttls`, and username `resend`; the deployment host can reach port 587, while port 465 timed out during review. Use an address on the verified subdomain as sender and keep `hi@hackmamba.io` as recipient. [Resend SMTP settings](https://resend.com/changelog/smtp-service).
+3. Store the configuration at `/opt/mural/operations/payment-monitor.json`, owned by root with mode `0600`. Use a verified sender and the existing mail provider's restricted SMTP credentials. The example contains placeholders, not working credentials. TLS with certificate validation is mandatory: `starttls` or `implicit`.
+4. Include only configured provider histories in `expectedProviders`. Production Apple and Play are currently disabled, so neither is expected there. Sandbox Apple is enabled.
+5. Run the monitor with `--dry-run` and review the sanitized output. This mode sends no email and changes no monitor state.
+6. Run with `--test-email`. SMTP acceptance is not inbox delivery: confirm receipt at hi@hackmamba.io before marking delivery verified.
+7. Enable the timer only after the test succeeds. Inspect `systemctl status mural-payment-monitor.timer` and the service journal. Alert content is deliberately absent from the journal.
+8. Verify host-health monitoring separately. This process cannot email when the host or its outbound mail service is unavailable.
 
 Configuration and mail credentials stay outside Git. Installing this separate inspector does not restart the API or alter its deployment configuration. To roll back, disable the timer and remove its two unit files; preserve monitor state for incident review.
 

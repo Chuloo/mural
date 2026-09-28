@@ -1,4 +1,36 @@
 import Foundation
+import StoreKit
+
+public enum ApplePurchaseSubmission {
+    /// Only rejection by StoreKit proves that this invocation cannot deliver a purchase later.
+    /// Network, system and task-cancellation errors retain the durable recovery record.
+    @MainActor public static func perform<Result>(purchase: () async throws -> Result,
+                                                  clearRejectedAttempt: () throws -> Void) async throws -> Result {
+        do { return try await purchase() }
+        catch {
+            if definitelyRejected(error) { try clearRejectedAttempt() }
+            throw error
+        }
+    }
+
+    private static func definitelyRejected(_ error: Error) -> Bool {
+        if let error = error as? Product.PurchaseError {
+            switch error {
+            case .productUnavailable, .purchaseNotAllowed, .invalidQuantity, .ineligibleForOffer,
+                 .invalidOfferIdentifier, .invalidOfferPrice, .invalidOfferSignature, .missingOfferParameters:
+                return true
+            @unknown default: return false
+            }
+        }
+        if let error = error as? StoreKitError {
+            switch error {
+            case .userCancelled, .notAvailableInStorefront, .notEntitled: return true
+            default: return false
+            }
+        }
+        return false
+    }
+}
 
 public struct MinuteOffer: Decodable, Equatable, Sendable, Identifiable {
     public var id: String { sku }
@@ -55,6 +87,13 @@ public struct ApplePurchaseAttempt: Codable, Equatable, Sendable {
     }
     public func matches(_ selected: MinuteOffer, quantity: Int) -> Bool {
         offer == MinuteOfferSnapshot(selected) && self.quantity == quantity
+    }
+    public func preparingCheckout(for selected: MinuteOffer, quantity: Int) throws -> ApplePurchaseAttempt {
+        guard canResumeCheckout else { throw ManagedAccountError.unavailable }
+        // No StoreKit invocation has occurred in this phase. A fresh explicit choice
+        // may replace stale terms; unchanged terms keep the key for lost-response recovery.
+        return matches(selected, quantity: quantity) ? self :
+            try ApplePurchaseAttempt(accountID: accountID, offer: selected, quantity: quantity)
     }
     public init(accountID: UUID, offer: MinuteOffer, quantity: Int) throws {
         _ = try offer.total(quantity: quantity)

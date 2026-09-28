@@ -2,6 +2,8 @@ package chat.mural.network
 
 import chat.mural.core.AccountSession
 import chat.mural.core.LanguageRegistry
+import chat.mural.core.LearningEngine
+import chat.mural.core.TeachingPolicy
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -144,6 +146,19 @@ class HostedAPIClientTest {
         server.enqueue(MockResponse().setBody(created()))
         api.createLiveSession(create.copy(history = JsonArray(listOf(valid))))
         assertEquals(JsonArray(listOf(valid)), Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject["history"])
+    }
+
+    @Test fun selectedThemeIsPreservedInTheHostedSessionRequest() = runBlocking {
+        for (language in LanguageRegistry.all) {
+            val theme = language.themes.first { it.id == "dinner" }
+            val prompt = TeachingPolicy.voice(language, LearningEngine.project(emptyList(), languageID = language.id),
+                theme, "An unrelated interest", "English")
+            server.enqueue(MockResponse().setBody(created()))
+            api.createLiveSession(create.copy(language = language.locale, instructions = prompt))
+            val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+            assertEquals(prompt, body["instructions"]!!.jsonPrimitive.content)
+            assertTrue(body["instructions"]!!.jsonPrimitive.content.contains(theme.situation))
+        }
     }
 
     @Test fun statusAndHelpersStayWithCreatingAccountButCleanupUsesOriginalIdentityOnce() = runBlocking {

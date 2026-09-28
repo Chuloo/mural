@@ -89,6 +89,30 @@ class ConversationPolicyTest {
         compose.runOnIdle { assertNull(vm.session); assertFalse(vm.hasContinuation); assertFalse(vm.continuationReady) }
     }
 
+    @Test fun settledInsufficientContinuationOpensAccountWithoutStartingACall() {
+        val saved = SessionRecord(languageID = vm.language.id, endedAt = nowSeconds())
+        val provider = vm.conversationProvider
+        compose.runOnIdle {
+            state("session", saved); state("state", "ended"); state("hasContinuation", true)
+            state("continuationReady", false); state("continuationNeedsMinutes", true)
+            state("notice", compose.activity.getString(R.string.notice_continue_insufficient))
+        }
+        compose.onNodeWithText(compose.activity.getString(R.string.notice_continue_insufficient)).assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.talk_continue_conversation_button)).assertDoesNotExist()
+        compose.onNodeWithText(compose.activity.getString(R.string.settings_done)).performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.notice_continue_insufficient)).assertDoesNotExist()
+        compose.onNodeWithTag("conversation-continuation-sheet").assertDoesNotExist()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.talk_mic_start_desc)).performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.talk_continue_add_minutes)).assertIsEnabled().performClick()
+        compose.onNodeWithTag("account-sheet").assertIsDisplayed()
+        compose.runOnIdle {
+            assertFalse(vm.isRunning)
+            assertEquals(saved.id, vm.session?.id)
+            assertEquals(provider, vm.conversationProvider)
+            assertTrue(vm.hasContinuation)
+        }
+    }
+
     @Test fun quotaErrorUsesBillingAdviceAndSafeProviderReference() {
         compose.runOnIdle {
             MuralViewModel::class.java.getDeclaredMethod("presentError", Throwable::class.java, Int::class.javaPrimitiveType)
@@ -99,5 +123,36 @@ class ConversationPolicyTest {
         capture("quota-error")
         compose.onNodeWithText(compose.activity.getString(R.string.common_ok)).performClick()
         compose.runOnIdle { assertNull(vm.error) }
+    }
+
+    @Test fun themeChangedWhileConnectingIsKeptByTheConversation() {
+        compose.runOnIdle {
+            val coffee = vm.language.themes.first { it.id == "coffee" }
+            val dinner = vm.language.themes.first { it.id == "dinner" }
+            state("session", SessionRecord(languageID = vm.language.id, themeID = coffee.id, title = coffee.title))
+            state("state", "connecting")
+            vm.chooseTheme(dinner)
+            assertEquals(dinner, vm.selectedTheme)
+            assertEquals(dinner.id, vm.session?.themeID)
+            assertEquals(dinner.title, vm.session?.title)
+            assertEquals("connecting", vm.state)
+        }
+    }
+
+    @Test fun sourcedTopicSelectedDuringACallReplacesThePreviousThemeAndKeepsItsReference() {
+        compose.runOnIdle {
+            val coffee = vm.language.themes.first { it.id == "coffee" }
+            state("session", SessionRecord(languageID = vm.language.id, themeID = coffee.id, title = coffee.title))
+            state("selectedTheme", coffee); state("state", "active")
+            MuralViewModel::class.java.getDeclaredField("voiceSession").apply { isAccessible = true }.setBoolean(vm, true)
+            val brief = TopicBrief(languageID = vm.language.id, query = "A sourced topic", text = "A verified reference fact.", sources = emptyList())
+            vm.discuss(brief)
+            assertEquals("current", vm.selectedTheme?.id)
+            assertEquals(brief.query, vm.selectedTheme?.title)
+            assertTrue(vm.selectedTheme!!.situation.contains(brief.text))
+            assertEquals("current", vm.session?.themeID)
+            assertEquals(brief.query, vm.session?.title)
+            assertEquals(listOf(brief), vm.session?.topics)
+        }
     }
 }

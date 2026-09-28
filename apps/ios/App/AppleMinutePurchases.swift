@@ -64,6 +64,11 @@ final class AppleMinutePurchases {
         var all = try attempts(); all.removeAll { $0.accountID == account && (order == nil || $0.orderID == order) }
         UserDefaults.standard.set(try JSONEncoder().encode(all), forKey: storageKey)
     }
+    private func originalAccountRecoveryMessage(orderID: UUID?, owner: ManagedAccountSession) -> String? {
+        guard let orderID, let saved = try? attempts(),
+              saved.contains(where: { $0.orderID == orderID && $0.accountID != owner.accountID }) else { return nil }
+        return "This purchase belongs to another Mural account. Sign in to that account and tap Check purchases to finish it."
+    }
     func start() {
         guard enabled, listener == nil, !ProcessInfo.processInfo.arguments.contains("--preview") else { return }
         listener = Task { [weak self] in
@@ -142,7 +147,8 @@ final class AppleMinutePurchases {
             for await result in Transaction.unfinished {
                 guard case .verified(let transaction) = result, transaction.productID == product.id else { continue }
                 guard await deliver(result, owner: owner) else {
-                    message = "Your earlier purchase needs another check. Tap Check purchases before trying again."; return
+                    message = originalAccountRecoveryMessage(orderID: transaction.appAccountToken, owner: owner) ??
+                        "Your earlier purchase needs another check. Tap Check purchases before trying again."; return
                 }
             }
             guard await Storefront.current?.countryCode == offer.storefront, matches(product, offer) else { throw ManagedAccountError.invalidResponse }
@@ -151,11 +157,9 @@ final class AppleMinutePurchases {
             // invoked, recovery only checks transactions and never launches another payment.
             if let previous {
                 guard previous.canResumeCheckout else { pending = true; message = "A purchase is still being checked. Tap Check purchases."; return }
-                guard previous.matches(offer, quantity: quantity) else {
-                    message = "Select your previous pack and quantity to continue the interrupted purchase."; return
-                }
             }
-            var attempt = try previous ?? ApplePurchaseAttempt(accountID: owner.accountID, offer: offer, quantity: quantity)
+            var attempt = try previous?.preparingCheckout(for: offer, quantity: quantity) ??
+                ApplePurchaseAttempt(accountID: owner.accountID, offer: offer, quantity: quantity)
             try save(attempt)
             struct Order: Decodable {
                 struct Payment: Decodable { let orderID: UUID; let appAccountToken: UUID; let productID: String; let quantity: Int }
@@ -172,7 +176,12 @@ final class AppleMinutePurchases {
             guard current(owner), await Storefront.current?.countryCode == offer.storefront else { throw ManagedAccountError.unavailable }
             attempt.phase = .submitted; try save(attempt)
             let purchaseStarted = Date()
-            switch try await product.purchase(options: [.quantity(quantity), .appAccountToken(order.payment.appAccountToken)]) {
+            let result = try await ApplePurchaseSubmission.perform(purchase: {
+                try await product.purchase(options: [.quantity(quantity), .appAccountToken(order.payment.appAccountToken)])
+            }, clearRejectedAttempt: {
+                try self.remove(account: owner.accountID, order: order.orderID)
+            })
+            switch result {
             case .success(let result):
                 let completed = await deliver(result, owner: owner)
                 if completed, current(owner), case .verified(let returned) = result,
@@ -294,7 +303,10 @@ final class AppleMinutePurchases {
             }
             return true
         } catch {
-            if current(owner) { message = "Your purchase is saved. We’ll check it again when Mural can connect." }
+            if current(owner) {
+                message = originalAccountRecoveryMessage(orderID: orderID, owner: owner) ??
+                    "Your purchase is saved. We’ll check it again when Mural can connect."
+            }
             return false
         }
     }

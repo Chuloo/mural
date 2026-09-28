@@ -87,6 +87,7 @@ import chat.mural.core.ConversationProvider
 fun TalkScreen(
     vm: MuralViewModel,
     onOpenAdvanced: () -> Unit = {},
+    onOpenAccount: () -> Unit = {},
     microphoneMessage: String?,
     onMicrophone: () -> Unit,
     onOpenAppSettings: (() -> Unit)?,
@@ -151,7 +152,8 @@ fun TalkScreen(
         )
         Box(Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 12.dp).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
             val status = if (vm.hasContinuation) {
-                stringResource(if (vm.continuationReady) R.string.talk_status_continue_ready else R.string.talk_status_continue_settling)
+                stringResource(if (vm.continuationReady) R.string.talk_status_continue_ready
+                    else if (vm.continuationNeedsMinutes) R.string.talk_status_continue_saved else R.string.talk_status_continue_settling)
             } else statusText(vm.state, vm.isMuted, vm.isVoiceSession, vm.inactivitySeconds)
             val statusCaption = buildAnnotatedString {
                 if (vm.inactivitySeconds != null) {
@@ -307,10 +309,12 @@ fun TalkScreen(
                 }
                 Text(vm.notice ?: stringResource(R.string.notice_continue_settling), color = MuralColors.Secondary,
                     style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = { conversationChoice = false; onMicrophone() }, enabled = vm.continuationReady,
+                Button(onClick = { conversationChoice = false; if (vm.continuationNeedsMinutes) onOpenAccount() else onMicrophone() },
+                    enabled = vm.continuationReady || vm.continuationNeedsMinutes,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
-                    Text(stringResource(R.string.talk_continue_conversation_button), textAlign = TextAlign.Center)
+                    Text(stringResource(if (vm.continuationNeedsMinutes) R.string.talk_continue_add_minutes
+                        else R.string.talk_continue_conversation_button), textAlign = TextAlign.Center)
                 }
                 MuralTextButton(onClick = { conversationChoice = false; vm.resetConversation() }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.talk_new_conversation_button))

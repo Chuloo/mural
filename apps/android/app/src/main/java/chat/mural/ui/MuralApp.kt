@@ -139,6 +139,7 @@ fun MuralApp(
                             0 -> TalkScreen(
                                 vm = vm,
                                 onOpenAdvanced = { focusAdvanced = true; showSettings = true },
+                                onOpenAccount = { account?.refresh(); showAccount = true },
                                 microphoneMessage = microphoneMessage,
                                 onMicrophone = { withConsent(CloudAction.StartVoice) },
                                 onOpenAppSettings = onOpenAppSettings,
@@ -208,7 +209,7 @@ fun MuralApp(
             }
 
             if (showAccount && !showMinutes) {
-                AccountSheet(accountState ?: AccountState(), onDismiss = { showAccount = false }, onSignIn = onGoogleSignIn,
+                AccountSheet(accountState ?: AccountState(), onDismiss = { showAccount = false; vm.refreshHostedReadiness() }, onSignIn = onGoogleSignIn,
                     onSignOut = onSignOut, onDelete = onDeleteAccount, onRefresh = { account?.refresh() },
                     transitionBusy = accountTransitionBusy, provider = vm.conversationProvider,
                     conversationRunning = vm.isRunning,

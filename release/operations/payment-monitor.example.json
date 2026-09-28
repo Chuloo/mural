@@ -2,24 +2,35 @@
   "sender": "REPLACE_WITH_VERIFIED_SENDER",
   "recipient": "hi@hackmamba.io",
   "smtp": {
-    "host": "REPLACE_WITH_SMTP_HOST",
+    "host": "smtp.resend.com",
     "port": 587,
     "tls": "starttls",
-    "username": "REPLACE_WITH_SMTP_USERNAME",
-    "password": "REPLACE_WITH_SMTP_PASSWORD"
+    "username": "resend",
+    "password": "REPLACE_WITH_DOMAIN_SCOPED_RESEND_KEY"
   },
   "targets": [
     {
       "name": "production",
-      "compose": ["/opt/mural/deploy/compose"],
+      "compose": [
+        "/opt/mural/deploy/compose"
+      ],
       "database": "mural",
       "expectedProviders": []
     },
     {
       "name": "sandbox",
-      "compose": ["docker", "compose", "-p", "mural-sandbox", "-f", "/opt/mural/sandbox/compose.json"],
+      "compose": [
+        "docker",
+        "compose",
+        "-p",
+        "mural-sandbox",
+        "-f",
+        "/opt/mural/sandbox/compose.json"
+      ],
       "database": "mural_sandbox",
-      "expectedProviders": ["apple"]
+      "expectedProviders": [
+        "apple"
+      ]
     }
   ]
 }

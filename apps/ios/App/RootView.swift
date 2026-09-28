@@ -32,7 +32,7 @@ struct RootView: View {
             Tab("Words", systemImage: "book", value: 2) { shell { WordsView(coordinator: coordinator) } }
         }
         .tint(MuralColor.ink)
-        .sheet(isPresented: $coordinator.showSettings) {
+        .sheet(isPresented: $coordinator.showSettings, onDismiss: { Task { await coordinator.refreshContinuation() } }) {
             SettingsView(coordinator: coordinator)
                 .presentationDetents([.large])
         }
@@ -69,6 +69,7 @@ struct RootView: View {
         } message: { Text(coordinator.error ?? coordinator.store.error ?? "") }
         .task { coordinator.resume(); AppleMinutePurchases.shared.start(); await HostedCloseRecovery.shared.resume() }
         .onChange(of: HostedCloseRecovery.shared.revision) { _, _ in Task { await coordinator.refreshContinuation() } }
+        .onChange(of: AppleMinutePurchases.shared.balanceRevision) { _, _ in Task { await coordinator.refreshContinuation() } }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
             #if DEBUG && targetEnvironment(simulator)
@@ -114,6 +115,7 @@ struct TalkView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var typing = false
     @State private var conversationChoice = false
+    @State private var openAccountAfterContinuation = false
     @State private var transcript: SessionRecord?
     @State private var lookup: WordLookup?
     init(coordinator: ConversationCoordinator) {
@@ -142,17 +144,26 @@ struct TalkView: View {
         .onChange(of: coordinator.hasContinuation, initial: true) { _, waiting in
             if waiting && !coordinator.isRunning { conversationChoice = true }
         }
-        .sheet(isPresented: $conversationChoice) {
+        .sheet(isPresented: $conversationChoice, onDismiss: {
+            if openAccountAfterContinuation {
+                openAccountAfterContinuation = false
+                coordinator.requestAccountFocus = true; coordinator.showSettings = true
+            }
+        }) {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Text(coordinator.notice ?? "Your conversation is saved. You can continue when your minutes finish updating.")
                             .font(.body).foregroundStyle(MuralColor.secondary)
-                        Button { conversationChoice = false; coordinator.start() } label: {
-                            Text("Continue conversation").frame(maxWidth: .infinity, minHeight: 52)
+                        Button {
+                            if coordinator.continuationNeedsMinutes { openAccountAfterContinuation = true; conversationChoice = false }
+                            else { conversationChoice = false; coordinator.start() }
+                        } label: {
+                            Text(coordinator.continuationNeedsMinutes ? "Add minutes" : "Continue conversation").frame(maxWidth: .infinity, minHeight: 52)
                         }
                         .buttonStyle(.borderedProminent).tint(MuralColor.orange).foregroundStyle(MuralColor.ink)
-                        .disabled(!coordinator.continuationReady).accessibilityIdentifier("continue-conversation")
+                        .disabled(!coordinator.continuationReady && !coordinator.continuationNeedsMinutes)
+                        .accessibilityIdentifier(coordinator.continuationNeedsMinutes ? "continuation-add-minutes" : "continue-conversation")
                         Button("New conversation") { conversationChoice = false; coordinator.resetConversation() }
                             .frame(maxWidth: .infinity, minHeight: 44).accessibilityIdentifier("new-conversation")
                     }.padding(24)
