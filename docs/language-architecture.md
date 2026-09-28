@@ -14,6 +14,7 @@ Language-specific content lives in `apps/ios/Core/Languages/`. Each module defin
 | `it` | Italian from Italy | `it-IT` |
 | `pt` | Brazilian Portuguese | `pt-BR` |
 | `zh` | Standard Mandarin, Simplified Chinese | `zh-CN` |
+| `sr` | Standard Serbian, ekavian, Latin script | `sr-Latn-RS` |
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
 

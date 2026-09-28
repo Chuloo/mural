@@ -56,6 +56,7 @@ final class MuralUITests: XCTestCase {
     func testGermanOnboarding() { checkNewOnboarding(id: "de", greeting: "Hallo!") }
     func testItalianOnboarding() { checkNewOnboarding(id: "it", greeting: "Ciao!") }
     func testBrazilianPortugueseOnboarding() { checkNewOnboarding(id: "pt", greeting: "Olá!") }
+    func testSerbianOnboarding() { checkNewOnboarding(id: "sr", greeting: "Zdravo!") }
     func testMandarinOnboardingWithOptionalPinyin() { checkNewOnboarding(id: "zh", greeting: "你好！") }
 
     func testMandarinSelectionAtLargestAccessibilityTextSize() {

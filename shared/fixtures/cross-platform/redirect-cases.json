@@ -17,6 +17,15 @@
     {"language": "es", "detected": "und", "confidence": 0.99, "redirect": false},
     {"language": "es", "detected": "", "confidence": 0.99, "redirect": false},
     {"language": "nb", "detected": "nb", "confidence": 0.99, "redirect": false},
-    {"language": "nb", "detected": "sv", "confidence": 0.95, "redirect": true}
+    {"language": "nb", "detected": "sv", "confidence": 0.95, "redirect": true},
+    {"language": "sr", "detected": "sr", "confidence": 0.99, "redirect": false},
+    {"language": "sr", "detected": "sr-Latn", "confidence": 0.99, "redirect": false},
+    {"language": "sr", "detected": "hr", "confidence": 0.99, "redirect": false},
+    {"language": "sr", "detected": "bs", "confidence": 0.99, "redirect": false},
+    {"language": "sr", "detected": "sh", "confidence": 0.99, "redirect": false},
+    {"language": "sr", "detected": "cnr", "confidence": 0.99, "redirect": false},
+    {"language": "sr", "detected": "sl", "confidence": 0.99, "redirect": true},
+    {"language": "sr", "detected": "en", "confidence": 0.99, "redirect": true},
+    {"language": "es", "detected": "hr", "confidence": 0.99, "redirect": true}
   ]
 }

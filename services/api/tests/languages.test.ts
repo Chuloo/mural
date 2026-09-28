@@ -20,7 +20,8 @@ test('all native locales reach the provider with the intended regional speech ta
     for (const [locale, target] of [
       ['nb-NO', 'Norwegian Bokmål'], ['es-ES', 'Spanish from Spain'], ['en', 'English'], ['en-US', 'English'], ['fr-FR', 'French from France'],
       ['de-DE', 'Standard German as spoken in Germany'], ['it-IT', 'Italian as spoken in Italy'],
-      ['pt-BR', 'Brazilian Portuguese'], ['zh-CN', 'Standard Mandarin with Simplified Chinese writing']
+      ['pt-BR', 'Brazilian Portuguese'], ['zh-CN', 'Standard Mandarin with Simplified Chinese writing'],
+      ['sr-Latn-RS', 'Standard Serbian as spoken in Serbia, with ekavian forms and the Latin script']
     ]) {
       assert.equal(supportsLanguage(locale!), true, locale);
       await provider.create('v=0', locale!);
@@ -28,11 +29,11 @@ test('all native locales reach the provider with the intended regional speech ta
       assert.equal(requests.at(-1).session.audio.output.voice, 'marin');
       assert.equal(requests.at(-1).session.store, false);
     }
-    for (const unsupported of ['pt-PT', 'de', 'zh', 'zh-TW', '__proto__', 'constructor', '']) {
+    for (const unsupported of ['pt-PT', 'de', 'zh', 'zh-TW', 'sr', 'sr-RS', 'sr-Cyrl-RS', '__proto__', 'constructor', '']) {
       assert.equal(supportsLanguage(unsupported), false);
       await assert.rejects(provider.create('v=0', unsupported), { code: 'invalid_language' });
     }
-    assert.equal(requests.length, 9);
+    assert.equal(requests.length, 10);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
