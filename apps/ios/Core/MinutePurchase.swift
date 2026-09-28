@@ -4,8 +4,8 @@ import StoreKit
 public enum ApplePurchaseSubmission {
     /// Only rejection by StoreKit proves that this invocation cannot deliver a purchase later.
     /// Network, system and task-cancellation errors retain the durable recovery record.
-    @MainActor public static func perform<Result>(purchase: () async throws -> Result,
-                                                  clearRejectedAttempt: () throws -> Void) async throws -> Result {
+    @MainActor public static func perform<Result>(purchase: @MainActor () async throws -> Result,
+                                                  clearRejectedAttempt: @MainActor () throws -> Void) async throws -> Result {
         do { return try await purchase() }
         catch {
             if definitelyRejected(error) { try clearRejectedAttempt() }

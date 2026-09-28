@@ -110,6 +110,19 @@ final class MinutePurchaseTests: XCTestCase {
             XCTAssertFalse(restored.canResumeCheckout, "An uncertain charge must never launch again")
         }
     }
+    @MainActor func testSubmissionKeepsActorOwnedResultOnTheMainActor() async throws {
+        final class PurchaseResultReference { var delivered = false }
+        let expected = PurchaseResultReference()
+        var clearCalled = false
+        let result = try await ApplePurchaseSubmission.perform(purchase: {
+            MainActor.preconditionIsolated()
+            return expected
+        }, clearRejectedAttempt: { clearCalled = true })
+        XCTAssertTrue(result === expected)
+        result.delivered = true
+        XCTAssertTrue(expected.delivered)
+        XCTAssertFalse(clearCalled)
+    }
     @MainActor func testPendingStoreKitResultRetainsRecoveryRecord() async throws {
         var clearCalled = false
         let result = try await ApplePurchaseSubmission.perform(purchase: { Product.PurchaseResult.pending },
