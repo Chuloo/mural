@@ -92,7 +92,8 @@ class PaymentHealthMonitorTests(unittest.TestCase):
         target = {"compose": ["/opt/mural/deploy/compose"], "database": "mural"}
         with patch.object(monitor.subprocess, "run", return_value=MagicMock(stdout=json.dumps(self.snapshot()))) as run:
             self.assertEqual(monitor.collect(target), [])
-            self.assertIn("READ ONLY", run.call_args.args[0][-1])
+            self.assertIn("READ ONLY", run.call_args.kwargs["input"])
+            self.assertEqual(run.call_args.args[0][-2:], ["-f", "-"])
             self.assertEqual(run.call_args.kwargs["timeout"], 45)
             self.assertNotIn("shell", run.call_args.kwargs)
 

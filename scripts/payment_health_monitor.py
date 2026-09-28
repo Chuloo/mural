@@ -82,8 +82,10 @@ def inspect_snapshot(snapshot, expected_providers=()):
 
 def collect(target):
     command = target["compose"] + ["exec", "-T", "database", "psql", "-X", "-qAt",
-        "-v", "ON_ERROR_STOP=1", "-U", "mural", "-d", target["database"], "-c", SNAPSHOT_SQL]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=45, check=True)
+        "-v", "ON_ERROR_STOP=1", "-U", "mural", "-d", target["database"], "-f", "-"]
+    # A command string (-c) may expose only the final COMMIT result on older psql.
+    # A script preserves the SELECT output and still closes the read-only transaction.
+    result = subprocess.run(command, input=SNAPSHOT_SQL, capture_output=True, text=True, timeout=45, check=True)
     return inspect_snapshot(json.loads(result.stdout), target.get("expectedProviders", []))
 
 
