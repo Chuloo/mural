@@ -46,7 +46,7 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
             val ai = if (basis == "actual-ai-usage") parseAIValue(item) else null
             MinuteProduct(item.text("sku"), item.text("providerProduct"), ai?.displayMinutes ?: item.count("minutes", 1440).toInt(), item.text("currency"),
                 item.count("totalMinor", 100_000_000), item.text("environment"), ai)
-        })
+        }, maximumQuantity = if (body["maximumQuantity"] == null) 1 else body.count("maximumQuantity", 10).toInt())
     }
     override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String): MinuteOrder = decoded {
         if (channel != PurchaseChannel.PLAY) throw MinuteCommerceFailure.Unavailable
@@ -58,16 +58,19 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         MinuteOrder(body.text("orderID"), ai?.displayMinutes ?: body.count("minutes", 1440).toInt(), body.text("currency"), body.count("totalMinor", 100_000_000),
             PlayOrderBinding(payment.text("orderID"), payment.text("obfuscatedAccountID"), payment.text("obfuscatedProfileID")), ai)
     }
-    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder = decoded {
+    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder = createStripe(session, sku, idempotencyKey, 1)
+    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String, quantity: Int): StripeMinuteOrder = decoded {
         if (channel != PurchaseChannel.STRIPE) throw MinuteCommerceFailure.Unavailable
-        if (sku.length > 128 || !minuteIdentifier.matches(sku) || !minuteUUID.matches(idempotencyKey))
+        if (quantity !in 1..10 || sku.length > 128 || !minuteIdentifier.matches(sku) || !minuteUUID.matches(idempotencyKey))
             throw MinuteCommerceFailure.InvalidResponse
         val body = request("POST", "minutes/orders", session,
-            buildJsonObject { put("provider", "stripe"); put("sku", sku) }, idempotencyKey)
+            buildJsonObject { put("provider", "stripe"); put("sku", sku); put("quantity", quantity) }, idempotencyKey)
         val payment = body["payment"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
-        val ai = parseAIValue(body)
+        val returnedQuantity = if (body["quantity"] == null) 1 else body.count("quantity", 10).toInt()
+        if (returnedQuantity != quantity) throw MinuteCommerceFailure.InvalidResponse
+        val ai = parseAIValue(body, returnedQuantity)
         val order = StripeMinuteOrder(body.text("orderID"), body.text("currency"), body.count("totalMinor", 100_000_000),
-            StripeCheckoutURL.checked(payment.text("checkoutURL")), ai)
+            StripeCheckoutURL.checked(payment.text("checkoutURL")), ai, returnedQuantity)
         if (payment.text("orderID") != order.orderID) throw MinuteCommerceFailure.InvalidResponse
         return@decoded order
     }
@@ -111,12 +114,12 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
             if (ai == null) body.count("reversalOutstandingMilliseconds", 86_400_000) else 0,
             body.boolean("fulfillmentRecorded"), ai)
     }
-    private fun parseAIValue(body: JsonObject): AIValueEntitlement {
+    private fun parseAIValue(body: JsonObject, quantity: Int = 1): AIValueEntitlement {
         if (body.text("entitlementKind") != "ai_value" || body.text("billingBasis") != "actual-ai-usage" ||
             !body.boolean("estimate")) throw MinuteCommerceFailure.InvalidResponse
         val quote = body["quote"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
         return AIValueEntitlement(body.text("aiValueNanoUSD"), body.count("estimatedMilliseconds", MAX_AI_ESTIMATE_MS),
-            json.decodeFromJsonElement<AIValueQuote>(quote))
+            json.decodeFromJsonElement<AIValueQuote>(JsonObject(quote + ("quantity" to JsonPrimitive(quantity)))))
     }
     private fun validateID(value: String) { if (!minuteUUID.matches(value)) throw MinuteCommerceFailure.InvalidResponse }
     private fun validateToken(value: String) { if (!validPurchaseToken(value)) throw MinuteCommerceFailure.InvalidResponse }

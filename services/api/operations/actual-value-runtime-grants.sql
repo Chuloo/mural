@@ -1,5 +1,8 @@
 -- Apply after migrations017/018 and the existing billing/voice/helper grants.
 -- Runtime may settle funds, but only a privileged operator can approve historical cash provenance.
+REVOKE ALL ON deployment_environment FROM mural_runtime;
+GRANT SELECT ON deployment_environment TO mural_runtime;
+REVOKE ALL ON FUNCTION protect_deployment_environment() FROM mural_runtime;
 GRANT EXECUTE ON FUNCTION lock_ai_pricing_policy() TO mural_runtime;
 REVOKE INSERT,UPDATE,DELETE ON ai_pricing_policy,ai_pricing_audit FROM mural_runtime;
 GRANT SELECT ON wallets,ledger,reservations TO mural_runtime;

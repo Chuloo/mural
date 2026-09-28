@@ -8,9 +8,10 @@ import { AIValuePurchases, PurchaseFulfillmentRouter, type AIValueProduct } from
 import { MinutePurchases, type MinuteProduct, type PurchaseEnvironment } from './minute-purchases.js';
 import { MinuteReceiptVault, MinuteDeliveryWorker, type MinuteDeliveryAdapter } from './minute-provider-delivery.js';
 import { StripeMinuteProvider, type StripeMinuteTransport } from './stripe-minute-provider.js';
+import { AppleMinuteProvider, type AppleMinuteTransport } from './apple-minute-provider.js';
 import { PlayMinuteProvider } from './play-minute-provider.js';
 import { GooglePlayHTTPTransport, GoogleServiceAccountTokens, type PlayTransport } from './google-play-transport.js';
-import { MinuteCommerceRunner, PlayVoidReconciler, type CommerceRunnerOptions } from './minute-commerce-runner.js';
+import { MinuteCommerceRunner, PlayVoidReconciler, AppleHistoryReconciler, type CommerceRunnerOptions } from './minute-commerce-runner.js';
 
 export const permanentAndroidPackage = 'chat.mural.android';
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -62,6 +63,7 @@ export interface MinuteCommerceServices {
   fulfillment: PurchaseFulfillmentRouter;
   stripe?: StripeMinuteProvider;
   play?: PlayMinuteProvider;
+  apple?: AppleMinuteProvider;
   vault: MinuteReceiptVault;
   worker: MinuteDeliveryWorker;
   runner: MinuteCommerceRunner;
@@ -72,6 +74,7 @@ export interface MinuteCommerceServices {
 export interface MinuteCommerceDependencies {
   stripeTransport?: StripeMinuteTransport;
   playTransport?: PlayTransport;
+  appleTransport?: AppleMinuteTransport;
   request?: typeof fetch;
   onFailure?: CommerceRunnerOptions['onFailure'];
 }
@@ -88,14 +91,14 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     if (salesEnabled) throw invalid();
     return undefined;
   }
-  const pathNames = ['COMMERCE_CONFIG_FILE', 'CATALOG_FILE', 'RECEIPT_KEYS_FILE', 'STRIPE_CREDENTIALS_FILE', 'PLAY_SERVICE_ACCOUNT_FILE', 'PLAY_BINDING_KEY_FILE'];
+  const pathNames = ['COMMERCE_CONFIG_FILE', 'CATALOG_FILE', 'RECEIPT_KEYS_FILE', 'STRIPE_CREDENTIALS_FILE', 'PLAY_SERVICE_ACCOUNT_FILE', 'PLAY_BINDING_KEY_FILE','APPLE_CREDENTIALS_FILE'];
   const paths = pathNames.map(name => env[prefix + name]).filter((path): path is string => path !== undefined);
   if (new Set(paths).size !== paths.length) throw invalid();
   const manifest = keys((await protectedJSON(env[prefix + 'COMMERCE_CONFIG_FILE'])).value,
-    ['version','environment','webOrigin','stripe','play','runner']);
+    ['version','environment','webOrigin','stripe','play','apple','runner']);
   if (manifest.version !== 1 || !['test','live'].includes(manifest.environment) ||
     (manifest.environment === 'live' && !allowLive) || (manifest.environment === 'test' && allowLive) ||
-    (!manifest.stripe && !manifest.play)) throw invalid();
+    (!manifest.stripe && !manifest.play && !manifest.apple)) throw invalid();
   const environment: PurchaseEnvironment = manifest.environment;
   if (manifest.webOrigin !== undefined) {
     const origin = new URL(manifest.webOrigin);
@@ -116,7 +119,7 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
   const receipt = keys((await protectedJSON(env[prefix + 'RECEIPT_KEYS_FILE'])).value, ['activeKeyID','keys']);
   const ring = new Map(Object.entries(object(receipt.keys)).map(([id, key]) => [id, base64Key(key)]));
   const vault = new MinuteReceiptVault(db, receipt.activeKeyID, ring);
-  let stripe: StripeMinuteProvider | undefined, play: PlayMinuteProvider | undefined;
+  let stripe: StripeMinuteProvider | undefined, play: PlayMinuteProvider | undefined, apple:AppleMinuteProvider | undefined;
   if (manifest.stripe) {
     const settings = keys(manifest.stripe, ['accountID','managedPayments']);
     const credentials = keys((await protectedJSON(env[prefix + 'STRIPE_CREDENTIALS_FILE'])).value, ['secretKey','webhookSecret']);
@@ -141,9 +144,20 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     for (const product of [...products,...aiProducts]) if (product.provider === 'play' && (settings.currencyExponents[product.currency] === undefined ||
       ('quote' in product && product.quote.currencyExponent!==settings.currencyExponents[product.currency]))) throw invalid();
   } else if (env[prefix + 'PLAY_SERVICE_ACCOUNT_FILE'] !== undefined || env[prefix + 'PLAY_BINDING_KEY_FILE'] !== undefined || dependencies.playTransport) throw invalid();
-  const adapters: MinuteDeliveryAdapter[] = [stripe, play].filter((item): item is StripeMinuteProvider | PlayMinuteProvider => !!item);
+  if(manifest.apple) {
+    const settings=keys(manifest.apple,['bundleID','appAppleID']);
+    const credentials=keys((await protectedJSON(env[prefix+'APPLE_CREDENTIALS_FILE'])).value,['signingKey','keyID','issuerID','rootCertificates']);
+    if(!Array.isArray(credentials.rootCertificates) || credentials.rootCertificates.length<1 || credentials.rootCertificates.length>5 ||
+      credentials.rootCertificates.some((v:unknown)=>typeof v!=='string' || v.length>10000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(v))) throw invalid();
+    const key=createPrivateKey(credentials.signingKey);
+    if(key.asymmetricKeyType!=='ec' || key.asymmetricKeyDetails?.namedCurve!=='prime256v1') throw invalid();
+    apple=new AppleMinuteProvider(db,vault,{bundleID:settings.bundleID,appAppleID:settings.appAppleID,environment,allowLive,
+      signingKey:credentials.signingKey,keyID:credentials.keyID,issuerID:credentials.issuerID,
+      rootCertificates:credentials.rootCertificates.map((v:string)=>Buffer.from(v,'base64')),purchasesEnabled:salesEnabled},dependencies.appleTransport);
+  } else if(env[prefix+'APPLE_CREDENTIALS_FILE']!==undefined || dependencies.appleTransport) throw invalid();
+  const adapters: MinuteDeliveryAdapter[] = [stripe, play,apple].filter((item): item is StripeMinuteProvider | PlayMinuteProvider | AppleMinuteProvider => !!item);
   const purchases = new MinutePurchases(db, { catalog: products, verifiers: adapters, salesEnabled: false });
-  const aiPurchases = new AIValuePurchases(db, { catalog: aiProducts, verifiers: adapters, salesEnabled });
+  const aiPurchases = new AIValuePurchases(db, { catalog: aiProducts, verifiers: adapters, salesEnabled, quantityEnabled: [...(flag(env,'STRIPE_QUANTITY_ENABLED')?['stripe' as const]:[]),...(flag(env,'APPLE_QUANTITY_ENABLED')?['apple' as const]:[])] });
   const fulfillment = new PurchaseFulfillmentRouter(db, purchases, aiPurchases, adapters);
   // Removing a historical decryption key or provider would strand settled purchases and refunds.
   const receipts = (await db.query(`SELECT DISTINCT encryption_key_id,provider,environment,merchant FROM minute_provider_receipts
@@ -154,7 +168,7 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     ['intervalMilliseconds','deliveryLimit','reconciliationLimit','voidPagesPerRun']);
   const worker = new MinuteDeliveryWorker(db, fulfillment, adapters);
   const runner = new MinuteCommerceRunner(vault, worker, play ? new PlayVoidReconciler(db, play) : undefined,
-    { ...runnerSettings, onFailure: dependencies.onFailure });
-  return { purchases, aiPurchases, fulfillment, ...(stripe ? { stripe } : {}), ...(play ? { play } : {}), vault, worker, runner,
+    { ...runnerSettings, onFailure: dependencies.onFailure },apple?new AppleHistoryReconciler(db,apple):undefined);
+  return { purchases, aiPurchases, fulfillment, ...(stripe ? { stripe } : {}), ...(play ? { play } : {}), ...(apple?{apple}:{}), vault, worker, runner,
     environment, salesEnabled, catalogSHA256: catalogFile.hash };
 }

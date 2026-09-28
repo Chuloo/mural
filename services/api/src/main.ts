@@ -36,6 +36,12 @@ try {
     { clientID: appleClient, teamID: appleTeam, keyID: appleKey, privateKeyPEM: await readFile(appleFile, 'utf8') }) : undefined;
   await appleRevoker?.validateConfiguration();
   minuteCommerce = await configuredMinuteCommerce(db, process.env, { onFailure: code => diagnostics.record('background_failed', { operation: 'commerce.reconcile' }, new ServiceError(code)) });
+  const deploymentEnvironment=(await db.query('SELECT environment FROM deployment_environment WHERE singleton')).rows[0]?.environment;
+  if (!['live','test'].includes(deploymentEnvironment)) throw new Error('Missing deployment environment.');
+  if (deploymentEnvironment==='test' && (origin.origin!=='https://sandbox-api.mural.chat' ||
+      new URL(databaseURL).pathname!=='/mural_sandbox' || minuteCommerce?.environment!=='test'))
+    throw new Error('Sandbox funding requires the isolated sandbox database, origin and commerce bindings.');
+  if (deploymentEnvironment==='live' && origin.hostname==='sandbox-api.mural.chat') throw new Error('Sandbox database was not provisioned.');
   const accessMode = process.env.HOSTED_VOICE_ACCESS ?? 'restricted-test';
   if (!['restricted-test','public-minutes'].includes(accessMode)) throw new Error('Invalid hosted access mode.');
   const publicMinuteAccess = accessMode==='public-minutes';
@@ -61,6 +67,7 @@ try {
     if (process.env.HOSTED_HELPERS_EXPERIMENTAL === 'true') {
       hostedHelpers = new HostedHelpers(db, new OpenAIHostedResponses(process.env.OPENAI_API_KEY ?? '', fetch, diagnostics), {
         accountAllowlist: accounts, aggregateFundingCapNano: lifetimeFundingCapNano,publicMinuteAccess,publicPaidAccess,
+        restrictToAllowlist:deploymentEnvironment==='test',
         helperBudgetNanoPerMinute: BigInt(process.env.HOSTED_HELPER_BUDGET_PER_MINUTE_NANO ?? '50000000'),
         maxRequestsPerMinute: Number(process.env.HOSTED_HELPER_REQUESTS_PER_MINUTE ?? '24'),
         maxSearchesPerSession: Number(process.env.HOSTED_HELPER_SEARCHES_PER_SESSION ?? '0'),
@@ -71,6 +78,8 @@ try {
     }
     hosted = new HostedVoice(db, new OpenAILiveProvider(process.env.OPENAI_API_KEY ?? '', { diagnostics }),
       { accountAllowlist: accounts, billingUnit, lifetimeFundingCapNano,publicMinuteAccess,publicPaidAccess, helpers: hostedHelpers,
+        restrictToAllowlist:deploymentEnvironment==='test',
+        maximumSessionMilliseconds:deploymentEnvironment==='test'?60_000:undefined,
         diagnostics });
     await hosted.start();
   }
@@ -104,15 +113,17 @@ try {
     void pruneAuthenticationRecords(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.accounts' }, error); });
     void pruneAccessRequests(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.access_requests' }, error); });
     void pruneAIReports(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.reports' }, error); });
-    void hostedHelpers?.expireBudgets().catch(error => { diagnostics.record('background_failed', { operation: 'helpers.expire' }, error); });
   }, 15 * 60_000);
   cleanup.unref();
+  const helperExpiry=setInterval(()=>{
+    void hostedHelpers?.expireBudgets().catch(error=>{diagnostics.record('background_failed',{operation:'helpers.expire'},error);});
+  },15_000);helperExpiry.unref();
   let guestLinkFlight:Promise<unknown>|undefined;
   const retryGuestLinks=()=>{if(!guestLinkFlight)guestLinkFlight=finalizeDeferredGuestLinks(db)
     .catch(error=>{diagnostics.record('background_failed', { operation: 'guest.transfer' }, error);}).finally(()=>{guestLinkFlight=undefined;});};
   const guestLinkCleanup=setInterval(retryGuestLinks,60_000);guestLinkCleanup.unref();retryGuestLinks();
   const close = async () => {
-    clearInterval(cleanup);clearInterval(guestLinkCleanup);await guestLinkFlight; await app.close(); await hosted?.stop(); await minuteCommerce?.runner.stop();
+    clearInterval(cleanup);clearInterval(helperExpiry);clearInterval(guestLinkCleanup);await guestLinkFlight; await app.close(); await hosted?.stop(); await minuteCommerce?.runner.stop();
     await db.end(); process.exit(0);
   };
   process.on('SIGTERM', close); process.on('SIGINT', close);

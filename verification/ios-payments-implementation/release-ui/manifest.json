@@ -1,0 +1,65 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D75DEBE7-06A5-49EF-8294-FE6148ECD371",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D44D73A8-55CB-4470-8B3E-BED178F244D8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Free boundary - continue conversation - largest text_0_9348F7E4-87E8-4572-9006-EAE0CB868DFA.png",
+        "timestamp" : 1790589140.869
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D75DEBE7-06A5-49EF-8294-FE6148ECD371",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C474B8F2-34AD-4300-868F-3A0535AB9411.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Free boundary - updating minutes - largest text_0_D87E1C7F-3805-486D-8191-A7CE591C2E91.png",
+        "timestamp" : 1790589133.477
+      }
+    ],
+    "testIdentifier" : "MuralUITests/testFreeBoundaryAtLargestTextSize()",
+    "testIdentifierURL" : "test://com.apple.xcode/Mural/MuralUITests/MuralUITests/testFreeBoundaryAtLargestTextSize"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D75DEBE7-06A5-49EF-8294-FE6148ECD371",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "4B884764-A36C-4FBA-8046-7CBBD5BD0D71.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Free boundary - continue conversation_0_AB1E5743-9EC3-4785-BC0E-6CA918CE7D06.png",
+        "timestamp" : 1790589150.756
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D75DEBE7-06A5-49EF-8294-FE6148ECD371",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "4B12CCC8-248E-4B93-88A2-C2EFC254AC18.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Free boundary - updating minutes_0_AD3EBE6C-571A-49A8-871D-5A2FABA5ACA3.png",
+        "timestamp" : 1790589145.845
+      }
+    ],
+    "testIdentifier" : "MuralUITests/testFreeBoundaryPreservesConversationAndWaitsForSettlement()",
+    "testIdentifierURL" : "test://com.apple.xcode/Mural/MuralUITests/MuralUITests/testFreeBoundaryPreservesConversationAndWaitsForSettlement"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D75DEBE7-06A5-49EF-8294-FE6148ECD371",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CB3D0560-87FE-4BF7-ABAC-E2982F60975F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Apple packs - largest text_0_50681320-AD52-402D-A129-DB0D3641461D.png",
+        "timestamp" : 1790589174.979
+      }
+    ],
+    "testIdentifier" : "MuralUITests/testPurchaseControlsRemainReachableAtLargestTextSize()",
+    "testIdentifierURL" : "test://com.apple.xcode/Mural/MuralUITests/MuralUITests/testPurchaseControlsRemainReachableAtLargestTextSize"
+  }
+]

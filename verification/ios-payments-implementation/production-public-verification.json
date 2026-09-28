@@ -1,0 +1,190 @@
+{
+  "checkedAt": "2026-09-28T09:31:48.757650+00:00",
+  "checks": {
+    "/healthz": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "stage": "commercial-foundation",
+        "hostedVoice": true,
+        "guestMinutes": true,
+        "livePayments": true
+      }
+    },
+    "/readyz": {
+      "status": 200,
+      "body": {
+        "database": true,
+        "hostedVoice": true,
+        "guestMinutes": true,
+        "livePayments": true
+      }
+    },
+    "/v1/auth/providers": {
+      "status": 200,
+      "body": {
+        "google": true,
+        "googleAndroid": true,
+        "apple": true
+      }
+    },
+    "/v1/minutes/products?provider=stripe": {
+      "status": 200,
+      "body": {
+        "available": true,
+        "maximumQuantity": 10,
+        "billingBasis": "actual-ai-usage",
+        "products": [
+          {
+            "environment": "live",
+            "sku": "mural-ai-usd-500-v1",
+            "providerProduct": "price_1UFXcoBpHYkum990z31ONadP",
+            "currency": "usd",
+            "totalMinor": 500,
+            "entitlementKind": "ai_value",
+            "billingBasis": "actual-ai-usage",
+            "estimate": true,
+            "aiValueNanoUSD": "3690000000",
+            "estimatedMilliseconds": 2214000,
+            "quote": {
+              "policyVersion": 1,
+              "aiValueMinor": 369,
+              "serviceFeeBasisPoints": 1500,
+              "serviceFeeMinor": 56,
+              "processingEstimateMinor": 70,
+              "processingBufferMinor": 5,
+              "paymentFeeMinor": 75,
+              "totalMinor": 500,
+              "currency": "usd",
+              "currencyExponent": 2,
+              "processingRateBasisPoints": 790,
+              "processingFixedMinor": 30,
+              "processingBufferBasisPoints": 100,
+              "exchangeRateNumerator": "1",
+              "exchangeRateDenominator": "1",
+              "exchangeRateVersion": "usd-1-2026-09",
+              "estimatedNanoUSDPerMinute": "100000000",
+              "estimateRateVersion": "voice-helper-2026-09-v1"
+            }
+          },
+          {
+            "environment": "live",
+            "sku": "mural-ai-usd-1000-v1",
+            "providerProduct": "price_1UFXiGBpHYkum990HAjCSxVO",
+            "currency": "usd",
+            "totalMinor": 1000,
+            "entitlementKind": "ai_value",
+            "billingBasis": "actual-ai-usage",
+            "estimate": true,
+            "aiValueNanoUSD": "7660000000",
+            "estimatedMilliseconds": 4596000,
+            "quote": {
+              "policyVersion": 1,
+              "aiValueMinor": 766,
+              "serviceFeeBasisPoints": 1500,
+              "serviceFeeMinor": 115,
+              "processingEstimateMinor": 109,
+              "processingBufferMinor": 10,
+              "paymentFeeMinor": 119,
+              "totalMinor": 1000,
+              "currency": "usd",
+              "currencyExponent": 2,
+              "processingRateBasisPoints": 790,
+              "processingFixedMinor": 30,
+              "processingBufferBasisPoints": 100,
+              "exchangeRateNumerator": "1",
+              "exchangeRateDenominator": "1",
+              "exchangeRateVersion": "usd-1-2026-09",
+              "estimatedNanoUSDPerMinute": "100000000",
+              "estimateRateVersion": "voice-helper-2026-09-v1"
+            }
+          },
+          {
+            "environment": "live",
+            "sku": "mural-ai-usd-1500-v1",
+            "providerProduct": "price_1UFXlQBpHYkum990OuapY0dp",
+            "currency": "usd",
+            "totalMinor": 1500,
+            "entitlementKind": "ai_value",
+            "billingBasis": "actual-ai-usage",
+            "estimate": true,
+            "aiValueNanoUSD": "11610000000",
+            "estimatedMilliseconds": 6966000,
+            "quote": {
+              "policyVersion": 1,
+              "aiValueMinor": 1161,
+              "serviceFeeBasisPoints": 1500,
+              "serviceFeeMinor": 175,
+              "processingEstimateMinor": 149,
+              "processingBufferMinor": 15,
+              "paymentFeeMinor": 164,
+              "totalMinor": 1500,
+              "currency": "usd",
+              "currencyExponent": 2,
+              "processingRateBasisPoints": 790,
+              "processingFixedMinor": 30,
+              "processingBufferBasisPoints": 100,
+              "exchangeRateNumerator": "1",
+              "exchangeRateDenominator": "1",
+              "exchangeRateVersion": "usd-1-2026-09",
+              "estimatedNanoUSDPerMinute": "100000000",
+              "estimateRateVersion": "voice-helper-2026-09-v1"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/minutes/products?provider=apple": {
+      "status": 200,
+      "body": {
+        "available": false,
+        "maximumQuantity": 1,
+        "products": []
+      }
+    },
+    "/v1/account/connect-google": {
+      "status": 400,
+      "body": "{\"error\":{\"code\":\"invalid_request\"}}"
+    },
+    "/v1/live/requests/00000000-0000-0000-0000-000000000001/close": {
+      "status": 401,
+      "body": "{\"error\":{\"code\":\"sign_in_required\"}}"
+    }
+  },
+  "revision": "8063bdff34028d1441c8d2a755b889bae30e6983",
+  "sourceClean": true,
+  "image": "sha256:ca64ebd2fe90b2efa804ca63a2c42235e24a49caffcb1b7e26292c88cfeb7df4",
+  "rollback": "/opt/mural/deploy/before-payment-backend-20260928T092457Z",
+  "encryptedDatabaseBackup": true,
+  "migrationsApplied": [
+    "024",
+    "025",
+    "026",
+    "027",
+    "028",
+    "029"
+  ],
+  "runtimeGrantsApplied": [
+    "apple-purchase-runtime-grants.sql",
+    "hosted-close-runtime-grants.sql"
+  ],
+  "logs": {
+    "newPermissionOrSchemaErrors": 0,
+    "historicalUnsettledCalls": 21,
+    "historicalCallDates": [
+      "2026-09-14",
+      "2026-09-16"
+    ],
+    "historicalCallRetryReason": "provider_hangup_unconfirmed",
+    "completedStripeJobs": 37,
+    "pendingStripeJobs": 1,
+    "pendingJobCreated": "2026-09-27",
+    "pendingJobReason": "provider_still_pending",
+    "note": "Pending provider status is reported by the current runner as minute_delivery_failed; no new completed-purchase delivery failure was observed. Historical usage records were not altered."
+  },
+  "initialDeploymentAttempt": {
+    "revision": "4d5015d4d58704a7d75e0e3ae04f4ea8b3340749",
+    "result": "rolled back after runtime file permission failure; corrected COPY ownership in 8063bdf",
+    "databaseRestored": false
+  }
+}

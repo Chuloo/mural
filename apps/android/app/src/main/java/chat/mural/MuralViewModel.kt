@@ -113,6 +113,45 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var typedRepliesSent by mutableStateOf(0); private set
     fun clearTypedReplyError() { typedReplyError = null }
     var notice by mutableStateOf<String?>(null); private set
+    private var continuationSession: SessionRecord? = null
+    private var continuationOwnerID: String? = null
+    private var freeBoundaryOwnerID: String? = null
+    var hasContinuation by mutableStateOf(false); private set
+    var continuationReady by mutableStateOf(false); private set
+    var continuationNeedsMinutes by mutableStateOf(false); private set
+    private val continuationPreferences = application.getSharedPreferences("mural_continuation", android.content.Context.MODE_PRIVATE)
+    private val continuationKey = "v1." + BuildConfig.MANAGED_API_ORIGIN
+    private fun clearContinuation() {
+        continuationSession = null; continuationOwnerID = null; freeBoundaryOwnerID = null
+        hasContinuation = false; continuationReady = false; continuationNeedsMinutes = false
+        continuationPreferences.edit().remove(continuationKey).apply()
+    }
+    private fun restoreContinuation(accountID: String) {
+        if (isRunning || hasContinuation || conversationProvider != ConversationProvider.HOSTED_MINUTES) return
+        val checkpoint = runCatching { json.decodeFromString<ConversationContinuationCheckpoint>(
+            continuationPreferences.getString(continuationKey, null) ?: return) }.getOrNull() ?: return
+        val saved = checkpoint.recover(archive.sessions, accountID, language.id) ?: return
+        continuationSession = saved; continuationOwnerID = accountID; hasContinuation = true; continuationReady = false
+        session = saved; selectedTheme = language.themes.firstOrNull { it.id == saved.themeID }; topicResult = saved.topics.lastOrNull()
+        if (saved.themeID == "current") selectedTheme = topicResult?.let(::currentTheme)
+        state = "ended"; resetJob?.cancel()
+        notice = getApplication<Application>().getString(R.string.notice_continue_settling)
+    }
+    private suspend fun refreshContinuation() {
+        val expected = continuationOwnerID ?: return
+        if (isRunning) return
+        continuationReady = false; continuationNeedsMinutes = false
+        val owner = availableHostedOwner()?.takeIf { it.accountID == expected } ?: return
+        val balance = hostedBalance(owner)
+        if (isRunning || continuationOwnerID != expected || availableHostedOwner()?.accountID != expected) return
+        continuationReady = !accountChangeBlocked && balance.canStartConversation && balance.presentation?.settlementState == "settled"
+        continuationNeedsMinutes = ConversationContinuationPolicy.needsMoreMinutes(balance.presentation?.settlementState,
+            balance.presentation?.availabilityReason)
+        if (continuationNeedsMinutes) notice = getApplication<Application>().getString(R.string.notice_continue_insufficient)
+        else if (continuationReady) notice = getApplication<Application>().getString(
+            if (balance.availableMilliseconds > 0) R.string.notice_continue_remaining_free
+            else R.string.notice_continue_purchased)
+    }
     var meaning by mutableStateOf(""); private set
     var translating by mutableStateOf(false); private set
     var meaningFailed by mutableStateOf(false); private set
@@ -412,6 +451,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** Called by the minutes/account UI after an explicit provider choice. No failure changes it. */
     fun selectConversationProvider(provider: ConversationProvider) {
         if (isRunning || !storageReady) return
+        if (provider != conversationProvider) clearContinuation()
         conversationProvider = provider
         viewModelScope.launch {
             try { providerStore.select(provider) }
@@ -434,6 +474,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onAccountChanged(account: AccountState) {
         selectedAccount = account
+        continuationReady = false
         // Invalidate immediately. Slow guest or member reads may not restore access during a transition.
         readiness.selectAccount(null, true)
         accessJob?.cancel()
@@ -452,6 +493,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                         if (!completeGuestSignIn() && guests.memberMaySpend(member.accountID) != true) return@launch
                     }
                     if (selectedAccount.busy) return@launch
+                    restoreContinuation(member.accountID)
                     readiness.selectAccount(member.accountID, false)
                     readiness.refresh()
                 } else {
@@ -464,6 +506,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     readiness.selectAccount(guest?.accountID, false)
                     readiness.refresh()
                 }
+                refreshContinuation()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { readiness.selectAccount(null, false) }
         }
@@ -606,7 +649,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         reconciliationJob = viewModelScope.launch {
             // Wait for cancelled creation/provenance writes before clearing the durable pending marker.
             connectionJob?.join()
-            if (settleHostedSessions()) refreshHostedReadiness()
+            repeat(40) {
+                if (settleHostedSessions()) { refreshHostedReadiness(); return@launch }
+                delay(15_000)
+            }
         }
     }
 
@@ -631,7 +677,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 if (!closed) return false
             }
             val balance = hostedBalance(owner)
-            if (balance.reservedMilliseconds != 0L) return false
+            if (balance.reservedMilliseconds != 0L || balance.paid?.reservedNanoUSD?.toBigInteger()?.signum() == 1 ||
+                balance.presentation?.settlementState?.let { it != "settled" } == true) return false
             guests?.recordSettledBalance(owner, balance)
             providerStore.clearPending()
             pendingHostedOwnerID = null; accountChangeBlocked = false
@@ -708,12 +755,16 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun selectLanguage(id: String) {
         if (!isRunning && LanguageRegistry.get(id) != null) updatePreferences(archive.preferences.copy(learningLanguageID = id))
     }
+    private var startingWithHistory = false
     fun chooseTheme(theme: ConversationTheme?) {
         if (!isRunning && session != null) resetConversation()
         selectedTheme = theme
-        if (state == "active") {
+        if (theme?.id != "current") topicResult = null
+        if (state == "active" || state == "connecting") {
             updateSession { it.themeID = theme?.id; it.title = theme?.title ?: language.defaultTitle }
-            command("instructions", TeachingPolicy.theme(theme, language), respond = true)
+            // The opening instruction applies a selection made while connecting.
+            startingWithHistory = false
+            if (state == "active") command("instructions", TeachingPolicy.theme(theme, language), respond = true)
         }
     }
     fun toggleMeaning() {
@@ -757,6 +808,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun start() {
         if (isRunning || !cloudReady()) return
+        if (hasContinuation && !continuationReady) { reconcileHostedSessions(); refreshHostedReadiness(); return }
+        val continuing = continuationSession
+        val continuingOwner = continuationOwnerID
         val choice = conversationProvider
         if (choice == ConversationProvider.HOSTED_MINUTES && accountChangeBlocked) {
             presentError(getApplication<Application>().getString(R.string.hosted_checking_previous))
@@ -776,45 +830,51 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val id = session!!.id
         val module = language
         val instructions = TeachingPolicy.voice(module, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage)
-        val history = ConversationHistory.messages(session)
+        val history = ConversationHistory.messages(continuing ?: session)
+        startingWithHistory = history.isNotEmpty()
         if (choice == ConversationProvider.HOSTED_MINUTES) accountChangeBlocked = true
         transport = if (turnBased) turnTransport else liveTransport
         connectionJob = viewModelScope.launch {
             try {
                 if (turnBased) turnTransport.connect(api, module.id) { guidance -> spokenReply(id, instructions, module, guidance) }
-                else liveTransport.connect(if (choice == ConversationProvider.PERSONAL_KEY) api else hostedProvider(id),
-                    instructions, history, module.locale)
+                else {
+                    val provider: LiveSessionProvider = if (choice == ConversationProvider.PERSONAL_KEY) api else {
+                        val owner = requireHostedOwner()
+                        if (selectedAccount.busy || owner.accountID != hostedReadiness.accountID ||
+                            (continuingOwner != null && continuingOwner != owner.accountID)) throw HostedFailure.SignInRequired
+                        val hosted = hostedClient(owner.accountID)
+                        val balance = hostedBalance(owner)
+                        if (!balance.canStartConversation || !hosted.available()) throw HostedFailure.Unavailable
+                        freeBoundaryOwnerID = if (balance.availableMilliseconds in 1 until archive.preferences.sessionMinutes * 60_000L &&
+                            balance.paid?.available == true) owner.accountID else null
+                        if (freeBoundaryOwnerID != null) notice = getApplication<Application>().getString(R.string.notice_free_minutes_first)
+                        // Commit provider provenance and the unresolved-owner marker before making a paid create.
+                        hostedSessionIDs = hostedSessionIDs + id
+                        pendingHostedOwnerID = owner.accountID
+                        withContext(NonCancellable) { providerStore.markHosted(id, owner.accountID) }
+                        object : LiveSessionProvider {
+                            override suspend fun createLiveSession(request: LiveSessionRequest): LiveSessionConnection {
+                                val result = hosted.createLiveSession(request.copy(requestedMilliseconds = archive.preferences.sessionMinutes * 60_000L))
+                                val lease = result.lease as? HostedAPIClient.HostedLease ?: throw HostedFailure.InvalidResponse
+                                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                                    if (lease.paid) freeBoundaryOwnerID = null
+                                    hostedBindings.bind(id, owner.accountID, binding(lease))
+                                    if (session?.id != id || state != "connecting") {
+                                        hostedBindings.ended(id); reconcileHostedSessions()
+                                    }
+                                }
+                                return result
+                            }
+                        }
+                    }
+                    liveTransport.connect(provider, instructions, history, module.locale)
+                }
             } catch (cancelled: CancellationException) {
                 if (choice == ConversationProvider.HOSTED_MINUTES) reconcileHostedSessions()
                 throw cancelled
             } catch (e: Exception) {
                 if (session?.id == id && isRunning) fail(e, R.string.error_voice_connect_failed)
                 if (choice == ConversationProvider.HOSTED_MINUTES) reconcileHostedSessions()
-            }
-        }
-    }
-    /** Checks hosted access and commits provenance before the paid create, then binds its lease to conversation [id]. */
-    private suspend fun hostedProvider(id: String): LiveSessionProvider {
-        val owner = requireHostedOwner()
-        if (selectedAccount.busy || owner.accountID != hostedReadiness.accountID) throw HostedFailure.SignInRequired
-        val hosted = hostedClient(owner.accountID)
-        val balance = hostedBalance(owner)
-        if (!balance.canStartConversation || !hosted.available()) throw HostedFailure.Unavailable
-        // Commit provider provenance and the unresolved-owner marker before making a paid create.
-        hostedSessionIDs = hostedSessionIDs + id
-        pendingHostedOwnerID = owner.accountID
-        withContext(NonCancellable) { providerStore.markHosted(id, owner.accountID) }
-        return object : LiveSessionProvider {
-            override suspend fun createLiveSession(request: LiveSessionRequest): LiveSessionConnection {
-                val result = hosted.createLiveSession(request.copy(requestedMilliseconds = archive.preferences.sessionMinutes * 60_000L))
-                val lease = result.lease as? HostedAPIClient.HostedLease ?: throw HostedFailure.InvalidResponse
-                withContext(NonCancellable + Dispatchers.Main.immediate) {
-                    hostedBindings.bind(id, owner.accountID, binding(lease))
-                    if (session?.id != id || state != "connecting") {
-                        hostedBindings.ended(id); reconcileHostedSessions()
-                    }
-                }
-                return result
             }
         }
     }
@@ -836,6 +896,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun finish(final: Boolean) {
         if (!isRunning) return
+        if (ConversationContinuationPolicy.reachedFreeBoundary(freeBoundaryOwnerID != null,
+                session?.endReason, session?.id?.let(hostedBindings::reachedDeadline) == true)) {
+            updateSession { it.endReason = "Reserved conversation time ended" }
+        }
         connectionJob?.cancel(); durationJob?.cancel(); closeJob?.cancel(); assessmentJob?.cancel()
         actionJob?.cancel(); clearLookup(); languageCheckJob?.cancel()
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()
@@ -847,13 +911,23 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             "Time limit" -> getApplication<Application>().getString(R.string.notice_time_limit_reached)
             else -> null
         }
+        if (freeBoundaryOwnerID != null && session?.endReason in listOf("Time limit", "Reserved conversation time ended")) {
+            continuationSession = session; continuationOwnerID = freeBoundaryOwnerID
+            hasContinuation = true; continuationReady = false
+            session?.let { saved ->
+                continuationPreferences.edit().putString(continuationKey, json.encodeToString(
+                    kotlinx.serialization.serializer<ConversationContinuationCheckpoint>(),
+                    ConversationContinuationCheckpoint(saved.id, freeBoundaryOwnerID!!))).apply()
+            }
+            notice = getApplication<Application>().getString(R.string.notice_continue_settling)
+        }
         session?.let {
             if (it.id in hostedSessionIDs) {
                 hostedBindings.ended(it.id); reconcileHostedSessions(); finishHostedAssessment(clone(it))
             } else finalAssessments.submit(clone(it))
         }
         scheduleTranslation(utteranceComplete = true)
-        resetJob = viewModelScope.launch { delay(15000); if (state == "ended") resetConversation() }
+        if (!hasContinuation) resetJob = viewModelScope.launch { delay(15000); if (state == "ended" && !hasContinuation) resetConversation() }
     }
     private fun fail(message: String, needsKeySetup: Boolean = false) { finish(false); resetJob?.cancel(); state = "failed"; presentError(message, needsKeySetup) }
     private fun fail(e: Throwable, @StringRes fallback: Int) {
@@ -864,6 +938,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun resetConversation() {
         if (isRunning) return
+        clearContinuation()
         generation++; resetJob?.cancel(); actionJob?.cancel(); clearLookup(); assessmentJob?.cancel(); languageCheckJob?.cancel(); meanings.reset()
         session = null; selectedTheme = null; topicResult = null
         notice = null; working = false; state = "idle"; voiceSession = false
@@ -889,10 +964,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         when (event["type"]?.jsonPrimitive?.content) {
             "mural.session.created" -> updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content; it.voiceSeconds = 15.0 }
             "session.started" -> if (state == "connecting") {
+                continuationSession = null; continuationOwnerID = null; hasContinuation = false; continuationReady = false
+                continuationPreferences.edit().remove(continuationKey).apply()
                 state = "active"; activity = ConversationActivity(activityNow()); conversationPace = ConversationPace(); inactivitySeconds = null
                 if (conversationProvider == ConversationProvider.PERSONAL_KEY) providerIssue = null
                 updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content ?: it.providerID }
-                command("instructions", TeachingPolicy.greeting(language), respond = true); startDurationChecks()
+                if (selectedTheme?.id == "current") topicResult?.let { command("thinking", "Sourced context, data: ${it.text}") }
+                command("instructions", TeachingPolicy.greeting(language, selectedTheme, startingWithHistory), respond = true); startDurationChecks()
             }
             "session.input_transcript.delta", "session.output_transcript.delta" -> {
                 val text = event["delta"]?.jsonPrimitive?.contentOrNull ?: return
@@ -1158,9 +1236,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun discuss(brief: TopicBrief) {
         if (brief.languageID != language.id) return
         if (state == "active") {
-            updateSession { if (it.topics.none { t -> t.id == brief.id }) it.topics += brief }
+            topicResult = brief; selectedTheme = currentTheme(brief)
+            updateSession {
+                it.themeID = selectedTheme?.id; it.title = brief.query
+                if (it.topics.none { t -> t.id == brief.id }) it.topics += brief
+            }
             if (voiceSession) {
-                command("thinking", "Sourced context, data: ${brief.text}"); command("instructions", "Discuss this topic ONLY in ${language.name}.", respond = true)
+                command("thinking", "Sourced context, data: ${brief.text}"); command("instructions", TeachingPolicy.theme(selectedTheme, language), respond = true)
                 return
             }
         } else resetConversation()

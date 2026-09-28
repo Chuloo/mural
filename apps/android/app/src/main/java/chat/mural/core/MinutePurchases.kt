@@ -22,10 +22,11 @@ data class MinuteProduct(val sku: String, val providerProduct: String, val minut
         if (exponent !in 0..3) null else totalMinor * when (exponent) { 0 -> 1_000_000; 1 -> 100_000; 2 -> 10_000; else -> 1_000 }
     } catch (_: IllegalArgumentException) { null }
 }
-data class MinuteCatalog(val available: Boolean, val products: List<MinuteProduct>) {
+data class MinuteCatalog(val available: Boolean, val products: List<MinuteProduct>, val maximumQuantity: Int = 1) {
     init {
         require(products.size <= 100 && available == products.isNotEmpty())
         require(products.distinctBy { it.sku }.size == products.size)
+        require(maximumQuantity in listOf(1, 10))
     }
 }
 data class PlayOrderBinding(val orderID: String, val obfuscatedAccountID: String, val obfuscatedProfileID: String) {

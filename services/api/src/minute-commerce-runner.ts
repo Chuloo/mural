@@ -2,6 +2,7 @@ import { transaction, type Database } from './db.js';
 import { ServiceError } from './errors.js';
 import type { MinuteDeliveryWorker, MinuteReceiptVault } from './minute-provider-delivery.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
+import type { AppleMinuteProvider } from './apple-minute-provider.js';
 
 const day = 86_400_000;
 export interface CommerceRunnerOptions {
@@ -9,7 +10,35 @@ export interface CommerceRunnerOptions {
   deliveryLimit?: number;
   reconciliationLimit?: number;
   voidPagesPerRun?: number;
-  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed') => void;
+  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed' | 'apple_history_reconciliation_failed') => void;
+}
+
+/** Replay notification history without advancing beyond an unverified or unqueued page. */
+export class AppleHistoryReconciler {
+  constructor(readonly db:Database,readonly apple:Pick<AppleMinuteProvider,'environment'|'merchant'|'pollHistory'>) {}
+  async page():Promise<{pages:number;scheduled:number;more:boolean}> {
+    return transaction(this.db,async sql=>{
+      const locked=(await sql.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired',
+        [`mural-apple-history:${this.apple.environment}:${this.apple.merchant}`])).rows[0].acquired;
+      if(!locked)return {pages:0,scheduled:0,more:false};
+      await sql.query('INSERT INTO apple_notification_cursors(environment,merchant) VALUES($1,$2) ON CONFLICT DO NOTHING',[this.apple.environment,this.apple.merchant]);
+      const row=(await sql.query('SELECT * FROM apple_notification_cursors WHERE environment=$1 AND merchant=$2',[this.apple.environment,this.apple.merchant])).rows[0];
+      if(row.page_token===null && row.next_poll_after.getTime()>Date.now())return {pages:0,scheduled:0,more:false};
+      const now=Date.now(),retention=(this.apple.environment==='test'?30:180)*day;
+      const end=row.window_end_ms===null?now-60_000:Number(row.window_end_ms);
+      const start=row.window_start_ms===null?(row.completed_through_ms===null?now-retention+day:Number(row.completed_through_ms)-300_000):Number(row.window_start_ms);
+      if(start<now-retention+60_000)throw new ServiceError('apple_history_cursor_expired',503);
+      if(start>=end || (row.page_token===null && row.completed_through_ms!==null && end<=Number(row.completed_through_ms)))
+        return {pages:0,scheduled:0,more:false};
+      const result=await this.apple.pollHistory(start,end,row.page_token??undefined);
+      if(result.nextPageToken && result.nextPageToken===row.page_token)throw new ServiceError('apple_history_cursor_stalled',502);
+      await sql.query(`UPDATE apple_notification_cursors SET completed_through_ms=CASE WHEN $5::text IS NULL THEN $4::bigint ELSE completed_through_ms END,
+        window_start_ms=CASE WHEN $5::text IS NULL THEN NULL ELSE $3::bigint END,window_end_ms=CASE WHEN $5::text IS NULL THEN NULL ELSE $4::bigint END,
+        page_token=$5,next_poll_after=CASE WHEN $5::text IS NULL THEN now()+interval '15 minutes' ELSE now() END,updated_at=now()
+        WHERE environment=$1 AND merchant=$2`,[this.apple.environment,this.apple.merchant,start,end,result.nextPageToken??null]);
+      return {pages:1,scheduled:result.scheduled,more:!!result.nextPageToken};
+    });
+  }
 }
 
 /** Checkpoints a page only after its verified voids and retry jobs have committed. */
@@ -59,7 +88,7 @@ export class MinuteCommerceRunner {
   #stopped = false;
   constructor(readonly vault: Pick<MinuteReceiptVault, 'scheduleReconciliation'>,
     readonly worker: Pick<MinuteDeliveryWorker, 'runBatch'>, readonly voids?: PlayVoidReconciler,
-    options: CommerceRunnerOptions = {}) {
+    options: CommerceRunnerOptions = {}, readonly appleHistory?: AppleHistoryReconciler) {
     this.#interval = options.intervalMilliseconds ?? 60_000;
     this.#deliveryLimit = options.deliveryLimit ?? 5;
     this.#reconciliationLimit = options.reconciliationLimit ?? 100;
@@ -93,6 +122,10 @@ export class MinuteCommerceRunner {
     for (let index = 0; this.voids && index < this.#voidPages && !this.#stopped; index++) {
       try { if (!(await this.voids.page()).more) break; }
       catch { this.#failure('play_void_reconciliation_failed'); break; }
+    }
+    for(let index=0;this.appleHistory && index<this.#voidPages && !this.#stopped;index++){
+      try {if(!(await this.appleHistory.page()).more)break;}
+      catch {this.#failure('apple_history_reconciliation_failed');break;}
     }
   }
   start(): void {

@@ -87,6 +87,15 @@ struct ManagedAccountClient {
         let result: ManagedWallet = try await request("/v1/wallet", method: "GET", session: session)
         try result.validate(); return result
     }
+    func connectGoogle(session: ManagedAccountSession, apple: String, appleChallenge: ManagedAuthChallenge,
+                       google: String, googleChallenge: ManagedAuthChallenge) async throws {
+        struct Result: Decodable { let accountID: UUID; let connected: Bool }
+        let result: Result = try await request("/v1/account/connect-google", method: "POST", body: [
+            "confirmation": "connect_google", "appleToken": apple, "appleChallengeID": appleChallenge.challengeID.uuidString,
+            "googleToken": google, "googleChallengeID": googleChallenge.challengeID.uuidString
+        ], session: session)
+        guard result.accountID == session.accountID, result.connected else { throw ManagedAccountError.invalidResponse }
+    }
     func profile(session: ManagedAccountSession) async throws -> ManagedAccountProfile {
         let result: ManagedAccountProfile = try await request("/v1/account", method: "GET", session: session)
         try result.validate(session: session); return result
@@ -116,10 +125,13 @@ struct ManagedAccountClient {
         }
         let (data, response) = try await http.send(request)
         guard (200...299).contains(response.statusCode) else {
-            if response.statusCode == 401 { throw ManagedAccountError.server("sign_in_required") }
             let code = (try? JSONDecoder().decode(Failure.self, from: data))?.error.code ?? "service_unavailable"
+            if response.statusCode == 401 {
+                if ["invalid_challenge", "invalid_identity_token"].contains(code) { throw ManagedAccountError.invalidResponse }
+                throw ManagedAccountError.server("sign_in_required")
+            }
             // Only a small allowlist is displayed. Never surface raw provider/server response text.
-            let safe = ["unresolved_billing", "rate_limit", "apple_sign_in_not_ready", "apple_revocation_not_configured", "invalid_challenge", "identity_provider_not_configured"]
+            let safe = ["unresolved_billing", "rate_limit", "apple_sign_in_not_ready", "apple_revocation_not_configured", "invalid_challenge", "identity_provider_not_configured", "same_account_required", "identity_link_conflict"]
             throw ManagedAccountError.server(safe.contains(code) ? code : "service_unavailable")
         }
         do { return try JSONDecoder().decode(T.self, from: data) }

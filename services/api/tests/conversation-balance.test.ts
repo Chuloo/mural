@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
 import { appendEntry } from '../src/ledger.js';
@@ -10,6 +11,34 @@ import { conversationBalance } from '../src/conversation-balance.js';
 const databaseURL = process.env.TEST_DATABASE_URL;
 if (databaseURL && !new URL(databaseURL).pathname.endsWith('_test')) throw new Error('Use an isolated test database.');
 const policy = { enabled: true, estimatedNanoUSDPerMinute: 100_000_000n, minimumSessionNanoUSD: 30_000_000n };
+test('shared minute projections match native fixtures and wait for a complete funding transaction',{skip:!databaseURL},async()=>{
+  const schema=`projection_${randomUUID().replaceAll('-','')}`,url=new URL(databaseURL!);
+  url.searchParams.set('options',`-c search_path=${schema}`);const db=connectDatabase(url.toString());
+  await db.query(`CREATE SCHEMA ${schema}`);
+  try {
+    await migrate(db);
+    const fixtures=JSON.parse(await readFile(new URL('../../../shared/fixtures/cross-platform/minutes-presentation.json',import.meta.url),'utf8'));
+    for(const fixture of fixtures) {
+      const account=randomUUID();
+      await transaction(db,async sql=>{
+        await sql.query('INSERT INTO accounts(id) VALUES($1)',[account]);
+        await sql.query('INSERT INTO wallets(account_id) VALUES($1)',[account]);
+        await appendMinuteEntry(sql,account,`free:${account}`,'gift',fixture.freeMilliseconds,0);
+        await appendEntry(sql,account,`paid:${account}`,'purchase',BigInt(fixture.paidNanoUSD),BigInt(fixture.reservedNanoUSD));
+      });
+      const result=await conversationBalance(db,account,true,policy);
+      const {asOf,revision,...actual}=result.presentation;
+      const {asOf:_date,revision:_revision,...expected}=fixture.presentation;
+      assert.deepEqual(actual,expected,fixture.name);assert.ok(BigInt(revision)>0n);assert.ok(Date.parse(asOf));
+    }
+    const account=randomUUID();await db.query('INSERT INTO accounts(id) VALUES($1)',[account]);await db.query('INSERT INTO wallets(account_id) VALUES($1)',[account]);
+    const sql=await db.connect();await sql.query('BEGIN');await appendMinuteEntry(sql,account,'atomic-free','gift',260_000,0);
+    let finished=false;const reading=conversationBalance(db,account,true,policy).then(value=>{finished=true;return value;});
+    await new Promise(resolve=>setTimeout(resolve,30));assert.equal(finished,false);
+    await appendEntry(sql,account,'atomic-paid','purchase',3_690_000_000n,0n);await sql.query('COMMIT');sql.release();
+    assert.equal((await reading).presentation.totalDisplayMilliseconds,2_474_000);
+  } finally {await db.query(`DROP SCHEMA ${schema} CASCADE`);await db.end();}
+});
 test('combined balance preserves free time and excludes sandbox cash, holds and refunded value', { skip: !databaseURL }, async () => {
   const schema = `balance_${randomUUID().replaceAll('-', '')}`, url = new URL(databaseURL!);
   url.searchParams.set('options', `-c search_path=${schema}`);
@@ -33,12 +62,17 @@ test('combined balance preserves free time and excludes sandbox cash, holds and 
       estimatedNanoUSDPerMinute: '100000000', minimumSessionNanoUSD: '30000000', available: true });
     await transaction(db, sql => appendEntry(sql, account, 'refund-after-use', 'reversal', -2_100_000_000n, 0n));
     const refunded = await conversationBalance(db, account, true, policy);
-    assert.ok('paid' in refunded);
+    assert.ok(refunded.paid);
     assert.equal(refunded.paid.balanceNanoUSD, '-100000000');
     assert.equal(refunded.paid.availableNanoUSD, '0');
     assert.equal(refunded.paid.estimatedMilliseconds, 0);
     assert.equal(refunded.paid.available, false);
     assert.equal(refunded.availableMilliseconds, 480_000);
+    assert.ok(BigInt(refunded.presentation.revision)>BigInt(result.presentation.revision));
+    assert.equal(refunded.presentation.settlementState,'pending');
+    assert.equal(refunded.presentation.availabilityReason,'settling');
+    assert.equal(refunded.presentation.totalDisplayMilliseconds,480_000);
+    assert.equal((await conversationBalance(db,account,true,policy)).presentation.revision,refunded.presentation.revision);
     assert.ok(!('paid' in await conversationBalance(db, account, true, { ...policy, enabled: false })));
     await db.query('UPDATE wallets SET cash_provenance_verified=false WHERE account_id=$1', [account]);
     assert.ok(!('paid' in await conversationBalance(db, account, true, policy)));

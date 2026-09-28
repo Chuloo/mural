@@ -15,11 +15,11 @@ enum HostedError: LocalizedError {
     }
     var errorDescription: String? {
         return switch self {
-        case .unavailable: "Mural’s free conversations are unavailable right now. Try again later or use your own API key."
+        case .unavailable: "Mural conversations are unavailable right now. Try again later or use your own API key."
         case .invalidResponse: "Mural couldn’t verify the server response. Please try again."
         case .secureStorage: "Mural couldn’t read this iPhone’s secure trial record. Unlock your iPhone and try again."
         case .signInRequired: "Sign in to continue using Mural minutes, or use your own API key."
-        case .noMinutes: "Your free minutes have been used. You can keep practising with your own API key."
+        case .noMinutes: "No Mural minutes are available for a new conversation. Check Account or use your own API key."
         case .unconfirmed: "Mural is checking an earlier conversation. Please try again shortly."
         case .personalKeyRequired: "Current topics need your API key. Add one in Settings and switch to Your key."
         case .server(let code, _):
@@ -74,7 +74,30 @@ struct HostedOwner: Codable, Sendable {
 }
 
 struct HostedBalance {
+    let presentation: MuralMinutesPresentation?
     let availableMilliseconds: Int
+    let paidEstimatedMilliseconds: Int?
+    let paidAvailable: Bool
+    let hasPaidRemainder: Bool
+    let paidReserved: Bool
+    var canStart: Bool { presentation.map { $0.availabilityReason == "ready" } ?? (availableMilliseconds > 0 || paidAvailable) }
+    var totalDisplayMilliseconds: Int? {
+        guard let paidEstimatedMilliseconds else { return hasPaidRemainder ? nil : availableMilliseconds }
+        let (sum, overflow) = availableMilliseconds.addingReportingOverflow(paidEstimatedMilliseconds)
+        return overflow ? nil : sum
+    }
+    var displayText: String {
+        if let presentation { return presentation.displayText }
+        guard let total = totalDisplayMilliseconds else { return "Couldn’t check your minutes" }
+        if total == 0 && paidReserved { return "Updating your minutes…" }
+        if hasPaidRemainder {
+            let minutes = total / 60_000
+            return minutes > 0 ? "About \(minutes) min" : "Less than 1 min"
+        }
+        guard total > 0 else { return "No minutes left" }
+        let seconds = MinuteBalanceTime.roundedSeconds(total)
+        return "\(seconds / 60) min \(seconds % 60) sec"
+    }
     init(_ value: [String: Any]) throws {
         guard value["unit"] as? String == "milliseconds", value["billingBasis"] as? String == "connected-conversation-time",
               let balance = value["balanceMilliseconds"] as? Int, let reserved = value["reservedMilliseconds"] as? Int,
@@ -82,8 +105,54 @@ struct HostedBalance {
               balance >= 0, reserved >= 0, reserved <= balance, available == balance - reserved
         else { throw HostedError.invalidResponse }
         availableMilliseconds = available
+        if let paid = value["paid"] as? [String: Any] {
+            guard paid["billingBasis"] as? String == "actual-ai-usage",
+                  let balanceText = paid["balanceNanoUSD"] as? String,
+                  let reservedText = paid["reservedNanoUSD"] as? String,
+                  let availableText = paid["availableNanoUSD"] as? String,
+                  let balanceValue = Int64(balanceText), let reservedValue = Int64(reservedText), reservedValue >= 0,
+                  let availableValue = Int64(availableText), availableValue >= 0,
+                  availableValue == (balanceValue > reservedValue ? balanceValue - reservedValue : 0),
+                  let estimate = paid["estimatedMilliseconds"] as? Int, estimate >= 0,
+                  let minimumText = paid["minimumSessionNanoUSD"] as? String,
+                  let minimum = Int64(minimumText), minimum > 0,
+                  let eligible = paid["available"] as? Bool,
+                  eligible == (availableValue >= minimum)
+            else { throw HostedError.invalidResponse }
+            paidEstimatedMilliseconds = estimate
+            paidAvailable = eligible
+            hasPaidRemainder = availableValue > 0
+            paidReserved = reservedValue > 0
+        } else {
+            paidEstimatedMilliseconds = nil
+            paidAvailable = false
+            hasPaidRemainder = false
+            paidReserved = false
+        }
+        if let projection = value["presentation"] {
+            presentation = try JSONDecoder().decode(MuralMinutesPresentation.self, from: JSONSerialization.data(withJSONObject: projection))
+            try presentation!.validate()
+            guard presentation!.freeAvailableMilliseconds == availableMilliseconds,
+                  presentation!.hasPurchasedRemainder == hasPaidRemainder else { throw HostedError.invalidResponse }
+            if presentation!.paidSupported {
+                guard paidEstimatedMilliseconds != nil, presentation!.paidEstimatedMilliseconds == paidEstimatedMilliseconds else { throw HostedError.invalidResponse }
+            } else if paidEstimatedMilliseconds != nil { throw HostedError.invalidResponse }
+        } else { presentation = nil }
+    }
+    static func preview(paidOnly: Bool, reserved: Bool = false) -> HostedBalance? {
+        let free = paidOnly ? 0 : 260_000
+        return try? HostedBalance(["unit": "milliseconds", "billingBasis": "connected-conversation-time",
+                                   "balanceMilliseconds": free, "reservedMilliseconds": 0,
+                                   "availableMilliseconds": free,
+                                   "paid": ["billingBasis": "actual-ai-usage", "balanceNanoUSD": "3690000000",
+                                            "reservedNanoUSD": reserved ? "3690000000" : "0",
+                                            "availableNanoUSD": reserved ? "0" : "3690000000",
+                                            "estimatedMilliseconds": reserved ? 0 : 2_214_000,
+                                            "minimumSessionNanoUSD": "100000000", "available": !reserved]])
     }
 }
+
+enum HostedFunding: String { case minutes, aiValue = "ai-value" }
 
 struct HostedLease {
     let sessionID: UUID
@@ -91,6 +160,9 @@ struct HostedLease {
     let deadline: Date
     let providerSessionID: String
     let answerSDP: String
+    let funding: HostedFunding
+    let limitMilliseconds: Int
+    let minimumChargeMilliseconds: Int
 }
 
 /// The same HTTPS origin is used for guest admission, member minutes and hosted voice.
@@ -155,22 +227,66 @@ struct HostedLease {
         return available && value["experimental"] as? Bool == true
     }
     func create(owner: HostedOwner, sdp: String, language: String, instructions: String,
-                requestedMilliseconds: Int, requestID: UUID) async throws -> HostedLease {
+                requestedMilliseconds: Int, requestID: UUID, history: [[String: Any]] = []) async throws -> HostedLease {
         guard sdp.hasPrefix("v=0"), sdp.utf8.count <= 65_536, instructions.utf8.count <= 12_000,
+              history.count <= 40, (try JSONSerialization.data(withJSONObject: history)).count <= 6_000,
               (60_000...3_600_000).contains(requestedMilliseconds) else { throw HostedError.invalidResponse }
-        let value = try await request("/v1/live/sessions", method: "POST", body: [
-            "sdp": sdp, "language": language, "instructions": instructions, "history": [],
+        try HostedCloseRecovery.shared.begin(requestID: requestID, owner: owner)
+        let value: [String: Any]
+        do { value = try await request("/v1/live/sessions", method: "POST", body: [
+            "sdp": sdp, "language": language, "instructions": instructions, "history": history,
             "requestedMilliseconds": requestedMilliseconds
-        ], owner: owner, key: requestID)
+        ], owner: owner, key: requestID) }
+        catch { HostedCloseRecovery.shared.failed(requestID: requestID); throw error }
+        do {
+            let lease = try decodeLease(value, owner: owner, requestedMilliseconds: requestedMilliseconds)
+            try HostedCloseRecovery.shared.track(lease, requestID: requestID)
+            return lease
+        }
+        catch {
+            HostedCloseRecovery.shared.failed(requestID: requestID)
+            // A malformed success response can still represent a funded server session.
+            if let sessionID = UUID(uuidString: value["sessionID"] as? String ?? "") {
+                try? HostedCloseRecovery.shared.track(sessionID: sessionID, owner: owner, active: false)
+                _ = try? await request("/v1/live/sessions/\(sessionID.uuidString.lowercased())/close",
+                                       method: "POST", body: [:], owner: owner)
+            }
+            throw error
+        }
+    }
+    private func decodeLease(_ value: [String: Any], owner: HostedOwner,
+                             requestedMilliseconds: Int) throws -> HostedLease {
         guard let id = UUID(uuidString: value["sessionID"] as? String ?? ""),
               let providerID = value["providerSessionID"] as? String, !providerID.isEmpty,
               let answer = value["sdp"] as? String, answer.hasPrefix("v=0"), answer.utf8.count <= 65_536,
               let deadlineText = value["deadline"] as? String,
               let deadline = Self.parseDate(deadlineText), deadline > .now,
               value["experimental"] as? Bool == true,
-              value["billingBasis"] as? String == "connected-conversation-time"
+              let fundingText = value["fundingMode"] as? String,
+              let funding = HostedFunding(rawValue: fundingText),
+              let minimum = value["minimumChargeMilliseconds"] as? Int,
+              minimum == 15_000
         else { throw HostedError.invalidResponse }
-        return HostedLease(sessionID: id, owner: owner, deadline: deadline, providerSessionID: providerID, answerSDP: answer)
+        let limit: Int
+        switch funding {
+        case .minutes:
+            guard value["billingBasis"] as? String == "connected-conversation-time",
+                  value["billingPolicy"] as? String == "connected-time-15s-minimum-v1",
+                  let reserved = value["reservedMilliseconds"] as? Int,
+                  (1...requestedMilliseconds).contains(reserved), value["limitMilliseconds"] == nil
+            else { throw HostedError.invalidResponse }
+            limit = reserved
+        case .aiValue:
+            guard value["billingBasis"] as? String == "actual-ai-usage",
+                  value["billingPolicy"] as? String == "actual-ai-usage-15s-minimum-v1",
+                  let granted = value["limitMilliseconds"] as? Int,
+                  (minimum...requestedMilliseconds).contains(granted), value["reservedMilliseconds"] == nil
+            else { throw HostedError.invalidResponse }
+            limit = granted
+        }
+        return HostedLease(sessionID: id, owner: owner, deadline: deadline, providerSessionID: providerID,
+                           answerSDP: answer, funding: funding, limitMilliseconds: limit,
+                           minimumChargeMilliseconds: minimum)
     }
     private static func parseDate(_ value: String) -> Date? {
         let fractional = ISO8601DateFormatter()
@@ -178,8 +294,22 @@ struct HostedLease {
         return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
     func close(_ lease: HostedLease) async throws {
-        let value = try await request("/v1/live/sessions/\(lease.sessionID.uuidString.lowercased())/close", method: "POST", body: [:], owner: lease.owner)
-        guard value["sessionID"] as? String == lease.sessionID.uuidString.lowercased() else { throw HostedError.invalidResponse }
+        _ = try await close(sessionID: lease.sessionID, owner: lease.owner)
+    }
+    func close(requestID: UUID, owner: HostedOwner) async throws -> Bool {
+        let value = try await request("/v1/live/requests/\(requestID.uuidString.lowercased())/close", method: "POST", body: [:], owner: owner)
+        guard UUID(uuidString: value["requestID"] as? String ?? "") == requestID else { throw HostedError.invalidResponse }
+        if value["preventedCreate"] as? Bool == true && value["session"] is NSNull { return true }
+        guard let session = value["session"] as? [String: Any], UUID(uuidString: session["sessionID"] as? String ?? "") != nil else { throw HostedError.invalidResponse }
+        return session["state"] as? String == "closed" && session["settlementState"] as? String == "final"
+    }
+    func close(sessionID: UUID, owner: HostedOwner) async throws -> Bool {
+        let value = try await request("/v1/live/sessions/\(sessionID.uuidString.lowercased())/close", method: "POST", body: [:], owner: owner)
+        guard UUID(uuidString: value["sessionID"] as? String ?? "") == sessionID,
+              let state = value["state"] as? String, ["creating", "active", "closing", "incomplete", "closed"].contains(state)
+        else { throw HostedError.invalidResponse }
+        // Older servers and a closed voice stream are not proof that helper usage settled.
+        return state == "closed" && value["settlementState"] as? String == "final"
     }
     func helper(_ lease: HostedLease, purpose: String, instructions: String, input: String,
                 schema: [String: Any]?, search: Bool) async throws -> APIResult {

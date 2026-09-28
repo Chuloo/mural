@@ -4,33 +4,33 @@ import XCTest
 @MainActor final class VoiceConnectionRecoveryTests: XCTestCase {
     func testBriefHandoffRecoversAndLaterDisconnectFailsOnce() async throws {
         var failures = 0
-        let recovery = VoiceConnectionRecovery(timeout: .milliseconds(40)) { failures += 1 }
+        let lost = expectation(description: "Disconnected call expires")
+        let recovery = VoiceConnectionRecovery(timeout: .milliseconds(40)) { failures += 1; lost.fulfill() }
         recovery.disconnected()
         recovery.connected()
         try await Task.sleep(for: .milliseconds(60))
         XCTAssertEqual(failures, 0)
         recovery.disconnected()
-        try await waitUntil { failures == 1 }
+        await fulfillment(of: [lost], timeout: 1)
         XCTAssertEqual(failures, 1)
         recovery.disconnected()
         try await Task.sleep(for: .milliseconds(60))
         XCTAssertEqual(failures, 1)
     }
 
-    /// CI runners can run a main-actor timer well after its deadline, so a firing is awaited rather than given fixed slack.
-    private func waitUntil(_ condition: () -> Bool, timeout: Duration = .seconds(2)) async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        while !condition() && clock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
-    }
-
     func testRepeatedDisconnectDoesNotExtendDeadline() async throws {
         var failures = 0
-        let recovery = VoiceConnectionRecovery(timeout: .milliseconds(60)) { failures += 1 }
+        let lost = expectation(description: "Repeated disconnects keep the original deadline")
+        let recovery = VoiceConnectionRecovery(timeout: .milliseconds(60)) { failures += 1; lost.fulfill() }
         recovery.disconnected()
-        try await Task.sleep(for: .milliseconds(40))
-        recovery.disconnected()
-        try await Task.sleep(for: .milliseconds(40))
+        let repeats = Task { @MainActor in
+            while !Task.isCancelled {
+                recovery.disconnected()
+                do { try await Task.sleep(for: .milliseconds(10)) } catch { return }
+            }
+        }
+        defer { repeats.cancel() }
+        await fulfillment(of: [lost], timeout: 1)
         XCTAssertEqual(failures, 1)
     }
 
