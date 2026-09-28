@@ -22,6 +22,7 @@ The backend is deployed and both native implementations are available for review
 | --- | --- | --- |
 | Server full suite | 401 passed; no skips | `/private/tmp/mural-server-closeout-final.log` |
 | Latest Apple adapter and late-closeout tests | 14 passed; no skips, including the new test added after the full suite | `/private/tmp/mural-apple-closeout-final.log` |
+| Request admission and account tests | 24 passed; no skips | `/private/tmp/mural-payment-admission-regression.log` |
 | Server type checking | Passed | Same focused verification logs |
 | Swift core | 128 passed | `/private/tmp/mural-swift-continuation-final.log` |
 | iOS full interface suite | 44 passed; zero failures | `.build/PaymentFinalRegression.xcresult` |
@@ -37,6 +38,10 @@ The backend is deployed and both native implementations are available for review
 The native accessibility audit checks contrast, hit regions, descriptions, clipping and traits in checkout and history. Largest iOS text and Spanish Android large text have automated coverage and visual inspection. These checks do not replace the outstanding full VoiceOver/TalkBack walkthrough.
 
 Earlier test failures were resolved: preview continuation needed an explicit simulator fixture, Spanish checkout assertions needed the new title, and the Android report test needed to dismiss its keyboard before selecting consent. The final full iOS run passed. The final Android changes passed the affected 15-test suite after the full 77-test baseline.
+
+## Security review
+
+CodeQL alerts 60 and 61 report missing rate limits in the new Apple receipt routes and close-intent route. Both run after the existing Fastify admission hook. The focused tests confirm that Apple delivery/recovery share a durable 600-request network allowance per hour, which survives app recreation. Close intents reject request 121 within a minute. Rejections occur before authentication or provider work. Encoded routes and forged proxy headers cannot bypass these limits; other trusted networks retain their own allowance. The reviewed findings are false positives; no runtime protection was removed.
 
 ## Actual provider and device checks
 
