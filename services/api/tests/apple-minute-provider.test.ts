@@ -10,6 +10,7 @@ import {MinuteReceiptVault,MinuteDeliveryWorker} from '../src/minute-provider-de
 import {paidAIBalance} from '../src/ledger.js';
 import {AppleHistoryReconciler} from '../src/minute-commerce-runner.js';
 import {Environment,type JWSTransactionDecodedPayload,type ResponseBodyV2DecodedPayload} from '@apple/app-store-server-library';
+import {deleteAccount} from '../src/auth.js';
 
 const databaseURL=process.env.TEST_DATABASE_URL;
 if(databaseURL && !new URL(databaseURL).pathname.endsWith('_test')) throw new Error('Use an isolated test database.');
@@ -42,6 +43,25 @@ async function fixture(){
     {storefront:'USA',scheduleVersion:'test-schedule'});transport.bind(o.orderID,quantity);return o;},
     async cleanup(){await db.query(`DROP SCHEMA ${schema} CASCADE`);await db.end();}};
 }
+integration('late Apple notifications reconcile and refund a retained deleted account without restoring sign-in',async()=>{
+  const f=await fixture();try{
+    const order=await f.order(2);
+    await deleteAccount(f.db,f.account,undefined,undefined,undefined,new Date(Date.now()+25*60*60*1000));
+    f.transport.notificationValue={notificationUUID:randomUUID(),version:'2.0',signedDate:1_700_000_000_002,notificationType:'ONE_TIME_CHARGE',
+      data:{bundleId:'chat.mural.ios',appAppleId:6816001011,environment:Environment.SANDBOX,signedTransactionInfo:'valid.signed.transaction'}};
+    await f.apple.notify('valid.signed.notification');
+    const worker=new MinuteDeliveryWorker(f.db,f.router,[f.apple]);await worker.runBatch();
+    assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[f.account])).rows[0].balance_nano,order.aiValueNanoUSD);
+    await assert.rejects(paidAIBalance(f.db,f.account),{code:'account_not_found'});
+    f.transport.value={...f.transport.value,signedDate:1_700_000_000_004,revocationDate:1_700_000_000_003};
+    f.transport.notificationValue={...f.transport.notificationValue,notificationUUID:randomUUID(),notificationType:'REFUND'};
+    await f.apple.notify('valid.signed.notification');await worker.runBatch();
+    await f.apple.notify('valid.signed.notification');await worker.runBatch();
+    assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[f.account])).rows[0].balance_nano,'0');
+    assert.ok((await f.db.query('SELECT deleted_at FROM accounts WHERE id=$1',[f.account])).rows[0].deleted_at);
+    assert.equal((await f.db.query("SELECT count(*) FROM ledger WHERE kind='purchase'")).rows[0].count,'1');
+  }finally{await f.cleanup();}
+});
 test('Apple milliunits convert exactly',()=>{
   assert.equal(appleMinorUnits(14000,2),1400);assert.equal(appleMinorUnits(3300000,0),3300);assert.equal(appleMinorUnits(1234,3),1234);
   for(const [amount,exponent] of [[1,2],[0,2],[-1,2],[1.5,2],[Number.MAX_SAFE_INTEGER,2],[1000,4]])assert.throws(()=>appleMinorUnits(amount!,exponent!));
@@ -193,6 +213,10 @@ integration('Apple provider timeout leaves an encrypted durable retry; notificat
       data:{bundleId:'chat.mural.ios',appAppleId:6816001011,environment:Environment.SANDBOX,signedTransactionInfo:'valid.signed.transaction'}};
     await f.apple.notify('valid.signed.notification');await f.apple.notify('valid.signed.notification');await worker.runBatch();
     assert.equal((await f.db.query('SELECT count(*) FROM apple_purchase_notifications')).rows[0].count,'1');
+    assert.equal((await f.ai.status(f.account,order.orderID)).reversedNanoUSD,'0');
+    f.transport.notificationValue={...f.transport.notificationValue,notificationUUID:randomUUID(),notificationType:'REFUND_DECLINED'};
+    await f.apple.notify('valid.signed.notification');await worker.runBatch();
+    assert.equal((await f.db.query('SELECT count(*) FROM apple_purchase_notifications')).rows[0].count,'2');
     assert.equal((await f.ai.status(f.account,order.orderID)).reversedNanoUSD,'0');
   }finally{await f.cleanup();}
 });

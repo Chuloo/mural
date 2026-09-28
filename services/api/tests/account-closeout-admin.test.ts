@@ -72,8 +72,8 @@ integration('support closeout report identifies receiptless orders and distingui
     const order = await purchases.createOrder(f.account, 'stripe', product.sku, randomUUID());
     let report = await accountCloseoutReport(f.db, f.account);
     assert.equal(report.blockers.purchaseUnresolved, true);
-    assert.deepEqual(report.orders[0], { orderID: order.orderID, stripe: true, play: false, live: false, hasReceipt: false,
-      deliveryPending: false, unverified: true, pending: false, voided: false, minuteRefundDue: false });
+    assert.deepEqual(report.orders[0], { orderID: order.orderID, stripe: true, play: false, apple: false, live: false, hasReceipt: false,
+      deliveryPending: false, unverified: true, abandonedQuote: false, pending: false, voided: false, minuteRefundDue: false });
     const vault = new MinuteReceiptVault(f.db, 'synthetic', new Map([['synthetic', randomBytes(32)]]));
     await vault.save(order.orderID, adapter, 'cs_private_synthetic');
     evidence = { provider: 'stripe', environment: 'test', merchant: product.merchant, orderID: order.orderID, transactionID: 'cs_private_synthetic',

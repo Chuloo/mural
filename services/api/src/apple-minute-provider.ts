@@ -164,7 +164,7 @@ export class AppleMinuteProvider implements MinuteDeliveryAdapter {
       !validDate(notification.signedDate) || notification.signedDate>Date.now()+300_000) throw invalid();
     const type=notification.notificationType;
     if(type==='TEST') return;
-    if(!['ONE_TIME_CHARGE','REFUND','REFUND_REVERSED','CONSUMPTION_REQUEST'].includes(type??'') || !notification.data?.signedTransactionInfo) throw invalid();
+    if(!['ONE_TIME_CHARGE','REFUND','REFUND_REVERSED','REFUND_DECLINED','CONSUMPTION_REQUEST'].includes(type??'') || !notification.data?.signedTransactionInfo) throw invalid();
     const {value,order}=await this.#bound(notification.data.signedTransactionInfo,undefined,undefined,false);
     if(notification.data.bundleId!==this.merchant || notification.data.environment!==environment(this.config) ||
       notification.data.appAppleId!==this.config.appAppleID) throw invalid();
