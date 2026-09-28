@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="talk_continue_sheet_title">Continue practicing</string>
     <string name="talk_status_continue_ready">Ready to continue</string>
     <string name="talk_status_continue_settling">Updating your minutes…</string>
     <string name="talk_continue_conversation_button">Continue conversation</string>
     <string name="notice_continue_purchased">Your free minutes have ended. Continue this conversation with your purchased minutes.</string>
+    <string name="notice_continue_remaining_free">Continue this conversation with your remaining minutes. Your free minutes are used first.</string>
     <string name="notice_continue_settling">Your free minutes have ended. Your balance is updating. You can continue this conversation when it is ready.</string>
     <string name="notice_free_minutes_first">Your free minutes come first. This call will pause when they end; you can then continue with your purchased minutes.</string>
 </resources>

@@ -71,13 +71,20 @@ class ConversationPolicyTest {
         }
         val next = compose.onNodeWithText(compose.activity.getString(R.string.talk_continue_conversation_button))
         next.assertIsDisplayed().assertIsNotEnabled()
-        compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_continue_settling))
-        compose.onNodeWithText("Vi snakket om kaffe.", substring = true).assertExists()
+        compose.onNodeWithTag("conversation-continuation-sheet").assertIsDisplayed()
         capture("free-boundary-pending")
         compose.runOnIdle { state("continuationReady", true); state("notice", compose.activity.getString(R.string.notice_continue_purchased)) }
         next.assertIsDisplayed().assertIsEnabled()
-        compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_continue_ready))
         capture("free-boundary-ready")
+        compose.onNodeWithText(compose.activity.getString(R.string.settings_done)).performClick()
+        compose.onNodeWithTag("conversation-continuation-sheet").assertDoesNotExist()
+        next.assertDoesNotExist()
+        compose.onNodeWithText(compose.activity.getString(R.string.notice_continue_purchased)).assertDoesNotExist()
+        compose.onNodeWithText(compose.activity.getString(R.string.talk_new_conversation_button)).assertDoesNotExist()
+        compose.onNodeWithText("Vi snakket om kaffe.", substring = true).assertExists()
+        capture("free-boundary-minimal-home")
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.talk_mic_start_desc)).performClick()
+        compose.onNodeWithTag("conversation-continuation-sheet").assertIsDisplayed()
         compose.onNodeWithText(compose.activity.getString(R.string.talk_new_conversation_button)).performClick()
         compose.runOnIdle { assertNull(vm.session); assertFalse(vm.hasContinuation); assertFalse(vm.continuationReady) }
     }

@@ -2,6 +2,16 @@ import XCTest
 @testable import MuralCore
 
 final class ConversationContinuationTests: XCTestCase {
+    func testProviderDeadlineBeforeLocalTimerPreservesFreeContinuation() {
+        XCTAssertTrue(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: true, endReason: nil, deadlineReached: true))
+        XCTAssertFalse(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: true, endReason: nil, deadlineReached: false))
+        XCTAssertFalse(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: false, endReason: nil, deadlineReached: true))
+        for reason in ["Ended by you", "App moved to background", "Inactivity"] {
+            XCTAssertFalse(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: true, endReason: reason, deadlineReached: true))
+        }
+        XCTAssertTrue(ConversationContinuation.reachedFreeBoundary(hasFreeFunding: true, endReason: "Time limit", deadlineReached: true))
+    }
+
     func testRelaunchCheckpointRequiresSameOwnerLanguageAndArchivedBoundary() throws {
         let owner = UUID()
         var session = SessionRecord(languageID: "nb", themeID: "food")

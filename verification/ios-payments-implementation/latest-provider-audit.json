@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-28T11:16:42.756277+00:00",
+  "checkedAt": "2026-09-28T12:15:06.692341+00:00",
   "sandboxImage": "sha256:064f038232665b1b5a83c4d745579300d48fc14e6e19058e4bd1eefc0e56f9fd",
   "norway": {
     "order_id": "a48dd3d4-3f15-434a-8fec-cb2d9eb17bab",
@@ -28,8 +28,8 @@
     }
   ],
   "wallet": {
-    "balance_nano": "51550799265",
-    "sandbox_balance_nano": "51550799265",
+    "balance_nano": "53362407331",
+    "sandbox_balance_nano": "53362407331",
     "reserved_nano": "0"
   },
   "norwayOrders": [
@@ -52,6 +52,16 @@
       "reversed_nano": "7380000000",
       "refunded_minor": 17800,
       "updated_at": "2026-09-28T10:39:51.003028+00:00"
+    },
+    {
+      "id": "650c3602-6b1d-4575-8b0f-fbba933b5d94",
+      "quantity": 1,
+      "total_minor": 8900,
+      "currency": "nok",
+      "granted_nano": "3690000000",
+      "reversed_nano": "1845000000",
+      "refunded_minor": 4450,
+      "updated_at": "2026-09-28T12:10:02.368387+00:00"
     }
   ],
   "stripeOrders": [
@@ -70,6 +80,9 @@
     {
       "id": "34d61a53-3a5d-4ff6-a9cf-ba8aa4d67f19",
       "state": "closed",
+      "funding_mode": "ai-value",
+      "reserved_ms": null,
+      "charged_ms": null,
       "observed_ms": 35000,
       "charged_nano": "29166667",
       "provider_cost_nano": "29166667",
@@ -79,6 +92,9 @@
     {
       "id": "b314185c-1d13-414e-af44-14b4910da15a",
       "state": "closed",
+      "funding_mode": "ai-value",
+      "reserved_ms": null,
+      "charged_ms": null,
       "observed_ms": 43000,
       "charged_nano": "35833334",
       "provider_cost_nano": "35833334",
@@ -88,18 +104,123 @@
     {
       "id": "db9f2836-5317-4a18-beb7-e295b943ddc7",
       "state": "closed",
+      "funding_mode": "ai-value",
+      "reserved_ms": null,
+      "charged_ms": null,
       "observed_ms": 49000,
       "charged_nano": "40833334",
       "provider_cost_nano": "40833334",
       "close_reason": "user_requested",
       "created_at": "2026-09-28T11:04:30.94947+00:00"
+    },
+    {
+      "id": "408ac0f1-94e6-406c-9487-a48fe64521b1",
+      "state": "closed",
+      "funding_mode": "minutes",
+      "reserved_ms": 20000,
+      "charged_ms": 18000,
+      "observed_ms": 18000,
+      "charged_nano": null,
+      "provider_cost_nano": "15000000",
+      "close_reason": "user_requested",
+      "created_at": "2026-09-28T11:45:10.540144+00:00"
+    },
+    {
+      "id": "fab373a1-a926-46c7-9cb1-c698c45cce56",
+      "state": "closed",
+      "funding_mode": "minutes",
+      "reserved_ms": 2000,
+      "charged_ms": 2000,
+      "observed_ms": 15000,
+      "charged_nano": null,
+      "provider_cost_nano": "12500000",
+      "close_reason": "deadline",
+      "created_at": "2026-09-28T11:46:33.238526+00:00"
+    },
+    {
+      "id": "884f0256-c276-4588-af0e-9716b90b6b8a",
+      "state": "closed",
+      "funding_mode": "minutes",
+      "reserved_ms": 20000,
+      "charged_ms": 18000,
+      "observed_ms": 18000,
+      "charged_nano": null,
+      "provider_cost_nano": "15000000",
+      "close_reason": "user_requested",
+      "created_at": "2026-09-28T11:56:26.784838+00:00"
+    },
+    {
+      "id": "1336db15-db53-4f8e-b2ad-e4300f618735",
+      "state": "closed",
+      "funding_mode": "minutes",
+      "reserved_ms": 2000,
+      "charged_ms": 2000,
+      "observed_ms": 15000,
+      "charged_nano": null,
+      "provider_cost_nano": "12500000",
+      "close_reason": "deadline",
+      "created_at": "2026-09-28T11:58:56.806006+00:00"
+    },
+    {
+      "id": "0e565942-99e2-47be-9dd2-1167750677ab",
+      "state": "closed",
+      "funding_mode": "ai-value",
+      "reserved_ms": null,
+      "charged_ms": null,
+      "observed_ms": 40000,
+      "charged_nano": "33333334",
+      "provider_cost_nano": "33333334",
+      "close_reason": "user_requested",
+      "created_at": "2026-09-28T12:07:50.514078+00:00"
     }
   ],
+  "freeWallet": {
+    "balance_ms": 0,
+    "reserved_ms": 0,
+    "sandbox_balance_ms": 0
+  },
   "providerUsage": {
-    "voice_nano": "105833335",
-    "helper_nano": "3367400",
+    "voice_nano": "194166669",
+    "helper_nano": "4694800",
     "unsettled_sessions": 0
   },
-  "sandboxWarnings": [],
-  "productionWarnings": []
+  "sandboxWarnings": [
+    {
+      "event": "background_failed",
+      "operation": "commerce.reconcile",
+      "reason": "minute_delivery_failed",
+      "status": null,
+      "count": 3
+    }
+  ],
+  "productionWarnings": [
+    {
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "status": null,
+      "count": 24250
+    },
+    {
+      "event": "background_failed",
+      "operation": "commerce.reconcile",
+      "reason": "minute_delivery_failed",
+      "status": null,
+      "count": 132
+    },
+    {
+      "event": "request_failed",
+      "operation": "POST /v1/live/sessions/:id/helpers",
+      "reason": "helper_session_limit",
+      "status": 429,
+      "count": 3
+    },
+    {
+      "event": "request_failed",
+      "operation": "POST /v1/live/sessions/:id/helpers",
+      "reason": "helper_concurrency_limit",
+      "status": 429,
+      "count": 2
+    }
+  ]
 }

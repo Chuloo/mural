@@ -401,10 +401,20 @@ final class MuralUITests: XCTestCase {
             if largeText { for _ in 0..<5 { if app.buttons["new-conversation"].isHittable { break }; app.swipeUp() } }
             XCTAssertTrue(app.buttons["new-conversation"].isHittable)
             if !pending { XCTAssertTrue(next.isHittable) }
-            XCTAssertTrue(app.staticTexts["target-caption"].exists)
             let screen = XCTAttachment(screenshot: app.screenshot())
             screen.name = (pending ? "Free boundary - updating minutes" : "Free boundary - continue conversation") + (largeText ? " - largest text" : "")
             screen.lifetime = .keepAlways; add(screen)
+            app.buttons["Done"].tap()
+            XCTAssertFalse(app.buttons["continue-conversation"].exists)
+            XCTAssertFalse(app.buttons["new-conversation"].exists)
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Your free minutes have ended")).firstMatch.exists)
+            XCTAssertTrue(app.staticTexts["target-caption"].exists)
+            let home = XCTAttachment(screenshot: app.screenshot()); home.name = "Minimal Talk after dismissing continuation"
+            home.lifetime = .keepAlways; add(home)
+            let microphone = app.buttons["Start conversation"]
+            if largeText { for _ in 0..<5 { if microphone.isHittable { break }; app.swipeUp() } }
+            microphone.tap()
+            XCTAssertTrue(next.waitForExistence(timeout: 5))
             app.terminate()
         }
     }

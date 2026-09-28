@@ -1,6 +1,6 @@
 {
   "file": "Mural-Android-direct-v10-candidate.apk",
-  "sha256": "5357e51045932d3ba0c1967a62e450f3b20a5b3b0bd1fb53804ebe32ca65602d",
+  "sha256": "aa1569688e61f8f54655ec3772b4dd7a8515c73a52714488172d235dd794662d",
   "versionCode": 10,
   "versionName": "0.1",
   "configuration": {
@@ -24,7 +24,7 @@
   "published": false,
   "deviceInstallVerified": false,
   "embeddedSecretScan": {
-    "entriesScanned": 606,
+    "entriesScanned": 607,
     "patterns": [
       "OpenAI secret key",
       "Stripe secret or restricted key",
@@ -35,5 +35,7 @@
     "findings": 0,
     "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
   },
-  "compactCheckoutVerifiedOnPhysicalSamsung": true
+  "compactCheckoutVerifiedOnPhysicalSamsung": true,
+  "minimalTalkAndLaunchVerified": true,
+  "launchVerification": "Physical Samsung cold-start recording: cream directly to Talk; no static logo or separate loading orb. Android 16 launch-theme and automated startup checks also passed."
 }

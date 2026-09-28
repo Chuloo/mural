@@ -113,6 +113,7 @@ struct TalkView: View {
     @Bindable var coordinator: ConversationCoordinator
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var typing = false
+    @State private var conversationChoice = false
     @State private var transcript: SessionRecord?
     @State private var lookup: WordLookup?
     init(coordinator: ConversationCoordinator) {
@@ -138,6 +139,30 @@ struct TalkView: View {
             }
         }
         .sheet(isPresented: $typing) { TypedReplyView(coordinator: coordinator) }
+        .onChange(of: coordinator.hasContinuation, initial: true) { _, waiting in
+            if waiting && !coordinator.isRunning { conversationChoice = true }
+        }
+        .sheet(isPresented: $conversationChoice) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text(coordinator.notice ?? "Your conversation is saved. You can continue when your minutes finish updating.")
+                            .font(.body).foregroundStyle(MuralColor.secondary)
+                        Button { conversationChoice = false; coordinator.start() } label: {
+                            Text("Continue conversation").frame(maxWidth: .infinity, minHeight: 52)
+                        }
+                        .buttonStyle(.borderedProminent).tint(MuralColor.orange).foregroundStyle(MuralColor.ink)
+                        .disabled(!coordinator.continuationReady).accessibilityIdentifier("continue-conversation")
+                        Button("New conversation") { conversationChoice = false; coordinator.resetConversation() }
+                            .frame(maxWidth: .infinity, minHeight: 44).accessibilityIdentifier("new-conversation")
+                    }.padding(24)
+                }.background(MuralColor.cream)
+                    .navigationTitle("Continue practicing").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { conversationChoice = false } } }
+            }
+            .tint(MuralColor.ink).presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .animation(.smooth(duration: 0.35), value: coordinator.state)
         .sheet(item: $transcript) { session in
             TranscriptView(session: session, meaningLanguage: coordinator.store.preferences.meaningLanguage)
@@ -176,14 +201,6 @@ struct TalkView: View {
                     if coordinator.state == .active {
                         Button("Type instead", systemImage: "keyboard") { typing = true }
                         Button("A little help", systemImage: "sparkles") { coordinator.help() }
-                    } else if coordinator.session != nil && !coordinator.isRunning {
-                        if coordinator.hasContinuation {
-                            Button("Continue conversation") { coordinator.start() }
-                                .disabled(!coordinator.continuationReady)
-                                .accessibilityIdentifier("continue-conversation")
-                        }
-                        Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
-                            .accessibilityIdentifier("new-conversation")
                     }
                 }.font(.caption)
             }.frame(minHeight: compact ? 28 : 42).accessibilityHidden(coordinator.state != .active && coordinator.session == nil)
@@ -219,7 +236,7 @@ struct TalkView: View {
                     coordinator.requestAdvancedFocus = true; coordinator.showSettings = true
                 }.font(.footnote).accessibilityIdentifier("talk-open-advanced")
             }
-            if let notice = coordinator.notice {
+            if let notice = coordinator.notice, !coordinator.hasContinuation {
                 Text(notice).font(.footnote).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
             }
         }.frame(minHeight: typeSize.isAccessibilitySize ? 100 : 105).frame(maxWidth: .infinity)
@@ -283,6 +300,7 @@ struct TalkView: View {
                 .accessibilityValue(coordinator.store.preferences.meaningVisible ? "On" : "Off")
             Button {
                 if coordinator.state == .active { coordinator.toggleMute() }
+                else if coordinator.hasContinuation { conversationChoice = true }
                 else if !coordinator.isRunning { coordinator.start() }
             } label: {
                 ZStack {

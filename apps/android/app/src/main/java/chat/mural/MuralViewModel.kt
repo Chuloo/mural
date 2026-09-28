@@ -143,7 +143,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val balance = hostedBalance(owner)
         if (isRunning || continuationOwnerID != expected || availableHostedOwner()?.accountID != expected) return
         continuationReady = !accountChangeBlocked && balance.canStartConversation && balance.presentation?.settlementState == "settled"
-        if (continuationReady) notice = getApplication<Application>().getString(R.string.notice_continue_purchased)
+        if (continuationReady) notice = getApplication<Application>().getString(
+            if (balance.availableMilliseconds > 0) R.string.notice_continue_remaining_free
+            else R.string.notice_continue_purchased)
     }
     var meaning by mutableStateOf(""); private set
     var translating by mutableStateOf(false); private set
@@ -820,6 +822,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun finish(final: Boolean) {
         if (!isRunning) return
+        if (ConversationContinuationPolicy.reachedFreeBoundary(freeBoundaryOwnerID != null,
+                session?.endReason, session?.id?.let(hostedBindings::reachedDeadline) == true)) {
+            updateSession { it.endReason = "Reserved conversation time ended" }
+        }
         connectionJob?.cancel(); durationJob?.cancel(); closeJob?.cancel(); assessmentJob?.cancel()
         actionJob?.cancel(); clearLookup(); languageCheckJob?.cancel()
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()

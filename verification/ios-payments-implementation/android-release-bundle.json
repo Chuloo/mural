@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "validationScope": "store-files-and-native-layout",
   "source": {
-    "commit": "1d0d0482a8470ed588a99a85909f96375a586f7b",
+    "commit": "53db331be06a1f390b5def343cf99b98eff4b902",
     "dirty": true
   },
   "checks": {
@@ -116,8 +116,8 @@
       }
     },
     "aab": {
-      "sha256": "3b84e736f653dfda7bd2d53b67e2ef44fc667ced2090a79618eca066c9951d53",
-      "bytes": 33588749,
+      "sha256": "22f7c95c96839cdae047a33d76fcc740bd25180b4616967deddcc9c46a70d338",
+      "bytes": 33589135,
       "abis": [
         "arm64-v8a",
         "armeabi-v7a",
@@ -279,7 +279,7 @@
         }
       },
       "embeddedSecretScan": {
-        "entriesScanned": 609,
+        "entriesScanned": 610,
         "patterns": [
           "OpenAI secret key",
           "Stripe secret or restricted key",
@@ -416,7 +416,7 @@
   ],
   "scope": "hosted-minute-release",
   "specification": {
-    "file": "direct-v10.json",
+    "file": "release-spec.json",
     "sha256": "06dff83cc8ef3f4947acff7ddd58e9626ccaf57df86e8e60536457a25cd69a42",
     "packageName": "chat.mural.android",
     "versionCode": 10,

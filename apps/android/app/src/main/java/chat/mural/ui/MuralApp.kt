@@ -100,10 +100,7 @@ fun MuralApp(
     MuralTheme {
         Surface(Modifier.fillMaxSize(), color = MuralColors.Cream) {
             if (vm.loadingHistory) {
-                Box(Modifier.fillMaxSize().testTag("history-loading"), contentAlignment = Alignment.Center) {
-                    SoftAnimatedBackground(Modifier.fillMaxSize())
-                    MuralOrb(modifier = Modifier.size(150.dp))
-                }
+                Box(Modifier.fillMaxSize().testTag("history-loading"))
             } else if (!prefs.hasOnboarded) {
                 OnboardingScreen(prefs.learningLanguageID, prefs.meaningLanguage) { language, meaning ->
                     vm.selectLanguage(language)

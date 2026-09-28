@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="talk_continue_sheet_title">Sigue practicando</string>
     <string name="talk_status_continue_ready">Todo listo para continuar</string>
     <string name="talk_status_continue_settling">Actualizando tus minutos…</string>
     <string name="talk_continue_conversation_button">Continuar conversación</string>
     <string name="notice_continue_purchased">Tus minutos gratuitos se han agotado. Continúa esta conversación con tus minutos comprados.</string>
+    <string name="notice_continue_remaining_free">Continúa esta conversación con los minutos que te quedan. Primero se usan tus minutos gratuitos.</string>
     <string name="notice_continue_settling">Tus minutos gratuitos se han agotado. Estamos actualizando tu saldo. Podrás continuar esta conversación cuando esté listo.</string>
     <string name="notice_free_minutes_first">Primero se usan tus minutos gratuitos. La llamada se pausará cuando se agoten; después podrás continuar con tus minutos comprados.</string>
 </resources>

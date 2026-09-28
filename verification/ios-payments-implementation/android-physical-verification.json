@@ -29,5 +29,40 @@
       "skipped": 0
     }
   },
-  "testCardCleanup": "User will delete the synthetic saved Chrome Visa ending 4242 later."
+  "testCardCleanup": "User will delete the synthetic saved Chrome Visa ending 4242 later.",
+  "observedBalanceAfterRelaunch": "About 515 min",
+  "largeTextAndReducedAnimation": {
+    "fontScale": 1.6,
+    "animationsDisabled": true,
+    "screens": [
+      "Talk",
+      "Settings",
+      "Account",
+      "Add Mural minutes"
+    ],
+    "allPurchaseControlsReachableByScroll": true,
+    "originalSettingsRestored": true,
+    "screenReaderWalkthroughCompleted": false
+  },
+  "sameAccountBalanceAfterNewNorwayPurchase": "About 552 min on both physical phones",
+  "freeToPaidBoundary": {
+    "freeSecondsGranted": 40,
+    "remainingFreeSecondsAfterFirstSettlement": 2,
+    "checkpointSurvivedRelaunch": true,
+    "serverCloseRaceVerified": true,
+    "paidContinuationSeconds": 40,
+    "paidContinuationSessionID": "0e565942-99e2-47be-9dd2-1167750677ab"
+  },
+  "minimalTalk": {
+    "nativeSheetContainsExplanationAndChoices": true,
+    "orangeContinue": true,
+    "dismissalLeavesOriginalTalkLayout": true,
+    "microphoneReopensWithoutStartingCall": true
+  },
+  "coldLaunch": {
+    "staticSplashRemoved": true,
+    "separateAnimatedSplashRemoved": true,
+    "creamDirectlyToTalk": true,
+    "recording": "android-physical/cold-launch.mp4"
+  }
 }

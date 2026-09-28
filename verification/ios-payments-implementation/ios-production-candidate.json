@@ -1,25 +1,19 @@
 {
-  "archive": "release/private/payment-builds/Mural-Production-14.xcarchive",
+  "archive": "release/private/payment-builds/Mural-Production-19.xcarchive",
   "signedArchive": true,
   "uploaded": false,
   "info": {
     "CFBundleIdentifier": "chat.mural.ios",
     "CFBundleShortVersionString": "1.1",
-    "CFBundleVersion": "14",
+    "CFBundleVersion": "19",
     "MuralManagedAPIURL": "https://api.mural.chat",
     "MuralApplePurchasesEnabled": "NO",
     "MuralApplePurchaseEnvironment": "live",
     "SKIncludeConsumableInAppPurchaseHistory": true
   },
-  "entitlements": {
-    "application-identifier": "8PZYNMS6FH.chat.mural.ios",
-    "com.apple.developer.applesignin": [
-      "Default"
-    ],
-    "get-task-allow": true
-  },
   "distributionExport": {
-    "ipaSHA256": "bd737460a5d59e73b5ba41627abf65a4c456998befc529c9d595c49ada277612",
+    "file": "ios-production-export19/Mural.ipa",
+    "ipaSHA256": "bfcae112faf341ad95f41c10961b2c36d468c21cdd573429bdc4f9ae5cca2625",
     "signedAndVerified": true,
     "getTaskAllow": false,
     "uploaded": false

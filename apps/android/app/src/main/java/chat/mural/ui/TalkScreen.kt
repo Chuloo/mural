@@ -35,6 +35,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +82,7 @@ import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.ConversationProvider
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TalkScreen(
     vm: MuralViewModel,
@@ -90,6 +95,10 @@ fun TalkScreen(
     onHelp: () -> Unit,
 ) {
     var typing by rememberSaveable { mutableStateOf(false) }
+    var conversationChoice by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(vm.hasContinuation, vm.session?.id) {
+        if (vm.hasContinuation && !vm.isRunning) conversationChoice = true
+    }
     var lookup by rememberSaveable { mutableStateOf(false) }
     var lookupWord by rememberSaveable { mutableStateOf("") }
     var lookupSentence by rememberSaveable { mutableStateOf("") }
@@ -247,7 +256,9 @@ fun TalkScreen(
                 .background(Brush.linearGradient(listOf(Color(0xFFFFBA7A), MuralColors.Orange)), CircleShape).clip(CircleShape)
                 .testTag("start-conversation").semantics { contentDescription = micDescription }
                 .clickable(enabled = micEnabled, role = Role.Button) {
-                    if (vm.state == "active" && vm.isVoiceSession) vm.toggleMute() else onMicrophone()
+                    if (vm.state == "active" && vm.isVoiceSession) vm.toggleMute()
+                    else if (vm.hasContinuation) conversationChoice = true
+                    else onMicrophone()
                 }, contentAlignment = Alignment.Center) {
                 if (busy) CircularProgressIndicator(Modifier.size(25.dp), color = MuralColors.Ink, strokeWidth = 2.dp)
                 else MuralIcon(if (vm.isMuted && vm.state == "active") MuralSymbol.MicOff else MuralSymbol.Mic,
@@ -280,17 +291,33 @@ fun TalkScreen(
             Text(it, color = MuralColors.Secondary, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
             if (onOpenAppSettings != null) MuralTextButton(onClick = onOpenAppSettings) { Text(stringResource(R.string.talk_open_phone_settings)) }
         }
-        vm.notice?.let { Text(it, color = MuralColors.Secondary, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall) }
-        if (vm.session != null && !vm.isRunning) {
-            if (vm.hasContinuation) MuralTextButton(onClick = onMicrophone, enabled = vm.continuationReady) {
-                Text(stringResource(R.string.talk_continue_conversation_button))
-            }
-            MuralTextButton(onClick = vm::resetConversation) { Text(stringResource(R.string.talk_new_conversation_button)) }
-        }
+        if (!vm.hasContinuation) vm.notice?.let { Text(it, color = MuralColors.Secondary, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall) }
         Spacer(Modifier.height(if (compact) 8.dp else 16.dp))
     }
     }
 
+    if (conversationChoice && vm.hasContinuation && !vm.isRunning) {
+        ModalBottomSheet(onDismissRequest = { conversationChoice = false }, containerColor = MuralColors.Cream,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp)
+                .testTag("conversation-continuation-sheet"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.talk_continue_sheet_title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                    MuralTextButton(onClick = { conversationChoice = false }) { Text(stringResource(R.string.settings_done)) }
+                }
+                Text(vm.notice ?: stringResource(R.string.notice_continue_settling), color = MuralColors.Secondary,
+                    style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = { conversationChoice = false; onMicrophone() }, enabled = vm.continuationReady,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
+                    Text(stringResource(R.string.talk_continue_conversation_button), textAlign = TextAlign.Center)
+                }
+                MuralTextButton(onClick = { conversationChoice = false; vm.resetConversation() }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.talk_new_conversation_button))
+                }
+            }
+        }
+    }
     if (typing) TypedReplySheet(vm.language.name, vm.working, onSendTyped, onDismiss = { typing = false },
         error = vm.typedReplyError, completedSends = vm.typedRepliesSent, onOpen = { vm.clearTypedReplyError(); vm.noteTypingActivity() }, onTyping = vm::noteTypingActivity)
     if (lookup) WordLookupSheet(lookupWord, lookupSentence, vm.language.id, vm.lookupResult, vm.lookupError, vm.lookupLoading,

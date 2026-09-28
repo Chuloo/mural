@@ -14,6 +14,12 @@ public struct ConversationContinuationCheckpoint: Codable, Sendable {
 }
 
 public enum ConversationContinuation {
+    /// A server close can arrive before the next local timer tick.
+    public static func reachedFreeBoundary(hasFreeFunding: Bool, endReason: String?, deadlineReached: Bool) -> Bool {
+        hasFreeFunding && (endReason == "Time limit" || endReason == "Reserved conversation time ended" ||
+                           (endReason == nil && deadlineReached))
+    }
+
     /// Keep recent context within the server's forty-message / 6 KB contract.
     public static func history(_ entries: [(Speaker, String)]) -> [[String: Any]] {
         var result: [[String: Any]] = entries.suffix(40).compactMap { speaker, original in

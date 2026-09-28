@@ -14,24 +14,28 @@ The backend is deployed and both native implementations are available for review
 - Pending attempts retain the original account, order and quantity. Verified delivery refreshes the balance from the server, clears the completed attempt and finishes the StoreKit transaction. Check purchases does not recreate spent credit.
 - iOS adds recent Apple purchase history, refund requests and account-deletion support. Google linking requires fresh identity proofs and rejects conflicting ownership.
 - Paid leases, final settlement and reservation recovery work on iOS. A free-to-paid boundary preserves context and offers Continue conversation after settlement. An account-bound local checkpoint preserves that continuation through relaunch.
+- The free-minutes explanation and Continue/New conversation choices now share a native sheet. Dismissal leaves Talk clear; the microphone reopens the pending choice. No extra inline actions remain.
+- Android launches on a plain cream background; the static splash logo and separate loading orb are removed. The animated orb first appears in Talk.
 - Existing Settings order, Account orb, Talk controls, source selection and local learning storage are preserved. Buying minutes does not switch conversation source.
 
 ## Automated verification
 
 | Area | Result | Evidence |
 | --- | --- | --- |
-| Server full suite | 401 passed; no skips | `/private/tmp/mural-server-closeout-final.log` |
+| Server full suite | 404 passed; no skips | `/private/tmp/mural-payment-ci-final.log` |
 | Latest Apple adapter and late-closeout tests | 14 passed; no skips, including the new test added after the full suite | `/private/tmp/mural-apple-closeout-final.log` |
 | Request admission and account tests | 24 passed; no skips | `/private/tmp/mural-payment-admission-regression.log` |
 | Server type checking | Passed | Same focused verification logs |
-| Swift core | 128 passed | `/private/tmp/mural-swift-continuation-final.log` |
+| Swift core | 129 passed | `/private/tmp/mural-swift-boundary-race.log` |
+| Payment monitor | 12 focused tests passed; live read-only inspection passed | [Monitor evidence](payment-monitor-dry-run.json) |
+| Final minimal Talk sheets | iOS 2 passed, including largest text; Android 12 launch/conversation/checkout tests passed | `.build/PaymentMinimalHome.xcresult`; `/private/tmp/mural-android-startup-final-ui.log` |
 | iOS full interface suite | 44 passed; zero failures | `.build/PaymentFinalRegression.xcresult` |
 | Final iOS Account and accessibility changes | 2 passed | `.build/PaymentFinalAccountRegression.xcresult` |
-| Android unit tests | 360 passed | `/private/tmp/mural-android-continuation-final.log` |
+| Android unit tests | 361 passed | `/private/tmp/mural-android-boundary-race-build.log` |
 | Android full interface suite | 77 passed | `/private/tmp/mural-android-release-regression-final2.log` |
 | Final Android Account and checkout changes | 15 passed | `/private/tmp/mural-android-final-account-checkout.log` |
 | Android checkout screenshot capture | 6 passed | `/private/tmp/mural-android-final-visual-capture.log` |
-| Release scripts and shared contracts | 54 passed; generated content and cross-platform checks passed | `/private/tmp/mural-payment-release-contracts.log` |
+| Release scripts and shared contracts | 66 passed; generated content and cross-platform checks passed | `/private/tmp/mural-payment-release-contracts.log` |
 | Android debug/release compilation and lint | Passed | Android build logs and [bundle inspection](android-release-bundle.json) |
 | iOS device build and distribution export | Passed | [Candidate verification](ios-production-candidate.json) |
 
@@ -53,9 +57,14 @@ CodeQL alerts 60 and 61 report missing rate limits in the new Apple receipt rout
 | Norway quantity 1 | NOK 89 delivered once; balance became about 515 minutes |
 | Norway full refund | Apple request accepted; signed REFUND received; exactly 3,690,000,000 nano-USD reversed; phone showed About 479 min and Refund recorded |
 | Norway quantity 2 | NOK 178 delivered once; phone showed About 552 min |
-| Norway 50% refund request | Apple accepted GRANT_PRORATED but its signed API result was REFUND_FULL / 100000 (100%). The server correctly reversed the full two-pack grant; a real Apple partial refund is still unverified. |
+| Norway 50% refund request | Apple accepted GRANT_PRORATED but its signed API result was REFUND_FULL / 100000 (100%). The server correctly reversed the full two-pack grant; a quantity-2 partial refund is still unverified. |
 | Stripe quantities 1/2/10 | Real Stripe test checkouts, partial/full refunds and nine event replays passed; synthetic account ended at zero |
+| Physical Samsung | Apple-funded balance 479 → 478 after a 49-second call; a $5 Stripe test pack delivered once and updated both phones to about 515 min; recovery and relaunch retained it |
+| Real free-to-paid boundary | Audited 20-second sandbox allowance; remaining 2 seconds preserved after settlement; checkpoint survived relaunch; server-close race fixed; paid continuation completed for 40 seconds |
+| Apple partial-refund retry | A fresh NOK 89 purchase returned signed REFUND_PRORATED / 50000 (50%). Normal reconciliation reversed exactly 1,845,000,000 nano-USD and NOK 44.50; prior quantity-2 full-refund result remains unchanged |
 | Paid iPhone voice and helpers | User completed two calls (35 and 43 seconds); 11 helper requests settled; total provider cost $0.068367401; zero reserved value |
+
+The latest audit shows zero reserved value, no unsettled sandbox sessions and total provider test cost of $0.198861469.
 
 See [sandbox record](sandbox-setup-2026-09-26.json), [latest provider audit](latest-provider-audit.json), [Stripe evidence](stripe-real-sandbox.json), and [catalog/proceeds review](apple-catalog-review.json).
 
@@ -71,11 +80,11 @@ Rollback: `/opt/mural/deploy/before-payment-closeout-20260928T095941Z`. The prev
 
 Sandbox uses a separate API, database and receipt scope. Its current image and rollback are in the sandbox record. Only the approved test account can spend provider funds, with a $1.50 lifetime exposure cap and 60-second call limit. Observed usage remains within the user's $2 authorization.
 
-The latest sanitized post-deployment log sample contains no warnings. Earlier production inspection identified pre-existing September 14–16 unresolved hangup retries and one pending Stripe job. Those historical records were preserved; they are not represented as resolved by this release.
+The corrected log audit reads both numeric and text severity labels. It detects repeated hangup retries for 21 unresolved production calls from September 14–16. One unpaid Stripe checkout from September 27 remains pending with zero grant; the existing runner labels ordinary pending retries as delivery warnings. These historical records are preserved. The read-only monitor distinguishes pending payments from failed delivery and reports the overdue settlements. See [operations inspection](payment-operations-inspection.json).
 
-- iPhone sandbox build 15 is installed with existing learning data preserved; a pre-test backup is retained privately.
-- iOS 1.1 (14) is exported with distribution signing, production API configuration and Apple sales disabled. It has not been uploaded.
-- Android v10 has a staged direct APK using the same signing certificate as v9. It is a release payload with debugging disabled. It has not been published or verified on a physical Android device.
+- iPhone sandbox build 18 is installed with existing learning data preserved; a pre-test backup is retained privately.
+- iOS 1.1 (19) is exported with distribution signing, production API configuration and Apple sales disabled. It has not been uploaded.
+- Android v10 has a staged direct APK using the same signing certificate as v9. It is a release payload with debugging disabled. The matching sandbox code is verified on a physical Samsung Galaxy S9 running Android 10. The production candidate has not been published.
 - The corresponding Android test build points to the isolated sandbox.
 - Public Terms and Privacy were published in website commit `9102c3e`. App Store App Privacy includes purchase history. Play declarations remain a draft for any future paid Play release.
 
@@ -83,12 +92,12 @@ Artifacts are retained locally in `deliverables/mural-payments-candidate-2026-09
 
 ## Remaining release gates
 
-1. Resolve Apple’s sandbox partial-refund discrepancy. [Verified provider fields](apple-prorated-provider-inspection.json) show an explicit full refund; partial-refund arithmetic passes fixtures, but a real Apple prorated event remains a gate. Do not replace the provider result with an invented 50% credit.
-2. Sign Android into the same Mural account; verify iOS purchase → Android spend and Android purchase → iOS spend, including the updated balance on both devices.
+1. Verify a real prorated refund for quantity 2. The original quantity-2 request returned an explicit full refund; the later quantity-1 retry returned a real 50% refund and passed exact accounting. Multi-quantity partial arithmetic and out-of-order events pass automated tests.
+2. Finish Android purchase → iPhone spend. Apple purchase → Android spend and shared balance updates on both devices pass. The remaining iPhone microphone step requires direct device use.
 3. Exercise fresh Apple-to-Google linking on devices. Server conflict/ownership tests pass; matching email addresses do not merge accounts.
-4. Complete an actual free-to-paid boundary, preserved context and relaunch flow. Core and native UI coverage passes; a real boundary voice test remains outstanding.
+4. Confirm the same real boundary flow on iPhone. Physical Android now passes free settlement, returned remainder, relaunch recovery and paid continuation. Both native clients have regression coverage for the server-close race.
 5. Complete the full manual VoiceOver/TalkBack, reduced-motion/transparency and device-state matrix from the brief.
-6. Confirm the support response schedule and operational alert delivery before paid launch. William is the documented support owner; delivery/reconciliation retries and read-only closeout inspection exist, but an agreed response schedule is not recorded.
+6. Configure and verify email delivery for the tested payment monitor. William approved hi@hackmamba.io, William as owner, and replies within one business day. SMTP provider credentials are still needed; no email service is configured or timer activated. See the [operations runbook](../../release/operations/README.md).
 7. Submit the first Apple consumables with the new app version after acceptance, obtain approval, then obtain separate authorization for the controlled live purchase/refund. Configure and verify production Apple credentials/notifications as part of that activation. Existing pending submissions must stay intact.
 
 Recommendation: finish the device gates against the isolated sandbox, then submit the Apple payment release. Keep production Apple sales disabled until store approval and the authorized live verification pass. Google Play sales remain gated pending their separate catalog, acknowledgement-alert and store-specific device checks.

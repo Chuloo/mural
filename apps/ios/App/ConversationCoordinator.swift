@@ -359,7 +359,11 @@ import MuralCore
         closeTask?.cancel(); durationTask?.cancel(); connectionTask?.cancel()
         assessmentTask?.cancel(); saveTask?.cancel(); saveTask = nil
         delegationTasks.values.forEach { $0.cancel() }; delegationTasks.removeAll()
-        let boundary = session?.endReason == "Time limit" && api.hostedLease?.funding == .minutes ? freeBoundaryOwner : nil
+        let reachedBoundary = ConversationContinuation.reachedFreeBoundary(
+            hasFreeFunding: freeBoundaryOwner != nil && api.hostedLease?.funding == .minutes,
+            endReason: session?.endReason, deadlineReached: api.hostedLease.map { Date() >= $0.deadline } ?? false)
+        let boundary = reachedBoundary ? freeBoundaryOwner : nil
+        if reachedBoundary { session?.endReason = "Time limit" }
         transport.disconnect(); pendingCommands = [:]; working = false
         session?.endedAt = .now; session?.usageFinal = final
         save(); state = .ended
@@ -435,7 +439,16 @@ import MuralCore
             delegate(id: id)
         case "session.usage.updated", "session.closed":
             if let usage = event["usage"] as? [String: Any], let seconds = usage["seconds"] as? Double, seconds.isFinite, seconds >= 0 { session?.voiceSeconds = seconds }
-            if type == "session.closed" { session?.endReason = event["reason"] as? String; finish(final: true) }
+            if type == "session.closed" {
+                // Preserve explicit user/background endings. Classify a server deadline before
+                // its generic close reason can hide the funding boundary.
+                if ConversationContinuation.reachedFreeBoundary(
+                    hasFreeFunding: freeBoundaryOwner != nil && api.hostedLease?.funding == .minutes,
+                    endReason: session?.endReason, deadlineReached: api.hostedLease.map { Date() >= $0.deadline } ?? false) {
+                    session?.endReason = "Time limit"
+                } else if session?.endReason == nil { session?.endReason = event["reason"] as? String }
+                finish(final: true)
+            }
             else { scheduleSave() }
         case "error":
             let details = event["error"] as? [String: Any]
@@ -522,7 +535,11 @@ import MuralCore
               let latest = try? ManagedAccountKeychain(scope: config.storageScope).load(), latest.accountID == expected,
               latest.isUsable(scope: config.storageScope) else { return }
         continuationReady = balance.canStart && balance.presentation?.settlementState == "settled"
-        if continuationReady { notice = "Your free minutes have ended. Continue this conversation with your purchased minutes." }
+        if continuationReady {
+            notice = balance.availableMilliseconds > 0
+                ? "Continue this conversation with your remaining minutes. Your free minutes are used first."
+                : "Your free minutes have ended. Continue this conversation with your purchased minutes."
+        }
     }
     #if DEBUG
     func prepareEndedPreview() {
