@@ -33,10 +33,29 @@ class AccountControllerTest {
         override suspend fun profile(session: AccountSession): AccountProfile {
             profileFailure?.let { throw it }; return AccountProfile(id, "me@example.test", listOf("google"), "2026-09-13")
         }
-        override suspend fun minutes(session: AccountSession) = MinuteBalance("milliseconds", "connected-conversation-time", 581_234, 60_000, 521_234)
+        var minuteValue = MinuteBalance("milliseconds", "connected-conversation-time", 581_234, 60_000, 521_234)
+        override suspend fun minutes(session: AccountSession) = minuteValue
         override suspend fun signOut(session: AccountSession) { signOuts++; signOutFailure?.let { throw it } }
         override suspend fun delete(session: AccountSession) { deletes++; deletionFailure?.let { throw it } }
     }
+    @Test fun olderOrUnversionedBalancesCannotReplaceAVersionedBalance() = runTest {
+        val api = Service(); val storage = Store().apply { value = validSession }
+        val controller = AccountController(api, storage) { timestamp }
+        val original = api.minuteValue
+        fun version(revision: String) = original.copy(presentation = MuralMinutesPresentation(
+            1, "2026-09-26T12:00:00Z", revision, 521_234, 0, false, 521_234, "exactFree", null,
+            "ready", "settled", false))
+        api.minuteValue = version("10"); controller.restore()
+        assertEquals("10", controller.state.value.minutes?.presentation?.revision)
+        api.minuteValue = version("9"); controller.refresh()
+        assertNull(controller.state.value.minutes); assertEquals(AccountNotice.INVALID_RESPONSE, controller.state.value.notice)
+        api.minuteValue = original; controller.refresh()
+        assertNull(controller.state.value.minutes); assertEquals(AccountNotice.INVALID_RESPONSE, controller.state.value.notice)
+        api.minuteValue = version("11"); controller.refresh()
+        assertEquals("11", controller.state.value.minutes?.presentation?.revision)
+        assertNull(controller.state.value.notice)
+    }
+
     @Test fun deletionRetiresAcknowledgedCustodyBeforeRequestIncludingLostResponseButNeverOnSignOut() = runTest {
         val store = Store(); val api = Service(); val account = AccountController(api, store) { timestamp }
         account.signIn { "provider-token" }

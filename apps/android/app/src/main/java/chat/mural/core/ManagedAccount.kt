@@ -54,14 +54,20 @@ data class MinuteBalance(
     val reservedMilliseconds: Long,
     val availableMilliseconds: Long,
     val paid: PaidConversationBalance? = null,
+    val presentation: MuralMinutesPresentation? = null,
 ) {
     init {
         require(unit == "milliseconds" && billingBasis == "connected-conversation-time")
         require(balanceMilliseconds in 0..9_007_199_254_740_991L)
         require(reservedMilliseconds in 0..balanceMilliseconds)
         require(availableMilliseconds == balanceMilliseconds - reservedMilliseconds)
+        presentation?.let {
+            require(it.freeAvailableMilliseconds == availableMilliseconds)
+            require(it.hasPurchasedRemainder == (paid?.availableNanoUSD?.toBigInteger()?.signum() == 1))
+            require(if (it.paidSupported) paid != null && it.paidEstimatedMilliseconds == paid.estimatedMilliseconds else paid == null)
+        }
     }
-    val canStartConversation get() = availableMilliseconds > 0 || paid?.available == true
+    val canStartConversation get() = presentation?.let { it.availabilityReason == "ready" } ?: (availableMilliseconds > 0 || paid?.available == true)
     val readinessMilliseconds get() = if (availableMilliseconds > 0) availableMilliseconds
         else paid?.takeIf { it.available }?.estimatedMilliseconds ?: 0L
 }

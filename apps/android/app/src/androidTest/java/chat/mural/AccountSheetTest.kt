@@ -75,13 +75,16 @@ class AccountSheetTest {
         val provider = mutableStateOf(ConversationProvider.PERSONAL_KEY)
         compose.setContent { MuralTheme {
             AccountSheet(member, {}, {}, {}, {}, {}, provider = provider.value,
-                conversationRunning = running.value)
+                conversationRunning = running.value, onBuyMinutes = {})
         } }
         compose.runOnIdle { assertEquals(ConversationProvider.PERSONAL_KEY, provider.value) }
         compose.onNodeWithTag("account-conversation-source").assertDoesNotExist()
         compose.onNodeWithTag("account-minute-balance").assertDoesNotExist()
+        compose.onNodeWithTag("account-buy-minutes").assertDoesNotExist()
+        compose.onNodeWithTag("account-check-purchases").assertIsEnabled()
         capture("10-personal-key-account")
         compose.runOnIdle { running.value = true }
+        compose.onNodeWithTag("account-check-purchases").assertIsNotEnabled()
         compose.onNodeWithTag("account-sign-out").assertDoesNotExist()
     }
 

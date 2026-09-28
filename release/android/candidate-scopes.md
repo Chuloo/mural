@@ -1,11 +1,13 @@
 # Android candidate scopes
 
-The current Android source uses version code **8**. The Play submission evidence belongs to **version 4**. Those versions share the package `chat.mural.android` and version name `0.1`; their configuration and test evidence are separate.
+The current Android source uses version code **10**. The Play submission evidence belongs to **version 4**. Those versions share the package `chat.mural.android` and version name `0.1`; their configuration and test evidence are separate.
 
 | Specification | Intended build | Release status and evidence |
 | --- | --- | --- |
-| [release-spec.json](release-spec.json) | Current v8 funded-preview baseline. Clean Gradle builds default purchases off, channel `play`, environment `test` | Default validation target; it must match the version in `app/build.gradle.kts` |
-| [specs/direct-v8.json](specs/direct-v8.json) | Current v8 direct distribution, with `mural.minutePurchasesEnabled=true`, `mural.purchaseChannel=stripe`, `mural.minutePurchaseEnvironment=live` supplied explicitly | Separate from the submitted Play candidate. The scope label does not establish a successful purchase, signature, installation or store approval |
+| [release-spec.json](release-spec.json) | Current v10 baseline. Clean Gradle builds default purchases off, channel `play`, environment `test` | Default validation target; it must match the version in `app/build.gradle.kts` |
+| [specs/direct-v10.json](specs/direct-v10.json) | Current v10 direct distribution, with `mural.minutePurchasesEnabled=true`, `mural.purchaseChannel=stripe`, `mural.minutePurchaseEnvironment=live` supplied explicitly | Separate from the submitted Play candidate. The scope label does not establish a successful purchase, signature, installation or store approval |
+| [specs/direct-v9.json](specs/direct-v9.json) | Historical v9 direct Stripe distribution | Retained for upgrade and regression checks |
+| [specs/direct-v8.json](specs/direct-v8.json) | Historical v8 direct Stripe distribution | Retained for upgrade and regression checks |
 | [specs/direct-v7.json](specs/direct-v7.json) | Historical v7 direct Stripe distribution | Retained for upgrade and regression checks |
 | [specs/direct-v6.json](specs/direct-v6.json) | Historical v6 direct Stripe distribution | Retained for upgrade and regression checks |
 | [specs/direct-v5.json](specs/direct-v5.json) | Historical v5 direct Stripe distribution | Retained specification; its artifact checks do not cover the v6 recovery fix |

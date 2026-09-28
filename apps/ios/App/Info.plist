@@ -22,6 +22,9 @@
 <key>MuralGoogleClientID</key><string>$(MURAL_GOOGLE_CLIENT_ID)</string>
 <key>MuralAppleSignInEnabled</key><string>$(MURAL_APPLE_SIGN_IN_ENABLED)</string>
 <key>MuralAppleClientID</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+<key>MuralApplePurchasesEnabled</key><string>$(MURAL_APPLE_PURCHASES_ENABLED)</string>
+<key>MuralApplePurchaseEnvironment</key><string>$(MURAL_APPLE_PURCHASE_ENVIRONMENT)</string>
+<key>SKIncludeConsumableInAppPurchaseHistory</key><true/>
 <key>CFBundleURLTypes</key><array><dict>
 <key>CFBundleTypeRole</key><string>Editor</string>
 <key>CFBundleURLName</key><string>Google sign-in</string>

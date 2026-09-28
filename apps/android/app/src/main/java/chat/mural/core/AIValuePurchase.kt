@@ -8,6 +8,7 @@ data class AIValueQuote(
     val serviceFeeBasisPoints: Int, val serviceFeeMinor: Long,
     val processingEstimateMinor: Long, val processingBufferMinor: Long, val totalMinor: Long,
     val policyVersion: Int, val exchangeRateVersion: String, val estimateRateVersion: String,
+    val quantity: Int = 1,
 ) {
     init {
         require(Regex("[a-z]{3}").matches(currency) && currencyExponent in 0..3)
@@ -15,7 +16,8 @@ data class AIValueQuote(
         require(aiValueMinor in 1..100_000_000 && totalMinor in 1..100_000_000)
         require(serviceFeeBasisPoints in 0..10_000 && policyVersion > 0)
         require(listOf(serviceFeeMinor, processingEstimateMinor, processingBufferMinor).all { it in 0..100_000_000 })
-        require(serviceFeeMinor == (aiValueMinor * serviceFeeBasisPoints + 9_999) / 10_000)
+        require(quantity in 1..10 && aiValueMinor % quantity == 0L && serviceFeeMinor % quantity == 0L)
+        require(serviceFeeMinor / quantity == ((aiValueMinor / quantity) * serviceFeeBasisPoints + 9_999) / 10_000)
         require(totalMinor == aiValueMinor + serviceFeeMinor + processingEstimateMinor + processingBufferMinor)
         require(listOf(exchangeRateVersion, estimateRateVersion).all { it.length in 1..128 && it.none(Char::isISOControl) })
     }
@@ -28,7 +30,15 @@ data class AIValueEntitlement(val aiValueNanoUSD: String, val estimatedMilliseco
         require(nanoAmount(aiValueNanoUSD).signum() > 0)
         require(estimatedMilliseconds in 1..MAX_AI_ESTIMATE_MS)
     }
-    val displayMinutes get() = ((estimatedMilliseconds + 59_999) / 60_000).toInt()
+    val displayMinutes get() = (estimatedMilliseconds / 60_000).toInt()
+    fun multiplied(quantity: Int): AIValueEntitlement {
+        require(quantity in 1..10 && quote.quantity == 1)
+        return copy(aiValueNanoUSD = (nanoAmount(aiValueNanoUSD) * quantity.toBigInteger()).toString(),
+            estimatedMilliseconds = Math.multiplyExact(estimatedMilliseconds, quantity.toLong()),
+            quote = quote.copy(aiValueMinor = quote.aiValueMinor * quantity, serviceFeeMinor = quote.serviceFeeMinor * quantity,
+                processingEstimateMinor = quote.processingEstimateMinor * quantity, processingBufferMinor = quote.processingBufferMinor * quantity,
+                totalMinor = quote.totalMinor * quantity, quantity = quantity))
+    }
 }
 
 data class AIValueFulfillment(val grantedNanoUSD: String, val reversedNanoUSD: String, val reversalOutstandingNanoUSD: String) {

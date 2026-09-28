@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-09-28T10:30:17.045675+00:00",
+  "sandboxImage": "sha256:064f038232665b1b5a83c4d745579300d48fc14e6e19058e4bd1eefc0e56f9fd",
+  "norway": {
+    "order_id": "a48dd3d4-3f15-434a-8fec-cb2d9eb17bab",
+    "state": "purchased",
+    "granted_nano": "3690000000",
+    "reversed_nano": "3690000000",
+    "refunded_minor": 8900,
+    "provider_revision": "1790590183273",
+    "updated_at": "2026-09-28T10:09:43.394939+00:00"
+  },
+  "notifications": [
+    {
+      "notification_type": "ONE_TIME_CHARGE",
+      "signed_date": "1790588654376",
+      "created_at": "2026-09-28T09:44:15.090327+00:00"
+    },
+    {
+      "notification_type": "CONSUMPTION_REQUEST",
+      "signed_date": "1790589040983",
+      "created_at": "2026-09-28T09:50:41.430032+00:00"
+    },
+    {
+      "notification_type": "REFUND",
+      "signed_date": "1790589552781",
+      "created_at": "2026-09-28T09:59:13.226078+00:00"
+    }
+  ],
+  "wallet": {
+    "balance_nano": "47901632599",
+    "sandbox_balance_nano": "47901632599",
+    "reserved_nano": "0"
+  },
+  "norwayOrders": [
+    {
+      "id": "a48dd3d4-3f15-434a-8fec-cb2d9eb17bab",
+      "quantity": 1,
+      "total_minor": 8900,
+      "currency": "nok",
+      "granted_nano": "3690000000",
+      "reversed_nano": "3690000000",
+      "refunded_minor": 8900,
+      "updated_at": "2026-09-28T10:09:43.394939+00:00"
+    },
+    {
+      "id": "966178bc-4cb9-4398-b247-0851e295b1c6",
+      "quantity": 2,
+      "total_minor": 17800,
+      "currency": "nok",
+      "granted_nano": "7380000000",
+      "reversed_nano": "7380000000",
+      "refunded_minor": 17800,
+      "updated_at": "2026-09-28T10:27:45.425075+00:00"
+    }
+  ],
+  "sandboxWarnings": [],
+  "productionWarnings": []
+}

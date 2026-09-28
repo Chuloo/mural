@@ -20,7 +20,9 @@ class ReportConversationSheetTest {
     @Test fun sendingRequiresReasonAndExplicitConsentAndAnEditClearsConsent() {
         val delivery = mutableStateOf(ReportDelivery.IDLE)
         val submitted = mutableListOf<AIReportSubmission>()
+        lateinit var focus: androidx.compose.ui.focus.FocusManager
         compose.setContent { MuralTheme {
+            focus = androidx.compose.ui.platform.LocalFocusManager.current
             ReportConversationSheet("Una frase de prueba.", "es", true, delivery.value, {
                 submitted += it; delivery.value = ReportDelivery.SENDING
             }, {})
@@ -32,7 +34,11 @@ class ReportConversationSheetTest {
         compose.onNodeWithTag("report-send").assertIsEnabled()
         compose.onNodeWithTag("report-excerpt").performScrollTo().performTextReplacement("Solo este fragmento.")
         compose.onNodeWithTag("report-send").assertIsNotEnabled()
+        // Finish editing before scrolling to consent; IME animation can otherwise move the tap target.
+        compose.runOnIdle { focus.clearFocus(force = true) }
         compose.onNodeWithTag("report-consent").performScrollTo().performClick()
+        compose.onNodeWithTag("report-consent").assertIsOn()
+        compose.onNodeWithTag("report-send").assertIsEnabled()
         compose.onNodeWithTag("report-send").performClick()
         compose.onNodeWithTag("report-send").assertIsNotEnabled()
         compose.runOnIdle {

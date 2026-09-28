@@ -141,7 +141,9 @@ fun TalkScreen(
             modifier = Modifier.size(orbSize).testTag("talk-orb"),
         )
         Box(Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 12.dp).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
-            val status = statusText(vm.state, vm.isMuted, vm.isVoiceSession, vm.inactivitySeconds)
+            val status = if (vm.hasContinuation) {
+                stringResource(if (vm.continuationReady) R.string.talk_status_continue_ready else R.string.talk_status_continue_settling)
+            } else statusText(vm.state, vm.isMuted, vm.isVoiceSession, vm.inactivitySeconds)
             val statusCaption = buildAnnotatedString {
                 if (vm.inactivitySeconds != null) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")) { append(status.substringBefore('\n')) }
@@ -280,6 +282,9 @@ fun TalkScreen(
         }
         vm.notice?.let { Text(it, color = MuralColors.Secondary, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall) }
         if (vm.session != null && !vm.isRunning) {
+            if (vm.hasContinuation) MuralTextButton(onClick = onMicrophone, enabled = vm.continuationReady) {
+                Text(stringResource(R.string.talk_continue_conversation_button))
+            }
             MuralTextButton(onClick = vm::resetConversation) { Text(stringResource(R.string.talk_new_conversation_button)) }
         }
         Spacer(Modifier.height(if (compact) 8.dp else 16.dp))

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "validationScope": "store-files-and-native-layout",
+  "source": {
+    "commit": "0f8a0b106bd2e149be98ed24e1dd82720b9f60d0",
+    "dirty": true
+  },
+  "checks": {
+    "branding": {
+      "iosIconSource": "apps/ios/App/Assets.xcassets/AppIcon.appiconset/MuralIcon.png",
+      "androidIconSource": "apps/android/app/src/main/res/drawable-nodpi/mural_icon.png",
+      "identicalIconSHA256": "96503dcbfb81efbdd298e7a3d0132c4ed497b7f36ae632c5462a3039223e9fd1",
+      "androidAdaptiveIconSHA256": "1e6a55fd8fb581dd8f1e3a03768c5b6f394af49ddf65fa098992983abaeab795",
+      "androidForegroundSHA256": "75c993e3d9c9e9ace7ad029b726d8f3dcb28e71dbea8475b4a38a072715198ee",
+      "androidForegroundInset": "10%",
+      "designSources": {
+        "apps/ios/App/Design.swift": "ff2317f4f1e9c4d1562c008d18232277137d0a2a2c0298683b4e6ccfe54da706",
+        "apps/android/app/src/main/java/chat/mural/ui/Design.kt": "4e6e71fae98fe3c9026dae5b4a39f8e9554df16df8b1f628d6c9273788d6eee3"
+      },
+      "visualReviewRequired": "Launcher masks and scale, in-app wordmark and store artwork must match the current iOS reference."
+    },
+    "metadata": {
+      "title": {
+        "characters": 24,
+        "maximum": 30,
+        "sha256": "2fea210c0697acb8dad89c73eae02794ee96b1ab9bc834790508dc3d6c086437"
+      },
+      "short-description": {
+        "characters": 71,
+        "maximum": 80,
+        "sha256": "6f23a7d0cb65f19211e56fc967eec5c9b74c47f3cb7aaef2f97397fbc120354d"
+      },
+      "full-description": {
+        "characters": 2297,
+        "maximum": 4000,
+        "sha256": "abbbb96c817b819dc7c103e7de39efd10dcc203a55406bf875ca5b4c4c082e86"
+      },
+      "release-notes": {
+        "characters": 301,
+        "maximum": 500,
+        "sha256": "9cd70a64e254b67cbbc1bbd9474716e117e25e6a169cd84ac85fa26f4910beb1"
+      }
+    },
+    "assets": {
+      "assets/icon.png": {
+        "width": 512,
+        "height": 512,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparency": true,
+        "bytes": 62428,
+        "sha256": "be9791ab74bad75b6340c2ec41524d4ba32c9fd0cdf84d6d04d0f78846d34b21"
+      },
+      "assets/feature-graphic.png": {
+        "width": 1024,
+        "height": 500,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 54314,
+        "sha256": "09a531e4a19e9760d02d954f3ae229ebf58b7ddb69cb8af3981fde903c515576"
+      },
+      "assets/en-US/01-greeting.png": {
+        "width": 1080,
+        "height": 1920,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 145935,
+        "sha256": "8bd8c74b71f200ccb8c2cae265f575a8c3b2fb70afde24a0d62bc2783d350cc9"
+      },
+      "assets/en-US/02-conversation.png": {
+        "width": 1080,
+        "height": 1920,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 170726,
+        "sha256": "bb0bb91a272286e92d4ab21321bd83fbfffa1fdf7c1f7527c50819d43bd26113"
+      },
+      "assets/en-US/03-themes.png": {
+        "width": 1080,
+        "height": 1920,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 127640,
+        "sha256": "d4a3866ee2db311279bca0cc4ed079dec1df7882145c4293efd7622097e406c3"
+      },
+      "assets/en-US/04-words.png": {
+        "width": 1080,
+        "height": 1920,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 118975,
+        "sha256": "ca0936fcf4f67873871eb9e8d43d04ccd1a1e05a2a343faef8e9734d03c0fad7"
+      },
+      "assets/en-US/05-languages.png": {
+        "width": 1080,
+        "height": 1920,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 503628,
+        "sha256": "c22fad06bae017ea537aaedfad9e34665da125483f7194165f8b78202e2572f3"
+      },
+      "assets/en-US/06-settings.png": {
+        "width": 1080,
+        "height": 1920,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparency": false,
+        "bytes": 135077,
+        "sha256": "dc273282169dfc738050f5dc7e4882499968929b57c104c96ac47a9e9e7bdb25"
+      }
+    }
+  },
+  "notVerified": [
+    "upload signature and key custody",
+    "generated split APK alignment and install",
+    "16 KB runtime",
+    "physical microphone, speaker and Bluetooth",
+    "live accounts, trial and purchases",
+    "launcher mask/scale, in-app logo and Play artwork visual parity with iOS",
+    "store declarations and owner release approval",
+    "release AAB"
+  ],
+  "scope": "hosted-minute-release",
+  "specification": {
+    "file": "release-spec.json",
+    "sha256": "06dff83cc8ef3f4947acff7ddd58e9626ccaf57df86e8e60536457a25cd69a42",
+    "packageName": "chat.mural.android",
+    "versionCode": 10,
+    "versionName": "0.1"
+  },
+  "passed": true
+}

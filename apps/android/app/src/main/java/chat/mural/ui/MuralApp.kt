@@ -68,7 +68,7 @@ fun MuralApp(
     onDeleteAccount: () -> Unit = {},
     accountTransitionBusy: Boolean = false,
     purchases: MinutePurchaseViewModel? = null,
-    onBuyMinutes: (String) -> Unit = {},
+    onBuyMinutes: (String, Int) -> Unit = { _, _ -> },
 ) {
     val reportState by vm.reportState.collectAsStateWithLifecycle()
     val accountState = account?.state?.collectAsStateWithLifecycle()?.value
@@ -221,10 +221,10 @@ fun MuralApp(
             if (showMinutes && purchases?.enabled == true && account != null) {
                 val purchaseState by purchases.state.collectAsStateWithLifecycle()
                 val accountState by account.state.collectAsStateWithLifecycle()
-                MinutePurchaseSheet(purchaseState, accountState.signedIn, onBuyMinutes,
+                MinutePurchaseSheet(purchaseState, accountState.signedIn, { onBuyMinutes(it, 1) },
                     onSignIn = onGoogleSignIn, onRefresh = purchases::refresh,
                     onDismiss = { showMinutes = false; account.refresh() },
-                    accountBusy = accountTransitionBusy || accountState.busy)
+                    accountBusy = accountTransitionBusy || accountState.busy, onBuyQuantity = onBuyMinutes)
             }
 
             reportState.selection?.let { selected ->

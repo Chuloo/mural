@@ -19,6 +19,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import chat.mural.R
@@ -41,7 +44,13 @@ fun MinutePurchaseSheet(
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
     accountBusy: Boolean = false,
+    onBuyQuantity: ((String, Int) -> Unit)? = null,
 ) {
+    var selectedSKU by remember { mutableStateOf<String?>(null) }
+    var quantity by remember { mutableIntStateOf(1) }
+    val selectedPack = state.packs.firstOrNull { it.sku == selectedSKU } ?: state.packs.firstOrNull()
+    val maximumQuantity = if (state.channel == PurchaseChannel.STRIPE && onBuyQuantity != null) state.maximumQuantity else 1
+    LaunchedEffect(maximumQuantity) { quantity = quantity.coerceIn(1, maximumQuantity) }
     val checking = state.busy || state.notice == MinutePurchaseNotice.VERIFYING
     val needsSignIn = !signedIn || state.notice == MinutePurchaseNotice.SIGN_IN_REQUIRED
     val canChoose = state.available && !checking && !state.purchaseInProgress && !accountBusy && !needsSignIn
@@ -64,19 +73,13 @@ fun MinutePurchaseSheet(
                         textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
                     Text(stringResource(R.string.minute_purchases_intro), style = MaterialTheme.typography.bodyMedium,
                         color = MuralColors.Secondary, textAlign = TextAlign.Center)
-                    if (!needsSignIn) state.balance?.availableMilliseconds?.let { available ->
-                        Surface(color = MuralColors.Peach.copy(alpha = .70f), shape = RoundedCornerShape(50)) {
-                            Text(minuteBalanceText(available), Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                                .testTag("minute-purchase-balance"), style = MaterialTheme.typography.labelMedium, color = MuralColors.Ink)
-                        }
-                    }
-                    Text(stringResource(R.string.hosted_minimum_charge_disclosure), style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(if (state.packs.any { it.aiValue != null }) R.string.paid_minimum_charge_disclosure else R.string.hosted_minimum_charge_disclosure), style = MaterialTheme.typography.bodySmall,
                         color = MuralColors.Secondary, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp)
                             .testTag("minute-purchase-minimum"))
                     if (!needsSignIn) state.balance?.let { PaidBalanceText(it) }
                     Column(Modifier.widthIn(max = 520.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         state.packs.forEach { pack ->
-                            MinutePackCard(pack, enabled = canChoose, onBuy = { onBuy(pack.sku) })
+                            MinutePackCard(pack, enabled = canChoose, selected = pack.sku == selectedPack?.sku, onSelect = { selectedSKU = pack.sku })
                         }
                         if (state.packs.isEmpty()) Surface(color = Color.White.copy(alpha = .72f), shape = RoundedCornerShape(26.dp)) {
                             Text(stringResource(if (checking) R.string.minute_purchases_loading else R.string.minute_purchases_unavailable),
@@ -115,51 +118,61 @@ fun MinutePurchaseSheet(
                         Text(stringResource(R.string.minute_purchases_check))
                     }
                 }
+                selectedPack?.let { pack ->
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val decreaseLabel = stringResource(R.string.minute_quantity_decrease)
+                        val increaseLabel = stringResource(R.string.minute_quantity_increase)
+                        if (maximumQuantity > 1) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.minute_quantity, quantity), Modifier.weight(1f))
+                            TextButton(onClick = { quantity-- }, enabled = canChoose && quantity > 1,
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("minute-quantity-decrease")) {
+                                Text("−", Modifier.semantics { contentDescription = decreaseLabel })
+                            }
+                            TextButton(onClick = { quantity++ }, enabled = canChoose && quantity < maximumQuantity,
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("minute-quantity-increase")) {
+                                Text("+", Modifier.semantics { contentDescription = increaseLabel })
+                            }
+                        }
+                        Text(packMinutes(pack, quantity), style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.testTag("minute-purchase-total").semantics { liveRegion = LiveRegionMode.Polite })
+                        Button(onClick = { onBuyQuantity?.invoke(pack.sku, quantity) ?: onBuy(pack.sku) }, enabled = canChoose,
+                            shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("minute-purchase-continue"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
+                            Text(stringResource(R.string.minute_continue_price, packPrice(pack, quantity)))
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MinutePackCard(pack: MinutePack, enabled: Boolean, onBuy: () -> Unit) {
-    val minutes = pack.aiValue?.let { value -> stringResource(R.string.paid_pack_estimate,
-        NumberFormat.getNumberInstance().apply { maximumFractionDigits = 1; roundingMode = RoundingMode.DOWN }
-            .format(value.estimatedMilliseconds / 60_000.0)) }
-        ?: pluralStringResource(R.plurals.minute_purchases_pack_minutes, pack.minutes, NumberFormat.getIntegerInstance().format(pack.minutes))
-    val action = stringResource(R.string.minute_purchases_pack_action, minutes, pack.formattedPrice)
-    Surface(onClick = onBuy, enabled = enabled, shape = RoundedCornerShape(26.dp),
+private fun packMinutes(pack: MinutePack, quantity: Int = 1): String {
+    val estimate = pack.aiValue?.estimatedMilliseconds?.let { it * quantity }
+    return if (estimate != null) {
+        if (estimate < 60_000) stringResource(R.string.paid_balance_small)
+        else stringResource(R.string.paid_pack_estimate, NumberFormat.getIntegerInstance().format(estimate / 60_000))
+    } else pluralStringResource(R.plurals.minute_purchases_pack_minutes, pack.minutes * quantity, NumberFormat.getIntegerInstance().format(pack.minutes * quantity))
+}
+
+private fun packPrice(pack: MinutePack, quantity: Int): String {
+    val quote = pack.aiValue?.quote ?: return pack.formattedPrice
+    return NumberFormat.getCurrencyInstance().apply { currency = java.util.Currency.getInstance(quote.currency.uppercase(java.util.Locale.ROOT)) }
+        .format(BigDecimal.valueOf(quote.totalMinor * quantity, quote.currencyExponent))
+}
+
+@Composable
+private fun MinutePackCard(pack: MinutePack, enabled: Boolean, selected: Boolean, onSelect: () -> Unit) {
+    Surface(onClick = onSelect, enabled = enabled, shape = RoundedCornerShape(22.dp),
         color = Color.White.copy(alpha = if (enabled) .88f else .60f),
-        border = BorderStroke(1.dp, Color.White), modifier = Modifier.fillMaxWidth().testTag("minute-purchase-pack-${pack.sku}")
-            .semantics { contentDescription = action }) {
-        // A vertical card preserves full localized prices and long text at larger font sizes.
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(minutes, style = MaterialTheme.typography.headlineMedium, color = MuralColors.Ink)
-            pack.aiValue?.let { value ->
-                Text(stringResource(R.string.paid_balance_detail), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
-                val quote = value.quote
-                val money = NumberFormat.getCurrencyInstance().apply { currency = java.util.Currency.getInstance(quote.currency.uppercase(java.util.Locale.ROOT)) }
-                val feePercent = NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }
-                    .format(quote.serviceFeeBasisPoints / 100.0)
-                val lines = listOf(stringResource(R.string.paid_ai_allocation) to quote.aiValueMinor,
-                    stringResource(R.string.paid_mural_fee, feePercent) to quote.serviceFeeMinor,
-                    stringResource(R.string.paid_processing_fee) to quote.processingEstimateMinor,
-                    stringResource(R.string.paid_processing_buffer) to quote.processingBufferMinor)
-                lines.forEach { (label, amount) ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
-                        Text(money.format(BigDecimal.valueOf(amount, quote.currencyExponent)), style = MaterialTheme.typography.bodySmall,
-                            color = MuralColors.Ink)
-                    }
-                }
-            }
-            Surface(color = MuralColors.Peach.copy(alpha = if (enabled) 1f else .65f), shape = RoundedCornerShape(50)) {
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(pack.formattedPrice, style = MaterialTheme.typography.titleMedium, color = MuralColors.Ink,
-                        modifier = Modifier.weight(1f, fill = false))
-                    MuralIcon(MuralSymbol.ChevronRight, Modifier.size(14.dp), color = MuralColors.Secondary)
-                }
-            }
+        border = BorderStroke(1.dp, if (selected) MuralColors.Ink.copy(alpha = .35f) else Color.White),
+        modifier = Modifier.fillMaxWidth().testTag("minute-purchase-pack-${pack.sku}")
+            .semantics { this.selected = selected; role = Role.RadioButton }) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RadioButton(selected = selected, onClick = null, enabled = enabled)
+            Text(packMinutes(pack), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MuralColors.Ink)
+            Text(pack.formattedPrice, style = MaterialTheme.typography.bodyMedium, color = MuralColors.Ink)
         }
     }
 }

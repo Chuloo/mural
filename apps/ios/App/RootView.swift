@@ -48,6 +48,12 @@ struct RootView: View {
                 }
             }
             if let hostedFailure = coordinator.hostedAccessFailure {
+                if case .noMinutes = hostedFailure {
+                    Button("Check minutes") {
+                        coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil
+                        coordinator.requestAccountFocus = true; coordinator.showSettings = true
+                    }
+                }
                 if hostedFailure.needsSignInRecovery {
                     Button("Sign in") {
                         coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil
@@ -61,6 +67,8 @@ struct RootView: View {
             }
             Button("OK", role: .cancel) { coordinator.error = nil; coordinator.store.error = nil; coordinator.hostedAccessFailure = nil }
         } message: { Text(coordinator.error ?? coordinator.store.error ?? "") }
+        .task { coordinator.resume(); AppleMinutePurchases.shared.start(); await HostedCloseRecovery.shared.resume() }
+        .onChange(of: HostedCloseRecovery.shared.revision) { _, _ in Task { await coordinator.refreshContinuation() } }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
             #if DEBUG && targetEnvironment(simulator)
@@ -72,8 +80,8 @@ struct RootView: View {
             onboarding = !coordinator.store.preferences.hasOnboarded && !arguments.contains("--preview") && !AudioVerification.requested
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { coordinator.background() }
-            else if phase == .active { coordinator.resume() }
+            if phase == .background { coordinator.background(); HostedCloseRecovery.shared.pause() }
+            else if phase == .active { coordinator.resume(); Task { await HostedCloseRecovery.shared.resume(); await AppleMinutePurchases.shared.checkPurchases(includeHistory: false) } }
         }
         #if DEBUG
         .task {
@@ -163,16 +171,22 @@ struct TalkView: View {
                 .frame(maxHeight: scrollPage ? nil : .infinity)
             controls.padding(.top, compact ? 8 : 12)
             Group {
-                HStack(spacing: 24) {
+                let actionLayout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 24))
+                actionLayout {
                     if coordinator.state == .active {
                         Button("Type instead", systemImage: "keyboard") { typing = true }
                         Button("A little help", systemImage: "sparkles") { coordinator.help() }
                     } else if coordinator.session != nil && !coordinator.isRunning {
+                        if coordinator.hasContinuation {
+                            Button("Continue conversation") { coordinator.start() }
+                                .disabled(!coordinator.continuationReady)
+                                .accessibilityIdentifier("continue-conversation")
+                        }
                         Button("New conversation", systemImage: "arrow.counterclockwise") { coordinator.resetConversation() }
                             .accessibilityIdentifier("new-conversation")
                     }
                 }.font(.caption)
-            }.frame(height: compact ? 28 : 42).accessibilityHidden(coordinator.state != .active && coordinator.session == nil)
+            }.frame(minHeight: compact ? 28 : 42).accessibilityHidden(coordinator.state != .active && coordinator.session == nil)
         }.padding(.horizontal, 30).frame(maxWidth: .infinity)
     }
     private func captionArea(scrollPage: Bool) -> some View {
@@ -255,11 +269,13 @@ struct TalkView: View {
         return result
     }
     private var controls: some View {
-        HStack(alignment: .center, spacing: 27) {
+        let outerLayout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 20)) : AnyLayout(HStackLayout(alignment: .center, spacing: 27))
+        let labelLayout = typeSize.isAccessibilitySize ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 6))
+        return outerLayout {
             Button { coordinator.toggleMeaning() } label: {
-                VStack(spacing: 6) {
+                labelLayout {
                     Image(systemName: coordinator.store.preferences.meaningVisible ? "captions.bubble.fill" : "captions.bubble")
-                        .frame(width: 48, height: 48).modifier(SoftGlass(tint: coordinator.store.preferences.meaningVisible ? MuralColor.butter.opacity(0.7) : .white.opacity(0.4)))
+                        .font(.system(size: 20)).frame(width: 48, height: 48).modifier(SoftGlass(tint: coordinator.store.preferences.meaningVisible ? MuralColor.butter.opacity(0.7) : .white.opacity(0.4)))
                     Text("Meaning").font(.caption2)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain)
@@ -274,13 +290,13 @@ struct TalkView: View {
                     if coordinator.state == .connecting || coordinator.state == .closing { ProgressView().tint(MuralColor.ink) }
                     else { Image(systemName: coordinator.isMuted && coordinator.state == .active ? "mic.slash" : "mic").font(.system(size: 28, weight: .regular)).contentTransition(.symbolEffect(.replace)) }
                 }.frame(width: 76, height: 76).shadow(color: MuralColor.orange.opacity(0.25), radius: 10, y: 6)
-            }.buttonStyle(.plain).padding(.bottom, 18)
+            }.buttonStyle(.plain).padding(.bottom, typeSize.isAccessibilitySize ? 0 : 18)
                 .disabled(coordinator.state == .connecting || coordinator.state == .closing)
                 .accessibilityLabel(coordinator.state == .active ? (coordinator.isMuted ? "Unmute microphone" : "Mute microphone") : "Start conversation")
                 .accessibilityIdentifier("start-conversation")
             Button { if coordinator.isRunning { coordinator.end() } else { transcript = coordinator.session } } label: {
-                VStack(spacing: 6) {
-                    Image(systemName: coordinator.isRunning ? "phone.down" : "text.bubble").frame(width: 48, height: 48).modifier(SoftGlass())
+                labelLayout {
+                    Image(systemName: coordinator.isRunning ? "phone.down" : "text.bubble").font(.system(size: 20)).frame(width: 48, height: 48).modifier(SoftGlass())
                     Text(coordinator.isRunning ? "End" : "Transcript").font(.caption2)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel(coordinator.isRunning ? "End conversation" : "Conversation transcript")

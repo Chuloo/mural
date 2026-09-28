@@ -11,11 +11,13 @@ final class ManagedAccountStore {
     private(set) var hostedBalance: HostedBalance?
     private(set) var isBusy = false
     var message: String?
+    private(set) var deletionNeedsSupport = false
     @ObservationIgnored private let client: ManagedAccountClient?
     @ObservationIgnored private let keychain: ManagedAccountKeychain?
     @ObservationIgnored private let identity = ManagedAccountIdentity()
     @ObservationIgnored private var operation: Task<Void, Never>?
     @ObservationIgnored private var gate = ManagedAccountOperationGate()
+    @ObservationIgnored private var balanceRevision: (account: UUID, revision: UInt64)?
     private let isPreview: Bool
 
     init(configuration: ManagedAccountConfiguration? = .load()) {
@@ -82,6 +84,7 @@ final class ManagedAccountStore {
             do { try keychain.save(newSession) }
             catch { try? await client.signOut(session: newSession); throw error }
             session = newSession
+            Task { await HostedCloseRecovery.shared.resume() }
             let result = try await client.profile(session: newSession)
             guard gate.accepts(token) else { return }
             profile = result
@@ -90,8 +93,7 @@ final class ManagedAccountStore {
                 try await GuestAccess.shared.linkIfNeeded(to: owner)
                 let balance = try? await hosted.balance(owner)
                 guard gate.accepts(token), session?.accountID == newSession.accountID else { return }
-                hostedBalance = balance
-                hostedBalanceMilliseconds = balance?.availableMilliseconds
+                acceptBalance(balance, account: newSession.accountID)
             }
         }
     }
@@ -109,14 +111,39 @@ final class ManagedAccountStore {
                 try await GuestAccess.shared.linkIfNeeded(to: owner)
                 let balance = try? await hosted.balance(owner)
                 guard gate.accepts(token), self.session?.accountID == session.accountID else { return }
-                hostedBalance = balance
-                hostedBalanceMilliseconds = balance?.availableMilliseconds
+                acceptBalance(balance, account: session.accountID)
             }
+        }
+    }
+    func connectGoogle() {
+        guard !isPreview, !isBusy, let session, let client, let configuration,
+              configuration.providers.contains(.google), profile?.providers.contains(.apple) == true else { return }
+        run { [self] token in
+            let appleChallenge = try await client.challenge()
+            let apple = try await identity.apple(nonce: appleChallenge.nonce)
+            guard gate.accepts(token), self.session?.accountID == session.accountID else { throw ManagedAccountError.cancelled }
+            let googleChallenge = try await client.challenge()
+            let google = try await identity.google(configuration: configuration, nonce: googleChallenge.nonce, http: client.http)
+            guard gate.accepts(token), self.session?.accountID == session.accountID else { throw ManagedAccountError.cancelled }
+            try await client.connectGoogle(session: session, apple: apple.idToken, appleChallenge: appleChallenge,
+                                           google: google.idToken, googleChallenge: googleChallenge)
+            let refreshed = try await client.profile(session: session)
+            guard gate.accepts(token), self.session?.accountID == session.accountID else { return }
+            profile = refreshed; message = "Google is connected. Use it to sign in to Mural on Android."
         }
     }
     func refreshAndWait() async {
         refresh()
         await operation?.value
+    }
+    private func acceptBalance(_ balance: HostedBalance?, account: UUID) {
+        if let previous = balanceRevision, previous.account == account {
+            guard let revision = balance?.presentation?.revisionNumber, revision >= previous.revision else {
+                hostedBalance = nil; hostedBalanceMilliseconds = nil; return
+            }
+        }
+        if let revision = balance?.presentation?.revisionNumber { balanceRevision = (account, revision) }
+        hostedBalance = balance; hostedBalanceMilliseconds = balance?.availableMilliseconds
     }
     func signOut() {
         guard !isPreview else { message = "Preview account actions don’t change a real account."; return }
@@ -159,12 +186,13 @@ final class ManagedAccountStore {
         gate.cancel(); operation?.cancel(); identity.cancel(); operation = nil; isBusy = false
     }
     private func run(_ body: @escaping @MainActor (UInt64) async throws -> Void) {
-        let token = gate.begin(); isBusy = true; message = nil
+        let token = gate.begin(); isBusy = true; message = nil; deletionNeedsSupport = false
         operation = Task { [self] in
             defer { if gate.accepts(token) { isBusy = false; operation = nil } }
             do { try await body(token) }
             catch {
                 guard gate.accepts(token) else { return }
+                deletionNeedsSupport = error as? ManagedAccountError == .server("unresolved_billing")
                 if error as? ManagedAccountError == .server("sign_in_required") {
                     session = nil; profile = nil
                     do { try keychain?.remove() } catch { message = Self.message(for: error); return }
@@ -182,6 +210,8 @@ final class ManagedAccountStore {
         case .server("unresolved_billing"): "Your account has a balance, pending payment or active usage. Contact hi@hackmamba.io to resolve it before deleting your account."
         case .server("sign_in_required"): "Please sign in again. Your learning history is still on this iPhone."
         case .server("rate_limit"): "Please try again later."
+        case .server("same_account_required"): "Use the Apple account already connected to this Mural account."
+        case .server("identity_link_conflict"): "That Google account is already connected to another Mural account. Contact hi@hackmamba.io for help. Your minutes haven’t moved."
         case .server("apple_sign_in_not_ready"), .server("apple_revocation_not_configured"):
             "Sign in with Apple is temporarily unavailable. Please try again later."
         case .server("identity_provider_not_configured"), .unavailable:

@@ -1,0 +1,38 @@
+{
+  "file": "Mural-Android-direct-v10-candidate.apk",
+  "sha256": "57f69b61330df57aeced22017121b565b3cef1850c4a2a83a24abf9a6b02aa35",
+  "versionCode": 10,
+  "versionName": "0.1",
+  "configuration": {
+    "origin": "https://api.mural.chat",
+    "purchaseChannel": "stripe",
+    "purchaseEnvironment": "live",
+    "purchasesEnabled": true
+  },
+  "signature": {
+    "verified": true,
+    "schemes": [
+      "v2",
+      "v3"
+    ],
+    "certificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+    "matchesPreviousDirectV9": true,
+    "googlePlaySigning": false
+  },
+  "zipalign16KB": true,
+  "releasePayloadDebuggable": false,
+  "published": false,
+  "deviceInstallVerified": false,
+  "embeddedSecretScan": {
+    "entriesScanned": 606,
+    "patterns": [
+      "OpenAI secret key",
+      "Stripe secret or restricted key",
+      "Google OAuth client secret",
+      "GitHub token",
+      "private key material"
+    ],
+    "findings": 0,
+    "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+  }
+}

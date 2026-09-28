@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                 onDeleteAccount = { changeAccount(delete = true) },
                 accountTransitionBusy = accountTransitionBusy,
                 purchases = purchases,
-                onBuyMinutes = { sku -> if (!changingAccount) purchases.launch(this@MainActivity, sku) },
+                onBuyMinutes = { sku, quantity -> if (!changingAccount) purchases.launch(this@MainActivity, sku, quantity) },
             )
             }
         }

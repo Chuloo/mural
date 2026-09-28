@@ -23,6 +23,28 @@ import MuralCore
     var error: String?
     var typedReplyError: String?
     var notice: String?
+    private(set) var continuationReady = false
+    private var continuationSession: SessionRecord?
+    private var continuationOwner: UUID?
+    private var freeBoundaryOwner: HostedOwner?
+    var hasContinuation: Bool { continuationSession != nil }
+    private var continuationKey: String { "mural.continuation.v1." + (ManagedAccountConfiguration.load()?.storageScope ?? "disabled") }
+    private func clearContinuation() {
+        continuationSession = nil; continuationOwner = nil; continuationReady = false; freeBoundaryOwner = nil
+        UserDefaults.standard.removeObject(forKey: continuationKey)
+    }
+    private func restoreContinuation() {
+        guard !isRunning, !hasContinuation, conversationProvider == .hosted,
+              let config = ManagedAccountConfiguration.load(),
+              let member = try? ManagedAccountKeychain(scope: config.storageScope).load(), member.isUsable(scope: config.storageScope),
+              let data = UserDefaults.standard.data(forKey: continuationKey),
+              let checkpoint = try? JSONDecoder().decode(ConversationContinuationCheckpoint.self, from: data),
+              let saved = checkpoint.recover(from: store.sessions, accountID: member.accountID, languageID: language.id) else { return }
+        continuationSession = saved; continuationOwner = member.accountID; continuationReady = false
+        session = saved; selectedTheme = language.themes.first { $0.id == saved.themeID }; pendingTopic = saved.topics.last
+        state = .ended; cancelReset()
+        notice = "Your free minutes have ended. Updating your minutes before you continue."
+    }
     private(set) var conversationProvider: ConversationProvider
     private(set) var personalKeyFailure: ProviderFailure?
     var hostedAccessFailure: HostedError?
@@ -128,12 +150,16 @@ import MuralCore
         case .connecting: "Getting comfortable…"
         case .active: outputLevel > 0.02 ? "Mural is speaking" : inputLevel > 0.02 ? "I’m listening" : "Take your time"
         case .closing: "Saving our conversation…"
-        case .ended: "Until next time"
+        case .ended: hasContinuation ? (continuationReady ? "Ready to continue" : "Updating your minutes…") : "Until next time"
         case .failed: "Let’s try again"
         }
     }
     func start() {
         guard !isRunning else { return }
+        if hasContinuation && !continuationReady {
+            notice = "Updating your minutes. You can continue this conversation shortly."
+            Task { await refreshContinuation() }; return
+        }
         guard hasAIConsent else { startAfterConsent = true; showAIConsent = true; return }
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--preview") { showSettings = true; return }
@@ -148,8 +174,9 @@ import MuralCore
         session = record; store.save(record)
         let generation = record.id
         let learner = store.learner
-        // Each new conversation starts fresh; learned vocabulary and difficulty still carry forward.
-        let history: [[String: Any]] = []
+        let continuing = continuationSession
+        let continuingOwner = continuationOwner
+        let history = ConversationContinuation.history(continuing?.passages.map { ($0.speaker, $0.text) } ?? [])
         let instructions = TeachingPolicy.voice(language: language, learner: learner, theme: selectedTheme, interests: store.preferences.interests, meaningLanguage: store.preferences.meaningLanguage)
         api.conversationProvider = conversationProvider
         api.hostedLease = nil
@@ -165,15 +192,26 @@ import MuralCore
                         member = try ManagedAccountKeychain(scope: config.storageScope).load()
                     } else { member = nil }
                     let owner = try await GuestAccess.shared.owner(member: member)
+                    guard continuingOwner == nil || continuingOwner == owner.accountID else { throw HostedError.signInRequired }
                     guard try await client.available(owner) else { throw HostedError.unavailable }
                     let balance = try await client.balance(owner)
-                    guard balance.canStart else { throw HostedError.noMinutes }
+                    guard balance.canStart else {
+                        if balance.presentation?.settlementState != "settled" && balance.paidReserved { throw HostedError.unconfirmed }
+                        throw HostedError.noMinutes
+                    }
+                    self.freeBoundaryOwner = nil
+                    if balance.availableMilliseconds > 0 && balance.availableMilliseconds < self.store.preferences.sessionMinutes * 60_000 && balance.hasPaidRemainder {
+                        self.freeBoundaryOwner = owner
+                        self.notice = "Your free minutes come first. This call will pause when they end; you can then continue with your purchased minutes."
+                    }
                     hosted = HostedConnectRequest(client: client, owner: owner, language: self.language.locale,
                                                   requestedMilliseconds: self.store.preferences.sessionMinutes * 60_000)
                 }
                 guard self.session?.id == generation, self.state == .connecting else { return }
                 checkingHostedAccess = false
                 try await self.transport.connect(api: self.api, instructions: instructions, history: history, hosted: hosted)
+                self.continuationSession = nil; self.continuationOwner = nil; self.continuationReady = false
+                UserDefaults.standard.removeObject(forKey: self.continuationKey)
             }
             catch is CancellationError { return }
             catch {
@@ -188,6 +226,7 @@ import MuralCore
     }
     func selectConversationProvider(_ provider: ConversationProvider) {
         guard !isRunning else { return }
+        clearContinuation()
         conversationProvider = provider
         UserDefaults.standard.set(provider.rawValue, forKey: "mural.conversation-provider")
         api.conversationProvider = provider
@@ -242,6 +281,7 @@ import MuralCore
     }
     func selectLanguage(_ id: String) {
         guard !isRunning, id != language.id, LanguageRegistry.module(for: id) != nil else { return }
+        clearContinuation()
         cancelReset(); languageGeneration = UUID()
         connectionTask?.cancel(); closeTask?.cancel(); durationTask?.cancel()
         meanings.reset(); assessmentTask?.cancel(); saveTask?.cancel(); saveTask = nil
@@ -319,13 +359,22 @@ import MuralCore
         closeTask?.cancel(); durationTask?.cancel(); connectionTask?.cancel()
         assessmentTask?.cancel(); saveTask?.cancel(); saveTask = nil
         delegationTasks.values.forEach { $0.cancel() }; delegationTasks.removeAll()
+        let boundary = session?.endReason == "Time limit" && api.hostedLease?.funding == .minutes ? freeBoundaryOwner : nil
         transport.disconnect(); pendingCommands = [:]; working = false
         session?.endedAt = .now; session?.usageFinal = final
         save(); state = .ended
         if let session { finalAssessments.submit(session) }
-        scheduleTranslation(); scheduleReset()
+        scheduleTranslation()
+        if let boundary, let session {
+            continuationSession = session; continuationOwner = boundary.accountID; continuationReady = false
+            if let data = try? JSONEncoder().encode(ConversationContinuationCheckpoint(sessionID: session.id, accountID: boundary.accountID)) {
+                UserDefaults.standard.set(data, forKey: continuationKey)
+            }
+            cancelReset(); notice = "Your free minutes have ended. Updating your minutes before you continue."
+            Task { await refreshContinuation() }
+        } else if continuationSession == nil { scheduleReset() }
         let endNotices = ["You’ve reached your conversation time limit.", "Mural ended this quiet session to avoid running up usage."]
-        if !endNotices.contains(notice ?? "") {
+        if boundary == nil && !endNotices.contains(notice ?? "") {
             notice = !final && session?.providerID != nil ? "Conversation saved. Final voice usage is unconfirmed." : nil
         }
         if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
@@ -434,6 +483,7 @@ import MuralCore
     func resetConversation() {
         guard !isRunning else { return }
         cancelReset(); meanings.reset(); saveTask?.cancel(); saveTask = nil
+        clearContinuation()
         languageGeneration = UUID()
         session = nil; selectedTheme = nil; pendingTopic = nil
         notice = nil; error = nil; working = false; isMuted = false
@@ -451,7 +501,28 @@ import MuralCore
         }
     }
     func resume() {
+        restoreContinuation()
         if state == .ended, let resetDeadline, Date() >= resetDeadline { resetConversation() }
+        if hasContinuation { Task { await refreshContinuation() } }
+    }
+    func refreshContinuation() async {
+        continuationReady = false
+        #if DEBUG && targetEnvironment(simulator)
+        let previewArguments = ProcessInfo.processInfo.arguments
+        if previewArguments.contains("--preview") && previewArguments.contains("--preview-free-boundary") {
+            continuationReady = !previewArguments.contains("--preview-settlement-pending")
+            return
+        }
+        #endif
+        guard !isRunning, let expected = continuationOwner, let client = HostedClient.shared,
+              let config = ManagedAccountConfiguration.load(), let member = try? ManagedAccountKeychain(scope: config.storageScope).load(),
+              member.accountID == expected, member.isUsable(scope: config.storageScope) else { return }
+        let owner = HostedOwner(accountID: expected, accessToken: member.accessToken, expiresAt: member.expiresAt)
+        guard let balance = try? await client.balance(owner), !isRunning, continuationOwner == expected,
+              let latest = try? ManagedAccountKeychain(scope: config.storageScope).load(), latest.accountID == expected,
+              latest.isUsable(scope: config.storageScope) else { return }
+        continuationReady = balance.canStart && balance.presentation?.settlementState == "settled"
+        if continuationReady { notice = "Your free minutes have ended. Continue this conversation with your purchased minutes." }
     }
     #if DEBUG
     func prepareEndedPreview() {
@@ -471,6 +542,12 @@ import MuralCore
             notice = arguments.contains("--test-inactivity") ? "Mural ended this quiet session to avoid running up usage." : "Mural will make that a little simpler."
         }
         session = record; state = .closing; finish(final: !checkNotice)
+        if arguments.contains("--preview-free-boundary") {
+            cancelReset(); continuationSession = record; continuationOwner = UUID()
+            continuationReady = !arguments.contains("--preview-settlement-pending")
+            notice = continuationReady ? "Your free minutes have ended. Continue this conversation with your purchased minutes." :
+                "Your free minutes have ended. Updating your minutes before you continue."
+        }
     }
     #endif
     #if DEBUG && targetEnvironment(simulator)

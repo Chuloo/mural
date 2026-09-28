@@ -33,7 +33,7 @@ class ConversationPolicyTest {
     @After fun restore() {
         if (!::original.isInitialized) return
         compose.runOnIdle {
-            state("session", null); state("state", "idle"); state("inactivitySeconds", null); vm.dismissError()
+            state("session", null); state("state", "idle"); state("inactivitySeconds", null); vm.resetConversation(); vm.dismissError()
             val restored = ArchiveCodec.decode(original); state("archive", restored); vm.updatePreferences(restored.preferences)
         }
     }
@@ -62,6 +62,26 @@ class ConversationPolicyTest {
         capture("typing-grace")
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.common_close)).performClick()
     }
+    @Test fun freeBoundaryKeepsCaptionAndWaitsForSettlementBeforeContinue() {
+        compose.runOnIdle {
+            state("session", SessionRecord(languageID = vm.language.id, endedAt = nowSeconds(), fragments = mutableListOf(
+                Fragment(speaker = Speaker.assistant, text = "Vi snakket om kaffe.", startMS = 0, endMS = 1000))))
+            state("state", "ended"); state("hasContinuation", true); state("continuationReady", false)
+            state("notice", compose.activity.getString(R.string.notice_continue_settling))
+        }
+        val next = compose.onNodeWithText(compose.activity.getString(R.string.talk_continue_conversation_button))
+        next.assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_continue_settling))
+        compose.onNodeWithText("Vi snakket om kaffe.", substring = true).assertExists()
+        capture("free-boundary-pending")
+        compose.runOnIdle { state("continuationReady", true); state("notice", compose.activity.getString(R.string.notice_continue_purchased)) }
+        next.assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_continue_ready))
+        capture("free-boundary-ready")
+        compose.onNodeWithText(compose.activity.getString(R.string.talk_new_conversation_button)).performClick()
+        compose.runOnIdle { assertNull(vm.session); assertFalse(vm.hasContinuation); assertFalse(vm.continuationReady) }
+    }
+
     @Test fun quotaErrorUsesBillingAdviceAndSafeProviderReference() {
         compose.runOnIdle {
             MuralViewModel::class.java.getDeclaredMethod("presentError", Throwable::class.java, Int::class.javaPrimitiveType)

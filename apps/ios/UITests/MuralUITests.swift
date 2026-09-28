@@ -293,13 +293,15 @@ final class MuralUITests: XCTestCase {
 
     func testPersonalKeyKeepsAccountFreeOfMuralMetersAndUsesQuietActions() {
         let app = XCUIApplication()
-        app.launchArguments = ["--preview", "--preview-key", "--preview-apple"]
+        app.launchArguments = ["--preview", "--preview-key", "--preview-apple", "--preview-purchases"]
         app.launch()
         XCTAssertFalse(app.staticTexts["talk-guest-minutes"].exists)
         app.buttons["Settings"].tap()
         app.buttons["managed-account-settings"].tap()
         XCTAssertTrue(app.staticTexts["managed-account-email"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["managed-account-minutes"].exists)
+        XCTAssertFalse(app.buttons["account-add-minutes"].exists)
+        XCTAssertTrue(app.buttons["account-purchase-history"].exists)
         XCTAssertTrue(app.buttons["managed-account-sign-out"].isHittable)
         XCTAssertTrue(app.buttons["Delete account…"].isHittable)
         app.buttons["managed-account-sign-out"].tap()
@@ -318,6 +320,93 @@ final class MuralUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["managed-account-minutes"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["managed-account-minutes"].label, "8 min 54 sec")
         XCTAssertFalse(app.buttons["settings-conversation-access"].exists)
+    }
+
+    private func purchasePreview(_ extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-member", "--preview-purchases", "-AppleLocale", "en_US", "-AppleLanguages", "(en)"] + extra
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let add = app.buttons["account-add-minutes"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        if !add.isHittable { app.swipeUp() }
+        add.tap()
+        XCTAssertTrue(app.buttons["minute-continue"].waitForExistence(timeout: 5))
+        return app
+    }
+    func testPurchaseQuantityFloorsAfterAggregationAndKeepsCheckoutStationary() {
+        let app = purchasePreview()
+        let next = app.buttons["minute-continue"]
+        XCTAssertEqual(next.label, "Continue · $7.00")
+        let position = next.frame
+        let stepper = app.steppers["minute-quantity"]
+        stepper.buttons["minute-quantity-Increment"].tap()
+        XCTAssertTrue(app.staticTexts["minute-total"].label.contains("About 73 min"))
+        XCTAssertEqual(next.label, "Continue · $14.00")
+        XCTAssertEqual(next.frame.minY, position.minY, accuracy: 1)
+        app.buttons["minute-offer-large"].tap()
+        XCTAssertEqual(next.label, "Continue · $40.00")
+        XCTAssertTrue(app.staticTexts["minute-total"].label.contains("About 232 min"))
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Apple packs - quantity two"; screen.lifetime = .keepAlways; add(screen)
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Purchase preview · no payment was made."].exists)
+    }
+    func testPurchaseControlsRemainReachableAtLargestTextSize() {
+        let app = purchasePreview(["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        XCTAssertTrue(app.buttons["minute-continue"].isHittable)
+        XCTAssertTrue(app.steppers["minute-quantity"].buttons["minute-quantity-Increment"].isHittable)
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["minute-continue"].isHittable)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Apple packs - largest text"; screen.lifetime = .keepAlways; add(screen)
+    }
+    func testPendingPurchaseDisablesAnotherCheckout() {
+        let app = purchasePreview(["--preview-purchase-pending"])
+        XCTAssertFalse(app.buttons["minute-continue"].isEnabled)
+        XCTAssertFalse(app.steppers["minute-quantity"].isEnabled)
+        XCTAssertFalse(app.buttons["minute-offer-small"].isEnabled)
+        XCTAssertTrue(app.buttons["minute-check-purchases"].isEnabled)
+    }
+    func testPurchaseHistoryKeepsRefundsAccountBoundAndUsesMinutesOnly() {
+        let app = purchasePreview([])
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["account-purchase-history"].tap()
+        XCTAssertTrue(app.staticTexts["Recent Apple purchases"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Refund recorded"].exists)
+        XCTAssertTrue(app.staticTexts["Quantity · 2"].exists)
+        XCTAssertFalse(app.buttons["Request a refund"].firstMatch.isEnabled)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "USD")).firstMatch.exists)
+    }
+    func testPurchaseAccessibilityAudit() throws {
+        let app = purchasePreview([])
+        try app.performAccessibilityAudit(for: [.contrast, .hitRegion, .sufficientElementDescription, .textClipped, .trait])
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["account-purchase-history"].tap()
+        XCTAssertTrue(app.staticTexts["Recent Apple purchases"].waitForExistence(timeout: 5))
+        try app.performAccessibilityAudit(for: [.contrast, .hitRegion, .sufficientElementDescription, .textClipped, .trait])
+    }
+    func testFreeBoundaryPreservesConversationAndWaitsForSettlement() { checkFreeBoundary(largeText: false) }
+    func testFreeBoundaryAtLargestTextSize() { checkFreeBoundary(largeText: true) }
+    private func checkFreeBoundary(largeText: Bool) {
+        for pending in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--preview", "--ended-conversation", "--preview-free-boundary"] + (pending ? ["--preview-settlement-pending"] : []) +
+                (largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : [])
+            app.launch()
+            let next = app.buttons["continue-conversation"]
+            XCTAssertTrue(next.waitForExistence(timeout: 5))
+            XCTAssertEqual(next.isEnabled, !pending)
+            if largeText { for _ in 0..<5 { if app.buttons["new-conversation"].isHittable { break }; app.swipeUp() } }
+            XCTAssertTrue(app.buttons["new-conversation"].isHittable)
+            if !pending { XCTAssertTrue(next.isHittable) }
+            XCTAssertTrue(app.staticTexts["target-caption"].exists)
+            let screen = XCTAttachment(screenshot: app.screenshot())
+            screen.name = (pending ? "Free boundary - updating minutes" : "Free boundary - continue conversation") + (largeText ? " - largest text" : "")
+            screen.lifetime = .keepAlways; add(screen)
+            app.terminate()
+        }
     }
 
     func testMixedMuralMinutesFloorTheCombinedEstimate() {
@@ -639,7 +728,8 @@ final class MuralUITests: XCTestCase {
         app.launch()
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
-        XCTAssertTrue(alert.staticTexts["Your free minutes have been used. You can keep practising with your own API key."].exists)
+        XCTAssertTrue(alert.staticTexts["No Mural minutes are available for a new conversation. Check Account or use your own API key."].exists)
+        XCTAssertTrue(alert.buttons["Check minutes"].exists)
         alert.buttons["Use my API key"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["settings-conversation-access"].exists)

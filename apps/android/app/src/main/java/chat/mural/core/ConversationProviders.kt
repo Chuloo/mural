@@ -7,6 +7,15 @@ import kotlinx.serialization.json.*
 /** Choice is explicit. An unavailable provider never authorizes use of the other one. */
 enum class ConversationProvider { PERSONAL_KEY, HOSTED_MINUTES }
 
+@kotlinx.serialization.Serializable
+data class ConversationContinuationCheckpoint(val sessionID: String, val accountID: String) {
+    fun recover(sessions: List<SessionRecord>, accountID: String, languageID: String): SessionRecord? =
+        if (this.accountID != accountID) null else sessions.firstOrNull {
+            it.id == sessionID && it.languageID == languageID && it.endedAt != null &&
+                it.endReason in listOf("Time limit", "Reserved conversation time ended")
+        }
+}
+
 object MinuteBalanceTime {
     fun roundedSeconds(milliseconds: Long): Long {
         val value = milliseconds.coerceAtLeast(0)
@@ -36,8 +45,8 @@ object ConversationHistory {
     fun messages(session: SessionRecord?): JsonArray {
         val result = mutableListOf<JsonElement>()
         for (passage in session?.passages.orEmpty().takeLast(40).asReversed()) {
-            if (passage.text.isBlank()) continue
-            val text = utf8Prefix(passage.text, 4_500)
+            if (passage.text.isBlank() || passage.text.any { (it.code < 32 && it !in "\t\n\r") || it.code == 127 }) continue
+            val text = utf8Prefix(passage.text.trim(), 4_000)
             val item = buildJsonObject {
                 put("type", "message"); put("role", passage.speaker.name)
                 putJsonArray("content") { add(buildJsonObject {
