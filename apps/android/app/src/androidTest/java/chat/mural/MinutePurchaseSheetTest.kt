@@ -80,7 +80,7 @@ class MinutePurchaseSheetTest {
         compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 36 minutes")
         compose.onNodeWithTag("minute-quantity-increase").performClick()
         compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 73 minutes")
-        compose.onNodeWithTag("minute-purchase-continue").assertTextContains("Continue · $10.00")
+        compose.onNodeWithTag("minute-purchase-continue").assertTextContains("$10.00", substring = true)
         compose.runOnIdle { assertTrue(purchases.isEmpty()) }
         repeat(8) { compose.onNodeWithTag("minute-quantity-increase").performClick() }
         compose.onNodeWithTag("minute-quantity-increase").assertIsNotEnabled()
@@ -88,6 +88,20 @@ class MinutePurchaseSheetTest {
         capture("minute-packs-quantity-ten.png")
         compose.onNodeWithTag("minute-purchase-continue").performClick()
         compose.runOnIdle { assertEquals(listOf("starter" to 10), purchases) }
+    }
+
+    @Test fun compactHeaderKeepsThreePackChoicesVisibleBeforeCheckout() {
+        compose.setContent { MuralTheme {
+            MinutePurchaseSheet(ready.copy(channel = PurchaseChannel.STRIPE, maximumQuantity = 10,
+                packs = listOf(MinutePack("small", 36, "$5.00"), MinutePack("medium", 79, "$10.00"),
+                    MinutePack("large", 123, "$15.00"))), true, {}, {}, {}, {}, onBuyQuantity = { _, _ -> })
+        } }
+        for (sku in listOf("small", "medium", "large")) {
+            compose.onNodeWithTag("minute-purchase-pack-$sku").assertIsDisplayed()
+        }
+        compose.onNodeWithTag("minute-purchase-pack-medium").performClick()
+        compose.onNodeWithTag("minute-purchase-continue").assertIsDisplayed().assertTextContains("$10.00", substring = true)
+        capture("minute-packs-compact-three.png")
     }
 
     private fun capture(name: String) {

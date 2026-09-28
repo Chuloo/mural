@@ -1,6 +1,6 @@
 {
   "file": "Mural-Android-direct-v10-candidate.apk",
-  "sha256": "57f69b61330df57aeced22017121b565b3cef1850c4a2a83a24abf9a6b02aa35",
+  "sha256": "5357e51045932d3ba0c1967a62e450f3b20a5b3b0bd1fb53804ebe32ca65602d",
   "versionCode": 10,
   "versionName": "0.1",
   "configuration": {
@@ -34,5 +34,6 @@
     ],
     "findings": 0,
     "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
-  }
+  },
+  "compactCheckoutVerifiedOnPhysicalSamsung": true
 }

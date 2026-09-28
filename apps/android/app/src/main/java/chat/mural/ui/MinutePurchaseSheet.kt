@@ -68,15 +68,14 @@ fun MinutePurchaseSheet(
                 Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp).padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    MuralOrb(modifier = Modifier.size(104.dp), energy = if (checking) .10f else 0f)
-                    Text(stringResource(R.string.minute_purchases_title), style = MaterialTheme.typography.headlineLarge,
-                        textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+                    Row(Modifier.widthIn(max = 520.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        MuralOrb(modifier = Modifier.size(56.dp), energy = if (checking) .10f else 0f)
+                        Text(stringResource(R.string.minute_purchases_title), style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.weight(1f).semantics { heading() })
+                    }
                     Text(stringResource(R.string.minute_purchases_intro), style = MaterialTheme.typography.bodyMedium,
                         color = MuralColors.Secondary, textAlign = TextAlign.Center)
-                    Text(stringResource(if (state.packs.any { it.aiValue != null }) R.string.paid_minimum_charge_disclosure else R.string.hosted_minimum_charge_disclosure), style = MaterialTheme.typography.bodySmall,
-                        color = MuralColors.Secondary, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp)
-                            .testTag("minute-purchase-minimum"))
-                    if (!needsSignIn) state.balance?.let { PaidBalanceText(it) }
                     Column(Modifier.widthIn(max = 520.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         state.packs.forEach { pack ->
                             MinutePackCard(pack, enabled = canChoose, selected = pack.sku == selectedPack?.sku, onSelect = { selectedSKU = pack.sku })
@@ -87,6 +86,10 @@ fun MinutePurchaseSheet(
                                 style = MaterialTheme.typography.bodyMedium, color = MuralColors.Secondary, textAlign = TextAlign.Center)
                         }
                     }
+                    Text(stringResource(if (state.packs.any { it.aiValue != null }) R.string.paid_minimum_charge_disclosure else R.string.hosted_minimum_charge_disclosure), style = MaterialTheme.typography.bodySmall,
+                        color = MuralColors.Secondary, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp)
+                            .testTag("minute-purchase-minimum"))
+                    if (!needsSignIn) state.balance?.let { PaidBalanceText(it) }
                     if (needsSignIn) {
                         Text(stringResource(R.string.minute_purchases_sign_in_detail), style = MaterialTheme.typography.bodyMedium,
                             color = MuralColors.Secondary, textAlign = TextAlign.Center)
