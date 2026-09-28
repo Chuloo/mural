@@ -16,7 +16,7 @@ export async function stripeOrderByKey(db: Database, accountID: string, key: str
   return { orderID: row.id };
 }
 
-export type PurchaseProvider = 'stripe' | 'play';
+export type PurchaseProvider = 'stripe' | 'play' | 'apple';
 export type PurchaseEnvironment = 'test' | 'live';
 export interface PurchaseScope {
   readonly provider: PurchaseProvider;
@@ -46,6 +46,9 @@ export interface VerifiedMinutePurchase extends PurchaseScope {
   readonly state: 'pending' | 'purchased' | 'voided';
   /** Cumulative successful refunds only, obtained from the provider. Pending/failed refunds are excluded. */
   readonly refundedMinor: number;
+  /** Apple signed snapshot date; absent for historical Stripe/Play evidence. */
+  readonly providerRevision?: number;
+  readonly refundedPartsPer100000?: number;
 }
 export interface MinutePurchaseVerifier extends PurchaseScope {
   /**
@@ -72,11 +75,11 @@ const scopeKey = (scope: PurchaseScope) => JSON.stringify([scope.provider, scope
 const productKey = (scope: PurchaseScope, sku: string) => JSON.stringify([scopeKey(scope), sku]);
 const money = (value: number, positive = false) => Number.isSafeInteger(value) && value >= (positive ? 1 : 0) && value <= 100_000_000;
 function validScope(scope: PurchaseScope) {
-  return scope && ['stripe', 'play'].includes(scope.provider) && ['test', 'live'].includes(scope.environment) &&
+  return scope && ['stripe', 'play', 'apple'].includes(scope.provider) && ['test', 'live'].includes(scope.environment) &&
     typeof scope.merchant === 'string' && identifier.test(scope.merchant);
 }
 function validateProduct(product: MinuteProduct) {
-  if (!validScope(product) || typeof product.sku !== 'string' || product.sku.length > 128 || !identifier.test(product.sku) ||
+  if (product.provider==='apple' || !validScope(product) || typeof product.sku !== 'string' || product.sku.length > 128 || !identifier.test(product.sku) ||
     typeof product.providerProduct !== 'string' || !identifier.test(product.providerProduct) ||
     typeof product.currency !== 'string' || !/^[a-z]{3}$/.test(product.currency) || !money(product.totalMinor, true) ||
     !Number.isSafeInteger(product.minutes) || product.minutes < 1 || product.minutes > 1440) throw new ServiceError('invalid_minute_product');

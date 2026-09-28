@@ -54,6 +54,36 @@ export async function createChallenge(db: Database) {
   await db.query("INSERT INTO auth_challenges(id,nonce_hash,expires_at) VALUES($1,$2,now()+interval '5 minutes')", [id, digest(nonce)]);
   return { challengeID: id, nonce, expiresInSeconds: 300 };
 }
+/** Both proofs are fresh and nonce-bound; an email address is never an account join key. */
+export async function connectGoogleIdentity(db: Database, authorization: string | undefined,
+  proofs: {appleChallengeID:string;appleToken:string;googleChallengeID:string;googleToken:string},
+  config:AuthConfig,verify:typeof verifyIdentity=verifyIdentity) {
+  const account=await authenticate(db,authorization);
+  if(proofs.appleChallengeID===proofs.googleChallengeID) throw new ServiceError('invalid_challenge',401);
+  const challenges=(await db.query('SELECT id,nonce_hash FROM auth_challenges WHERE id=ANY($1::uuid[]) AND expires_at>now() AND used_at IS NULL',
+    [[proofs.appleChallengeID,proofs.googleChallengeID]])).rows;
+  if(challenges.length!==2) throw new ServiceError('invalid_challenge',401);
+  const apple=await verify('apple',proofs.appleToken,challenges.find(c=>c.id===proofs.appleChallengeID)?.nonce_hash,config);
+  const google=await verify('google',proofs.googleToken,challenges.find(c=>c.id===proofs.googleChallengeID)?.nonce_hash,config);
+  if(apple.provider!=='apple' || google.provider!=='google') throw new ServiceError('invalid_identity_token',401);
+  return transaction(db,async sql=>{
+    for(const id of [proofs.appleChallengeID,proofs.googleChallengeID].sort()) {
+      const consumed=await sql.query('UPDATE auth_challenges SET used_at=now() WHERE id=$1 AND used_at IS NULL AND expires_at>now() RETURNING id',[id]);
+      if(!consumed.rowCount) throw new ServiceError('invalid_challenge',401);
+    }
+    // Same ordering as signup prevents a concurrent Google signup from stealing the link.
+    await sql.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`google:${google.subject}`]);
+    await lockWallet(sql,account,true,true);await assertSession(sql,account,authorization!);
+    const source=(await sql.query("SELECT account_id FROM identities WHERE provider='apple' AND subject=$1",[apple.subject])).rows[0];
+    if(source?.account_id!==account) throw new ServiceError('same_account_required',409);
+    const target=(await sql.query("SELECT account_id FROM identities WHERE provider='google' AND subject=$1",[google.subject])).rows[0];
+    if(target && target.account_id!==account) throw new ServiceError('identity_link_conflict',409);
+    const existing=(await sql.query("SELECT subject FROM identities WHERE provider='google' AND account_id=$1",[account])).rows[0];
+    if(existing && existing.subject!==google.subject) throw new ServiceError('identity_link_conflict',409);
+    if(!target) await sql.query("INSERT INTO identities(provider,subject,account_id) VALUES('google',$1,$2)",[google.subject,account]);
+    return {accountID:account,connected:true};
+  });
+}
 export async function exchangeIdentity(db: Database, provider: Provider, token: string, challengeID: string, config: AuthConfig,
   verify: typeof verifyIdentity = verifyIdentity, expectedAccountID?: string) {
   const challenge = (await db.query('SELECT nonce_hash FROM auth_challenges WHERE id=$1 AND expires_at>now() AND used_at IS NULL', [challengeID])).rows[0];
@@ -159,6 +189,7 @@ export async function deleteAccount(db: Database, account: string, appleRevoker?
       UNION ALL SELECT 1 FROM checkout_orders WHERE account_id=$1 UNION ALL SELECT 1 FROM usage_records WHERE account_id=$1
       UNION ALL SELECT 1 FROM hosted_sessions WHERE account_id=$1 UNION ALL SELECT 1 FROM minute_entries WHERE account_id=$1
       UNION ALL SELECT 1 FROM minute_purchase_orders WHERE account_id=$1
+      UNION ALL SELECT 1 FROM hosted_close_intents WHERE account_id=$1
       UNION ALL SELECT 1 FROM minute_campaign_recipients WHERE account_id=$1
       UNION ALL SELECT 1 FROM minute_guest_links WHERE member_account_id=$1 OR guest_account_id=$1
       UNION ALL SELECT 1 FROM minute_guest_link_intents WHERE member_account_id=$1 OR guest_account_id=$1 LIMIT 1`, [account]);

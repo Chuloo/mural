@@ -5,7 +5,7 @@ import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
 import { createApp } from '../src/app.js';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
-import { accountProfile, authenticate, createChallenge, deleteAccount, digest, exchangeIdentity, pruneAuthenticationRecords, signOut, verifyIdentity } from '../src/auth.js';
+import { accountProfile, authenticate, createChallenge, connectGoogleIdentity, deleteAccount, digest, exchangeIdentity, pruneAuthenticationRecords, signOut, verifyIdentity } from '../src/auth.js';
 import { accountAdmissionConfig, AuthAdmission } from '../src/auth-admission.js';
 import { appendEntry } from '../src/ledger.js';
 
@@ -34,6 +34,34 @@ async function session(subject = randomUUID(), provider: 'google' | 'apple' = 'g
 function app(appleRevoker?: { revoke: () => Promise<void> }) {
   return createApp({ db: db!, auth: config, accounts: { admission: new AuthAdmission(db!, admissionConfig), identityVerifier: verifier }, appleRevoker });
 }
+
+integration('connecting Google requires two fresh identities and preserves the Apple account and balance',async()=>{
+  const appleSubject=randomUUID(),googleSubject=randomUUID(),owner=await session(appleSubject,'apple');
+  await transaction(db!,sql=>appendEntry(sql,owner.accountID,`link-funded:${randomUUID()}`,'purchase',3_690_000_000n,0n));
+  const apple=await createChallenge(db!),google=await createChallenge(db!);
+  const proofs={appleChallengeID:apple.challengeID,appleToken:await jwt(apple.nonce,appleSubject,'apple'),
+    googleChallengeID:google.challengeID,googleToken:await jwt(google.nonce,googleSubject,'google')};
+  const linked=await connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,proofs,config,verifier);
+  assert.deepEqual(linked,{accountID:owner.accountID,connected:true});
+  assert.equal((await session(googleSubject)).accountID,owner.accountID);
+  assert.deepEqual((await accountProfile(db!,`Bearer ${owner.accessToken}`)).providers,['apple','google']);
+  assert.equal((await db!.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[owner.accountID])).rows[0].balance_nano,'3690000000');
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,proofs,config,verifier),/invalid_challenge/);
+});
+integration('Google linking refuses wrong Apple owners, same emails and another funded Google account',async()=>{
+  const appleSubject=randomUUID(),owner=await session(appleSubject,'apple'),googleSubject=randomUUID(),other=await session(googleSubject);
+  await transaction(db!,sql=>appendEntry(sql,other.accountID,`other-funded:${randomUUID()}`,'purchase',5_000_000_000n,0n));
+  async function proofs(source=appleSubject,target=googleSubject) {
+    const apple=await createChallenge(db!),google=await createChallenge(db!);
+    return {appleChallengeID:apple.challengeID,appleToken:await jwt(apple.nonce,source,'apple'),googleChallengeID:google.challengeID,googleToken:await jwt(google.nonce,target)};
+  }
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,await proofs(randomUUID()),config,verifier),/same_account_required/);
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,await proofs(),config,verifier),/identity_link_conflict/);
+  const expired=await proofs(appleSubject,randomUUID());await db!.query('UPDATE auth_challenges SET expires_at=now()-interval \'1 second\' WHERE id=$1',[expired.appleChallengeID]);
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,expired,config,verifier),/invalid_challenge/);
+  assert.deepEqual((await accountProfile(db!,`Bearer ${owner.accessToken}`)).providers,['apple']);
+  assert.equal((await db!.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[other.accountID])).rows[0].balance_nano,'5000000000');
+});
 
 test('accounts remain disabled without an explicit switch and independent valid secrets', () => {
   assert.equal(accountAdmissionConfig({}), undefined);

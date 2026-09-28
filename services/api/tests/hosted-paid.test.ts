@@ -43,25 +43,28 @@ const response=(extra:Record<string,unknown>={})=>({id:`resp_${randomUUID().repl
   service_tier:'default',status:'completed',output:[{type:'message',content:[{type:'output_text',text:'Hola.',annotations:[]}]}],
   usage:{input_tokens:100,input_tokens_details:{cached_tokens:20,cache_write_tokens:30},output_tokens:40},...extra});
 const input=()=>({requestID:randomUUID(),purpose:'meaning',instructions:'Translate into English.',input:'Hola.'});
-async function fixture(options:{cash?:bigint;free?:number;paid?:boolean;cancel?:boolean;guest?:boolean}={}) {
+async function fixture(options:{cash?:bigint;free?:number;paid?:boolean;cancel?:boolean;guest?:boolean;sandbox?:boolean;restricted?:boolean;allowAccount?:boolean;cap?:bigint;maximumSessionMilliseconds?:number}={}) {
+  await db!.query("UPDATE deployment_environment SET environment=$1 WHERE environment<>$1",[options.sandbox?'test':'live']);
   const account=randomUUID();
   await db!.query('INSERT INTO accounts(id,is_guest) VALUES($1,$2)',[account,options.guest??false]);
   await db!.query('INSERT INTO wallets(account_id) VALUES($1)',[account]);
   await transaction(db!,async sql=>{
-    await appendEntry(sql,account,`seed:${account}`,'purchase',options.cash??2_000_000_000n,0n);
+    await appendEntry(sql,account,`seed:${account}`,'purchase',options.cash??2_000_000_000n,0n,null,options.sandbox?(options.cash??2_000_000_000n):0n);
     await appendMinuteEntry(sql,account,`minutes:${account}`,'gift',options.free??0,0);
   });
   const voice=new Voice();let attempts=0;
   const transport:HostedResponsesTransport & {handler:()=>Promise<unknown>}={handler:async()=>response(),async send(){attempts++;return this.handler();}};
-  const helpers=new HostedHelpers(db!,transport,{accountAllowlist:new Set(),aggregateFundingCapNano:0n,publicMinuteAccess:true,
+  const helpers=new HostedHelpers(db!,transport,{accountAllowlist:new Set(options.allowAccount?[account]:[]),aggregateFundingCapNano:options.cap??0n,publicMinuteAccess:true,
+    restrictToAllowlist:options.restricted,
     publicPaidAccess:options.paid??true,helperBudgetNanoPerMinute:50_000_000n,maxRequestsPerMinute:6,maxSearchesPerSession:1,
     maxConcurrentPerSession:2,maxConcurrentGlobal:4,postSessionMilliseconds:120_000,inputFramingTokenAllowance:4096,
     searchInputTokenAllowance:1_050_000,timeoutMilliseconds:1000});
   const admission={paidFundingPolicy:helpers.paidFundingPolicy,closeCashBudget:helpers.closeCashBudget.bind(helpers),
     async reserveSessionBudget(sql:any,owner:string,id:string) {await helpers.reserveSessionBudget(sql,owner,id);
       if(options.cancel) await sql.query("UPDATE hosted_sessions SET state='closing',close_requested_at=now() WHERE id=$1",[id]);}};
-  const controller=new HostedVoice(db!,voice,{accountAllowlist:new Set(),lifetimeFundingCapNano:0n,billingUnit:'milliseconds',
-    publicMinuteAccess:true,publicPaidAccess:options.paid??true,helpers:admission});
+  const controller=new HostedVoice(db!,voice,{accountAllowlist:new Set(options.allowAccount?[account]:[]),lifetimeFundingCapNano:options.cap??0n,billingUnit:'milliseconds',
+    restrictToAllowlist:options.restricted,
+    publicMinuteAccess:true,publicPaidAccess:options.paid??true,helpers:admission,maximumSessionMilliseconds:options.maximumSessionMilliseconds});
   await controller.start();
   return {account,voice,helpers,transport,controller,get attempts(){return attempts;},
     create:(duration?:number)=>controller.create(account,randomUUID(),'v=0\r\noffer','es-ES',undefined,duration),
@@ -85,6 +88,62 @@ async function fixture(options:{cash?:bigint;free?:number;paid?:boolean;cancel?:
       assert.equal(result.reserved_nano,result.expected);},
     close:()=>controller.stop()};
 }
+
+integration('closing a lost create response fences delayed creation and recovers settlement',async()=>{
+  const f=await fixture();try {
+    const key=randomUUID();
+    assert.deepEqual(await f.controller.closeByKey(f.account,key),{requestID:key,session:null,preventedCreate:true});
+    await assert.rejects(f.controller.create(f.account,key,'v=0\r\noffer','es-ES'),{code:'live_request_already_closed'});
+    assert.equal(f.voice.creates,0);
+    const activeKey=randomUUID();
+    const session=await f.controller.create(f.account,activeKey,'v=0\r\noffer','es-ES');
+    const recovered=await f.controller.closeByKey(f.account,activeKey);
+    assert.equal(recovered.session?.sessionID,session.sessionID);assert.equal(recovered.session?.settlementState,'pending');
+    await f.emit(session,5,true);await f.expire(session.sessionID);
+    assert.equal((await f.controller.closeByKey(f.account,activeKey)).session?.settlementState,'final');
+    assert.equal(f.voice.creates,1);await f.invariant();
+  }finally{await f.close();}
+});
+
+integration('isolated sandbox allowlist blocks provider calls even with public paid access and funds',async()=>{
+  const f=await fixture({sandbox:true,restricted:true});try {
+    assert.equal(f.controller.allows(f.account),false);assert.equal(f.helpers.allows(f.account),false);
+    await assert.rejects(f.create(),{code:'hosted_voice_not_ready'});
+    assert.equal(f.voice.creates,0);assert.equal(f.attempts,0);
+  }finally{await f.close();}
+});
+
+integration('isolated sandbox spending debits test provenance and cannot change an occupied database to live',async()=>{
+  const f=await fixture({sandbox:true});try {
+    assert.equal((await f.balance()).availableNanoUSD,'2000000000');
+    await assert.rejects(db!.query("UPDATE deployment_environment SET environment='live'"));
+    const session=await f.create(60_000);await f.emit(session,20,true);await f.expire(session.sessionID);
+    const wallet=(await db!.query('SELECT balance_nano,sandbox_balance_nano,reserved_nano FROM wallets WHERE account_id=$1',[f.account])).rows[0];
+    assert.equal(wallet.balance_nano,wallet.sandbox_balance_nano);assert.equal(wallet.reserved_nano,'0');
+    assert.ok(BigInt(wallet.balance_nano)<2_000_000_000n);await f.invariant();
+  }finally{await f.close();}
+});
+
+integration('sandbox caps a long paid request to a one minute test within the approved funding budget',async()=>{
+  const f=await fixture({sandbox:true,restricted:true,allowAccount:true,cap:1_500_000_000n,maximumSessionMilliseconds:60_000});try{
+    const session=await f.create(3_600_000);
+    const stored=(await db!.query('SELECT limit_ms,funding_exposure_nano FROM hosted_sessions WHERE id=$1',[session.sessionID])).rows[0];
+    assert.equal(Number(stored.limit_ms),60_000);
+    const total=BigInt(stored.funding_exposure_nano)+BigInt((await db!.query('SELECT sum(liability_nano) AS amount FROM hosted_helper_sessions')).rows[0].amount);
+    assert.ok(total<=1_500_000_000n);assert.equal(f.voice.creates,1);
+    await f.emit(session,20,true);await f.expire(session.sessionID);await f.invariant();
+  }finally{await f.controller.stop();}
+});
+
+integration('sandbox paid admission enforces the operator cap before contacting a provider and rolls back holds',async()=>{
+  const f=await fixture({sandbox:true,restricted:true,allowAccount:true,cap:1n});try{
+    await assert.rejects(f.create(60_000),{code:'hosted_funding_cap_reached'});
+    assert.equal(f.voice.creates,0);assert.equal(f.attempts,0);
+    assert.equal((await db!.query('SELECT count(*) FROM hosted_sessions')).rows[0].count,'0');
+    assert.equal((await db!.query('SELECT reserved_nano FROM wallets WHERE account_id=$1',[f.account])).rows[0].reserved_nano,'0');
+    await f.invariant();
+  }finally{await f.close();}
+});
 
 integration('paid admission defaults off and cannot spend sandbox or unreviewed cash',async()=>{
   const f=await fixture({paid:false});try {
@@ -141,7 +200,11 @@ integration('known voice and helper usage debit their exact separate costs and r
     const status=await f.controller.status(f.account,session.sessionID);
     assert.equal(status.chargedVoiceNanoUSD,'104166667');assert.equal(status.chargedHelperNanoUSD,'65900');
     assert.equal(status.chargedNanoUSD,'104232567');
+    assert.equal(status.settlementState,'pending');
+    assert.equal((await f.controller.current(f.account)).session?.sessionID,session.sessionID);
     await f.expire(session.sessionID);await f.invariant();
+    assert.equal((await f.controller.status(f.account,session.sessionID)).settlementState,'final');
+    assert.equal((await f.controller.current(f.account)).session,null);
     assert.deepEqual(await f.balance(),{balanceNanoUSD:'1895767433',reservedNanoUSD:'0',availableNanoUSD:'1895767433',cashProvenanceVerified:true});
   }finally{await f.close();}
 });
@@ -154,6 +217,8 @@ integration('unknown helper usage keeps only its request hold after the voice an
     await f.emit(session,10,true);await f.expire(session.sessionID);await f.invariant();
     assert.equal((await f.balance()).reservedNanoUSD,held);
     assert.equal((await f.controller.status(f.account,session.sessionID)).helperPendingNanoUSD,held);
+    assert.equal((await f.controller.status(f.account,session.sessionID)).settlementState,'pending');
+    assert.equal((await f.controller.current(f.account)).session?.sessionID,session.sessionID);
     const next=await f.create(60_000);assert.equal(next.fundingMode,'ai-value');await f.invariant();
   }finally{await f.close();}
 });
@@ -235,7 +300,7 @@ integration('the restricted runtime settles paid helpers while provenance and fu
     GRANT UPDATE(balance_ms,reserved_ms,sandbox_balance_ms) ON minute_wallets TO ${role};
     GRANT SELECT ON minute_purchase_transactions TO ${role};
     GRANT UPDATE ON wallets TO ${role}`);
-  for(const file of ['minute-runtime-grants.sql','hosted-helper-runtime-grants.sql','actual-value-runtime-grants.sql']) {
+  for(const file of ['minute-runtime-grants.sql','hosted-helper-runtime-grants.sql','actual-value-runtime-grants.sql','hosted-close-runtime-grants.sql']) {
     const grants=await readFile(new URL(`../operations/${file}`,import.meta.url),'utf8');await db!.query(grants.replaceAll('mural_runtime',role));
   }
   const runtimeURL=new URL(databaseURL!);runtimeURL.searchParams.set('options',`-c search_path=${schema} -c role=${role}`);

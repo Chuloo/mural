@@ -140,14 +140,14 @@ export class StripeMinuteProvider implements MinuteDeliveryAdapter {
     else {
       const price = await this.transport.price(order.provider_product);
       if (price.id !== order.provider_product || !price.active || price.livemode !== (this.environment === 'live') ||
-        price.currency !== order.currency || price.unit_amount !== Number(order.total_minor) || price.type !== 'one_time' ||
+        price.currency !== order.currency || price.unit_amount !== Number(order.total_minor)/Number(order.quantity) || price.type !== 'one_time' ||
         (managed && price.tax_behavior !== 'exclusive'))
         throw new ServiceError('stripe_minute_price_mismatch', 503);
       const safe = (await this.db.query("SELECT 1 FROM minute_stripe_checkout_attempts WHERE order_id=$1 AND started_at>now()-interval '23 hours'", [order.id])).rowCount;
       if (!safe) throw new ServiceError('checkout_reconciliation_required', 409);
       session = await this.transport.create({ mode: 'payment', client_reference_id: order.id,
         metadata: { mural_minute_order: order.id }, payment_intent_data: { metadata: { mural_minute_order: order.id } },
-        line_items: [{ price: order.provider_product, quantity: 1 }], allow_promotion_codes: false,
+        line_items: [{ price: order.provider_product, quantity: Number(order.quantity) }], allow_promotion_codes: false,
         ...(managed ? { managed_payments: { enabled: true } } : { adaptive_pricing: { enabled: false }, automatic_tax: { enabled: false } }),
         success_url: `${this.#origin}/payment-return?status=success`, cancel_url: `${this.#origin}/payment-return?status=cancelled` },
       `mural-minute-checkout-${order.id}`);
@@ -196,7 +196,7 @@ export class StripeMinuteProvider implements MinuteDeliveryAdapter {
     const managed = await this.#mode(order.id);
     const { gross, tax } = this.#sessionMatches(session, order, managed);
     const lines = await this.transport.lines(sessionID), line = lines.data[0];
-    if (lines.has_more || lines.data.length !== 1 || !line || line.quantity !== 1 || line.price?.id !== order.provider_product ||
+    if (lines.has_more || lines.data.length !== 1 || !line || line.quantity !== Number(order.quantity) || line.price?.id !== order.provider_product ||
       line.currency !== order.currency || line.amount_total !== gross || (managed &&
         (line.price?.tax_behavior !== 'exclusive' || line.amount_subtotal !== Number(order.total_minor) ||
           line.amount_discount !== 0 || line.amount_tax !== tax))) throw new ServiceError('stripe_minute_product_mismatch', 409);
@@ -265,7 +265,7 @@ export class StripeMinuteProvider implements MinuteDeliveryAdapter {
     await this.vault.save(order.id, this, sessionID, request.kind !== 'stored');
     return { provider: this.provider, environment: this.environment, merchant: this.merchant,
       orderID: order.id, transactionID: sessionID, eventID: `stripe-snapshot:${providerHash(JSON.stringify(snapshot))}`,
-      providerProduct: order.provider_product, quantity: 1, currency: order.currency, totalMinor: Number(order.total_minor), state, refundedMinor };
+      providerProduct: order.provider_product, quantity: Number(order.quantity), currency: order.currency, totalMinor: Number(order.total_minor), state, refundedMinor };
   }
   async complete(_orderID: string): Promise<void> { /* Stripe Checkout has no fulfillment acknowledgment API. */ }
 }

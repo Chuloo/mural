@@ -7,15 +7,17 @@ import { RATE_VERSION } from './pricing.js';
 type Kind = 'purchase' | 'reversal' | 'reserve' | 'settle' | 'release';
 export async function lockWallet(sql: PoolClient, account: string, requireActive = false, requireMember = false) {
   // Every account mutation uses this lock order, including deletion and reconciliation.
-  const owner = (await sql.query('SELECT deleted_at,is_guest FROM accounts WHERE id=$1 FOR UPDATE', [account])).rows[0];
+  const owner = (await sql.query(`SELECT deleted_at,is_guest,
+    (SELECT environment FROM deployment_environment WHERE singleton) AS environment FROM accounts WHERE id=$1 FOR UPDATE`, [account])).rows[0];
   if (!owner || (requireActive && owner.deleted_at)) throw new ServiceError('account_not_found', 404);
   if (requireMember && owner.is_guest) throw new ServiceError('sign_in_required',401);
   const result = await sql.query('SELECT * FROM wallets WHERE account_id=$1 FOR UPDATE', [account]);
   const wallet = result.rows[0];
   if (!wallet) throw new ServiceError('account_not_found', 404);
   const balance = BigInt(wallet.balance_nano), reserved = BigInt(wallet.reserved_nano);
-  const sandboxBalance = BigInt(wallet.sandbox_balance_nano), fundedBalance = balance - sandboxBalance;
-  return { balance, reserved, sandboxBalance, fundedBalance, isGuest: Boolean(owner.is_guest),
+  const sandboxBalance = BigInt(wallet.sandbox_balance_nano), sandboxFunding = owner.environment==='test';
+  const fundedBalance = sandboxFunding ? sandboxBalance : balance - sandboxBalance;
+  return { balance, reserved, sandboxBalance, fundedBalance, sandboxFunding, isGuest: Boolean(owner.is_guest),
     cashProvenanceVerified: Boolean(wallet.cash_provenance_verified),
     fundedAvailable: wallet.cash_provenance_verified && fundedBalance > reserved ? fundedBalance - reserved : 0n };
 }
@@ -59,6 +61,7 @@ export async function settlePaidInTransaction(sql: PoolClient, account: string, 
 export async function appendEntry(sql: PoolClient, account: string, reference: string, kind: Kind,
   balanceDelta: bigint, reservedDelta: bigint, version: string | null = null, sandboxDelta: bigint = 0n): Promise<boolean> {
   const wallet = await lockWallet(sql, account);
+  if (wallet.sandboxFunding && kind==='settle') sandboxDelta=balanceDelta;
   const existing = (await sql.query('SELECT * FROM ledger WHERE reference=$1', [reference])).rows[0];
   if (existing) {
     if (existing.account_id !== account || existing.kind !== kind || BigInt(existing.balance_delta_nano) !== balanceDelta ||

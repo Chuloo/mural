@@ -584,6 +584,33 @@ integration('Managed tax and payment fees never become spendable AI value and fu
   } finally {await f.cleanup();}
 });
 
+for(const quantity of [2,10])integration(`Stripe quantity ${quantity} uses unit pricing and grants/refunds the aggregate once`,async()=>{
+  const f=await fixture();try {
+    const account=await f.account();await f.db.query('INSERT INTO wallets(account_id) VALUES($1)',[account]);
+    const product=makeAIValueProduct({provider:'stripe',environment:'test',merchant:f.stripe.merchant,sku:'synthetic-ai',providerProduct:'price_synthetic',
+      currency:'usd',currencyExponent:2,aiValueMinor:369,policyVersion:1,serviceFeeBasisPoints:1500,
+      processing:{rateBasisPoints:790,fixedMinor:30,bufferBasisPoints:100},exchangeRate:{numerator:'1',denominator:'1',version:'synthetic-usd'},
+      estimate:{nanoUSDPerMinute:'100000000',rateVersion:'synthetic-estimate'}});
+    const purchases=new AIValuePurchases(f.db,{catalog:[product],verifiers:[f.stripe],salesEnabled:true,quantityEnabled:['stripe']});
+    const order=await purchases.createOrder(account,'stripe',product.sku,randomUUID(),quantity),gross=500*quantity;
+    const transport=f.stripeTransport;transport.bind(order.orderID);transport.priceValue.unit_amount=500;
+    transport.current.amount_total=gross;transport.lineValue.quantity=quantity;transport.lineValue.amount_total=gross;
+    transport.intentValue.amount_received=gross;transport.chargeValue.amount=gross;
+    await f.stripe.checkout(account,order.orderID);
+    assert.deepEqual(transport.createCalls[0].params.line_items,[{price:'price_synthetic',quantity}]);
+    transport.paid();const event=transport.event();const paid=await purchases.reconcile('stripe',event);
+    await purchases.reconcile('stripe',event);assert.equal(paid.grantedNanoUSD,String(3_690_000_000n*BigInt(quantity)));
+    transport.lineValue.quantity=1;
+    await assert.rejects(f.stripe.verify(transport.event()),/mismatch/);
+    transport.lineValue.quantity=quantity;
+    transport.refundsValue=[{id:'re_quantity',payment_intent:'pi_synthetic',charge:'ch_synthetic',currency:'usd',amount:gross,status:'succeeded'}];
+    const refunded=await purchases.reconcile('stripe',transport.event('refund.updated'));
+    assert.equal(refunded.reversedNanoUSD,paid.grantedNanoUSD);
+    assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[account])).rows[0].balance_nano,'0');
+    assert.equal((await f.db.query("SELECT count(*) FROM ledger WHERE kind='purchase'")).rows[0].count,'1');
+  }finally{await f.cleanup();}
+});
+
 integration('Managed refunds reject foreign charges, over-refunds and untrusted currencies',async()=>{
   const f=await fixture(true);
   try {

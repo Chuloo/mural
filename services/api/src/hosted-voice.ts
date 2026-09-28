@@ -24,6 +24,8 @@ export interface HostedConfig {
   publicMinuteAccess?: boolean;
   /** Independently enabled only after end-to-end paid accounting verification. */
   publicPaidAccess?: boolean;
+  restrictToAllowlist?: boolean;
+  maximumSessionMilliseconds?: number;
   billingUnit?: 'nanoUSD' | 'milliseconds';
   helpers?: Pick<HostedHelpers, 'reserveSessionBudget'> & Partial<Pick<HostedHelpers,'paidFundingPolicy'|'closeCashBudget'>>;
   onStartupFailure?: (diagnostic: { category: string; providerStatus?: number; requestID?: string }) => void;
@@ -46,6 +48,9 @@ export class HostedVoice {
     if (config.publicMinuteAccess ? config.billingUnit!=='milliseconds' :
       config.lifetimeFundingCapNano < HOLD || config.lifetimeFundingCapNano > 25_000_000_000n || !config.accountAllowlist.size)
       throw new ServiceError('invalid_hosted_funding_configuration', 503);
+    if (config.maximumSessionMilliseconds !== undefined && (!config.restrictToAllowlist ||
+      !Number.isSafeInteger(config.maximumSessionMilliseconds) || config.maximumSessionMilliseconds < 60_000 || config.maximumSessionMilliseconds > 3_600_000))
+      throw new ServiceError('invalid_hosted_test_duration',503);
     this.diagnostics = config.diagnostics ?? new Diagnostics();
     this.now = config.now ?? Date.now; this.grace = config.closeGraceMilliseconds ?? 5_000;
     if (!Number.isSafeInteger(this.grace) || this.grace<0 || this.grace>60_000)
@@ -64,7 +69,8 @@ export class HostedVoice {
     const helper=(BigInt(duration)*(this.config.helpers?.paidFundingPolicy?.helperBudgetNanoPerMinute ?? 0n)+59_999n)/60_000n;
     return { voice,helper,total:voice+helper };
   }
-  allows(account: string) { return this.accepting && (this.publicMinuteAccess || this.config.accountAllowlist.has(account)); }
+  allows(account: string) { return this.accepting && (!this.config.restrictToAllowlist || this.config.accountAllowlist.has(account)) &&
+    (this.publicMinuteAccess || this.config.accountAllowlist.has(account)); }
   async start(): Promise<void> {
     if (this.leader) throw new ServiceError('voice_worker_already_started', 503);
     const leader = await this.db.connect();
@@ -104,6 +110,8 @@ export class HostedVoice {
     const teachingContext = parseLiveContext(context);
     if (requestedMilliseconds!==undefined && (!Number.isSafeInteger(requestedMilliseconds) || requestedMilliseconds<60_000 || requestedMilliseconds>3_600_000))
       throw new ServiceError('invalid_session_duration');
+    if (this.config.maximumSessionMilliseconds !== undefined)
+      requestedMilliseconds = Math.min(requestedMilliseconds ?? 900_000,this.config.maximumSessionMilliseconds);
     const id = randomUUID(), reservation = randomUUID();
     let minutes = this.config.billingUnit === 'milliseconds', paid=false;
     let reservedMilliseconds = TRIAL_MS;
@@ -113,6 +121,8 @@ export class HostedVoice {
       await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
       const minuteWallet = minutes ? await lockMinuteWallet(sql, account) : undefined;
       let wallet = minuteWallet ?? await lockWallet(sql, account, true);
+      if ((await sql.query('SELECT 1 FROM hosted_close_intents WHERE account_id=$1 AND idempotency_key=$2',[account,key])).rowCount)
+        throw new ServiceError('live_request_already_closed',409);
       if((await sql.query('SELECT 1 FROM minute_guest_link_intents WHERE guest_account_id=$1',[account])).rowCount)
         throw new ServiceError('sign_in_to_continue',403);
       const previous = (await sql.query('SELECT id FROM hosted_sessions WHERE account_id=$1 AND idempotency_key=$2', [account, key])).rows[0];
@@ -163,6 +173,10 @@ export class HostedVoice {
         await appendEntry(sql, account, `reservation:${reservation}`, 'reserve', 0n, HOLD, RATE_VERSION);
         await sql.query(`INSERT INTO hosted_sessions(id,account_id,idempotency_key,reservation_id,rate_version,state,deadline,funding_exposure_nano)
           VALUES($1,$2,$3,$4,$5,'creating',$6,$7)`, [id, account, key, reservation, RATE_VERSION, deadline, HOLD.toString()]);
+      }
+      if(this.config.restrictToAllowlist){
+        const total=BigInt((await sql.query('SELECT COALESCE(sum(funding_exposure_nano),0) AS total FROM hosted_sessions')).rows[0].total)+await hostedHelperExposure(sql);
+        if(total>this.config.lifetimeFundingCapNano)throw new ServiceError('hosted_funding_cap_reached',503);
       }
     });
     if ((minutes || paid) && !await this.prepareMinuteProviderAttempt(id, account))
@@ -384,13 +398,16 @@ export class HostedVoice {
   }
   async status(account: string, id: string) {
     const row = (await this.db.query(`SELECT h.*,r.reserved_nano AS voice_reserved_nano,b.budget_nano AS helper_budget_nano,
-      b.cash_pool_nano,b.rate_version AS helper_rate_version,
+      b.cash_pool_nano,b.rate_version AS helper_rate_version,b.state AS helper_state,
       (SELECT COALESCE(sum(CASE WHEN q.state='settled' THEN q.cost_nano ELSE 0 END),0) FROM hosted_helper_requests q WHERE q.session_id=h.id) AS helper_charged_nano,
       (SELECT COALESCE(sum(CASE WHEN q.state<>'settled' THEN q.hold_nano ELSE 0 END),0) FROM hosted_helper_requests q WHERE q.session_id=h.id) AS helper_pending_nano
       FROM hosted_sessions h LEFT JOIN reservations r ON r.id=h.reservation_id LEFT JOIN hosted_helper_sessions b ON b.session_id=h.id
       WHERE h.id=$1 AND h.account_id=$2`, [id, account])).rows[0];
     if (!row) throw new ServiceError('live_session_not_found', 404);
+    const settlementState=row.state==='closed' && (!row.helper_state || row.helper_state==='expired') && BigInt(row.helper_pending_nano)===0n &&
+      (row.minute_reservation_id ? row.charged_ms!==null : row.charged_nano!==null) ? 'final' as const : 'pending' as const;
     if (row.funding_mode==='ai-value') return {sessionID:row.id,state:row.state,deadline:row.deadline,
+      settlementState,
       fundingMode:'ai-value' as const,billingBasis:'actual-ai-usage' as const,billingPolicy:'actual-ai-usage-15s-minimum-v1' as const,
       minimumChargeMilliseconds:15000,limitMilliseconds:Number(row.limit_ms),observedMilliseconds:Number(row.observed_ms),
       reservedNanoUSD:(BigInt(row.voice_reserved_nano)+BigInt(row.helper_budget_nano)).toString(),
@@ -400,6 +417,7 @@ export class HostedVoice {
       helperPendingNanoUSD:row.helper_pending_nano,helperReservedRemainingNanoUSD:(BigInt(row.cash_pool_nano)+BigInt(row.helper_pending_nano)).toString(),
       providerCostNanoUSD:row.provider_cost_nano,rateVersion:row.rate_version,helperRateVersion:row.helper_rate_version};
     return { sessionID: row.id, state: row.state, deadline: row.deadline, observedMilliseconds: Number(row.observed_ms),
+      settlementState,
       fundingMode:row.minute_reservation_id ? 'minutes' as const : undefined,
       reservedMilliseconds: row.reserved_ms ? Number(row.reserved_ms) : undefined,
       chargedMilliseconds: row.reserved_ms ? row.charged_ms === null ? null : Number(row.charged_ms) : undefined,
@@ -409,15 +427,29 @@ export class HostedVoice {
       chargedNanoUSD: row.reserved_ms ? undefined : row.charged_nano, providerCostNanoUSD: row.provider_cost_nano };
   }
   async current(account: string) {
-    const row = (await this.db.query("SELECT id FROM hosted_sessions WHERE account_id=$1 AND state<>'closed'", [account])).rows[0];
+    const row = (await this.db.query(`SELECT h.id FROM hosted_sessions h
+      WHERE h.account_id=$1 AND (h.state<>'closed' OR EXISTS (
+        SELECT 1 FROM hosted_helper_sessions b WHERE b.session_id=h.id AND b.state<>'expired') OR EXISTS (
+        SELECT 1 FROM hosted_helper_requests q WHERE q.session_id=h.id AND q.state<>'settled' AND q.hold_nano>0))
+      ORDER BY (h.state<>'closed') DESC,h.created_at DESC LIMIT 1`, [account])).rows[0];
     return { session: row ? await this.status(account, row.id) : null };
   }
   async close(account: string, id: string) { await this.status(account, id); await this.requestClose(id, 'user_requested'); return this.status(account, id); }
+  async closeByKey(account: string, key: string) {
+    if (!key || key.length<8 || key.length>128) throw new ServiceError('invalid_request');
+    const id = await transaction(this.db,async sql=>{
+      await sql.query('SELECT id FROM accounts WHERE id=$1 FOR UPDATE',[account]);
+      await sql.query('INSERT INTO hosted_close_intents(account_id,idempotency_key) VALUES($1,$2) ON CONFLICT DO NOTHING',[account,key]);
+      return (await sql.query('SELECT id FROM hosted_sessions WHERE account_id=$1 AND idempotency_key=$2',[account,key])).rows[0]?.id;
+    });
+    return {requestID:key,session:id ? await this.close(account,id) : null,preventedCreate:!id};
+  }
   async tick(): Promise<void> {
     if (this.ticking || !this.leader) return; this.ticking = true;
     try {
       await this.leader.query('SELECT 1');
       const rows = (await this.db.query(`SELECT h.*,w.balance_nano,w.reserved_nano,w.sandbox_balance_nano,
+        (SELECT environment FROM deployment_environment WHERE singleton) AS deployment_environment,
         EXISTS(SELECT 1 FROM minute_purchase_transactions p WHERE p.account_id=h.account_id
           AND (NOT h.public_minutes OR p.environment='live') AND p.recovered_ms<LEAST(p.reversal_target_ms,p.granted_ms)) AS minute_refund_due
         FROM hosted_sessions h LEFT JOIN wallets w ON w.account_id=h.account_id WHERE h.state<>'closed'`)).rows;
@@ -432,7 +464,10 @@ export class HostedVoice {
           try { await this.attach(row.id, row.provider_session_id); } catch { /* Keep the hold and retry closure. */ }
         }
         if (row.close_requested_at) await this.requestClose(row.id, row.close_reason === 'sign_out' ? 'sign_out' : 'user_requested');
-        else if (row.minute_reservation_id ? row.minute_refund_due : BigInt(row.balance_nano)-(row.funding_mode==='ai-value' ? BigInt(row.sandbox_balance_nano) : 0n) < BigInt(row.reserved_nano)) await this.requestClose(row.id, 'funding_reversed');
+        else if (row.minute_reservation_id ? row.minute_refund_due :
+          (row.funding_mode==='ai-value' && row.deployment_environment==='test' ? BigInt(row.sandbox_balance_nano) :
+          BigInt(row.balance_nano)-(row.funding_mode==='ai-value' ? BigInt(row.sandbox_balance_nano) : 0n)) < BigInt(row.reserved_nano))
+          await this.requestClose(row.id, 'funding_reversed');
         else if (this.now() >= new Date(row.deadline).getTime()) await this.requestClose(row.id, 'deadline');
         if (row.close_requested_at && this.now() - new Date(row.close_requested_at).getTime() >= this.grace) {
           const slot = this.slots.get(row.id);
