@@ -88,7 +88,7 @@ export class HostedVoice {
             await this.prepareMinuteProviderAttempt(row.id, row.account_id, false);
             continue;
           }
-          await this.db.query("UPDATE hosted_sessions SET state='incomplete',close_reason='create_uncertain' WHERE id=$1 AND state<>'closed'", [row.id]);
+          await this.updateSessionState(row.id, "UPDATE hosted_sessions SET state='incomplete',close_reason='create_uncertain' WHERE id=$1 AND state<>'closed'", [row.id]);
           continue;
         }
         try { await this.attach(row.id, row.provider_session_id); } catch { /* The watchdog retries. */ }
@@ -187,7 +187,7 @@ export class HostedVoice {
       created = await this.provider.create(sdp, language, teachingContext);
       if (minutes || paid) deadline = new Date(this.now() + reservedMilliseconds);
       startupStage = 'persist_provider_session';
-      const persisted = await this.db.query("UPDATE hosted_sessions SET provider_session_id=$2,state='active',deadline=$3 WHERE id=$1 AND state<>'closed'", [id, created.sessionID, deadline]);
+      const persisted = await this.updateSessionState(id, "UPDATE hosted_sessions SET provider_session_id=$2,state='active',deadline=$3 WHERE id=$1 AND state<>'closed'", [id, created.sessionID, deadline]);
       if (persisted.rowCount !== 1) throw new ServiceError('provider_session_no_longer_active', 502);
       startupStage = 'provider_attach';
       await this.attach(id, created.sessionID);
@@ -222,7 +222,7 @@ export class HostedVoice {
         throw error;
       }
       if (created) await this.provider.hangup(created.sessionID).catch(() => {});
-      await this.db.query(`UPDATE hosted_sessions SET state='incomplete',close_reason='create_or_attach_uncertain'
+      await this.updateSessionState(id, `UPDATE hosted_sessions SET state='incomplete',close_reason='create_or_attach_uncertain'
         WHERE id=$1 AND state<>'closed'`, [id]).catch(() => {});
       // Never guess a final bill or release this hold before a trusted final event/reconciliation.
       throw new ServiceError('provider_session_unconfirmed', 502);
@@ -373,10 +373,19 @@ export class HostedVoice {
     if (state.finalized) { this.diagnostics.record('voice_closed', { operation: 'voice.settle', sessionReference: errorReference(id) }); this.slots.get(id)?.connection?.disconnect(); this.slots.delete(id); }
     else if (state.close) await this.requestClose(id, 'usage_limit');
   }
+  private async updateSessionState(id: string, query: string, values: unknown[]) {
+    return transaction(this.db, async sql => {
+      // Session-state triggers advance the account's minutes revision. Take its
+      // lock first, matching funding and final-usage writers, before the session.
+      await sql.query(`SELECT id FROM accounts
+        WHERE id=(SELECT account_id FROM hosted_sessions WHERE id=$1) FOR UPDATE`, [id]);
+      return sql.query(query, values);
+    });
+  }
   private async connectionLost(id: string) {
     this.diagnostics.record('voice_connection_lost', { operation: 'voice.sideband', sessionReference: errorReference(id) });
     const slot = this.slots.get(id); slot?.connection?.disconnect(); this.slots.delete(id);
-    await this.db.query(`UPDATE hosted_sessions SET state='incomplete',close_requested_at=COALESCE(close_requested_at,$2),close_reason='sideband_lost'
+    await this.updateSessionState(id, `UPDATE hosted_sessions SET state='incomplete',close_requested_at=COALESCE(close_requested_at,$2),close_reason='sideband_lost'
       WHERE id=$1 AND state<>'closed'`, [id, new Date(this.now())]).catch(() => { this.accepting = false; });
     const row = (await this.db.query('SELECT provider_session_id,state FROM hosted_sessions WHERE id=$1', [id]).catch(() => ({ rows: [] }))).rows[0];
     if (row?.provider_session_id && row.state !== 'closed') await this.provider.hangup(row.provider_session_id).catch(error => this.diagnostics.record('voice_hangup_failed', { operation: 'voice.hangup', sessionReference: errorReference(id) }, error));
@@ -384,7 +393,7 @@ export class HostedVoice {
   async requestClose(id: string, reason: 'user_requested' | 'worker_recovery' | 'usage_limit' | 'deadline' | 'funding_reversed' | 'worker_shutdown' | 'sign_out') {
     // Lock the prior value so concurrent recovery requests log the durable transition once,
     // including sessions whose provider connection never produced an in-memory slot.
-    const updated = await this.db.query(`WITH previous AS MATERIALIZED (
+    const updated = await this.updateSessionState(id, `WITH previous AS MATERIALIZED (
       SELECT id,close_requested_at IS NULL AS first_request FROM hosted_sessions WHERE id=$1 AND state<>'closed' FOR UPDATE
     ) UPDATE hosted_sessions h SET state=CASE WHEN h.state='incomplete' THEN h.state ELSE 'closing' END,
       close_requested_at=COALESCE(h.close_requested_at,$2),close_reason=COALESCE(h.close_reason,$3)
@@ -476,7 +485,7 @@ export class HostedVoice {
             await this.provider.hangup(row.provider_session_id).catch(error => this.diagnostics.record('voice_hangup_failed', { operation: 'voice.hangup', sessionReference: errorReference(row.id) }, error));
           }
           // An HTTP 2xx hangup is not a final usage event. Keep the reservation unresolved.
-          await this.db.query("UPDATE hosted_sessions SET state='incomplete' WHERE id=$1 AND state<>'closed'", [row.id]);
+          await this.updateSessionState(row.id, "UPDATE hosted_sessions SET state='incomplete' WHERE id=$1 AND state<>'closed'", [row.id]);
         }
       }
     } finally { this.ticking = false; }

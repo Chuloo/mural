@@ -50,7 +50,8 @@ export async function accountCloseoutReport(db: Database, accountID: string) {
     await sql.query('COMMIT');
     return { accountID: account.id as string, alreadyDeleted: account.deleted_at !== null, guest: account.is_guest as boolean,
       manualReviewOnly: true, cashProvenanceVerified: wallet?.cash_provenance_verified === true,
-      latePaymentNeedsReview: account.deleted_at !== null && (BigInt(wallet?.balance_nano ?? '0') !== 0n || Number(minutes?.balance_ms ?? 0) > 0),
+      latePaymentNeedsReview: account.deleted_at !== null && (BigInt(wallet?.balance_nano ?? '0') !== 0n || BigInt(wallet?.reserved_nano ?? '0') !== 0n ||
+        Number(minutes?.balance_ms ?? 0) > 0 || Number(minutes?.reserved_ms ?? 0) > 0),
       appleRevocationRequired: facts.apple as boolean, blockers,
       readyForExistingDeletionChecks: !account.deleted_at && !Object.values(blockers).some(Boolean),
       orders: orders.slice(0, 1000).map(row => ({ orderID: row.id as string, stripe: row.provider === 'stripe', play: row.provider === 'play', apple: row.provider === 'apple',

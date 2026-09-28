@@ -105,6 +105,31 @@ integration('closing a lost create response fences delayed creation and recovers
   }finally{await f.close();}
 });
 
+for (const free of [0, 60_000]) integration(`closing ${free ? 'free' : 'paid'} voice waits for the account before locking its session`,async()=>{
+  const f=await fixture({free});
+  const blocker=await db!.connect();
+  let closing:Promise<void>|undefined;
+  try {
+    const session=await f.create(60_000);
+    await blocker.query('BEGIN');
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    await blocker.query('SELECT id FROM accounts WHERE id=$1 FOR UPDATE',[f.account]);
+    closing=f.controller.requestClose(session.sessionID,'user_requested');
+    // Wait for the real close query to be blocked by this transaction, avoiding
+    // a timing-only assertion that could pass before the close has started.
+    await until(async()=>Number((await db!.query(`SELECT count(*) FROM pg_stat_activity
+      WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%hosted_sessions%'`,[pid])).rows[0].count)>0);
+    await blocker.query('SELECT id FROM hosted_sessions WHERE id=$1 FOR UPDATE NOWAIT',[session.sessionID]);
+    await blocker.query('COMMIT');
+    await closing;
+    await f.emit(session,20,true);await f.expire(session.sessionID);await f.invariant();
+    assert.equal((await db!.query('SELECT state FROM hosted_sessions WHERE id=$1',[session.sessionID])).rows[0].state,'closed');
+  } finally {
+    await blocker.query('ROLLBACK');blocker.release();
+    await closing?.catch(()=>{});await f.close();
+  }
+});
+
 integration('isolated sandbox allowlist blocks provider calls even with public paid access and funds',async()=>{
   const f=await fixture({sandbox:true,restricted:true});try {
     assert.equal(f.controller.allows(f.account),false);assert.equal(f.helpers.allows(f.account),false);
