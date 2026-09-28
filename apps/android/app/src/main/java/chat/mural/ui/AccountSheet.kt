@@ -62,23 +62,23 @@ fun AccountSheet(state: AccountState, onDismiss: () -> Unit, onSignIn: () -> Uni
                     shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(stringResource(R.string.account_time_label), style = MaterialTheme.typography.labelLarge)
-                        val milliseconds = state.minutes?.availableMilliseconds
-                        val seconds = milliseconds?.let(MinuteBalanceTime::roundedSeconds)
-                        Text(if (seconds == null) stringResource(R.string.account_time_unavailable) else
-                            stringResource(R.string.account_time_remaining_format, seconds / 60, seconds % 60),
+                        Text(state.minutes?.let { muralBalanceText(it) } ?: stringResource(R.string.account_time_unavailable),
                             style = MaterialTheme.typography.headlineMedium,
                             modifier = Modifier.testTag("account-minute-balance"))
-                        if (seconds != null) Text(stringResource(R.string.account_time_remaining_description),
-                            style = MaterialTheme.typography.bodyMedium)
                         Text(stringResource(R.string.account_time_updates), style = MaterialTheme.typography.bodySmall,
                             color = MuralColors.Secondary)
-                        state.minutes?.let { PaidBalanceText(it) }
                         onBuyMinutes?.let { buy ->
-                            Button(onClick = buy, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("account-buy-minutes"),
-                                colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Ink, contentColor = MuralColors.Cream)) {
+                            Button(onClick = buy, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("account-buy-minutes"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
                                 Text(stringResource(R.string.account_add_minutes))
                             }
                         }
+                    }
+                }
+                if (provider == ConversationProvider.PERSONAL_KEY) onBuyMinutes?.let { check ->
+                    MuralTextButton(onClick = check, enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-check-purchases")) {
+                        Text(stringResource(R.string.minute_purchases_check), color = MuralColors.Secondary)
                     }
                 }
                 if (memberAlreadyClaimedTrial) Text(stringResource(R.string.guest_member_trial_used),

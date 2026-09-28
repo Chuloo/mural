@@ -59,6 +59,21 @@ integration('support closeout report distinguishes spend, debt and retained hold
   } finally { await f.close(); }
 });
 
+integration('deleted-account review includes a retained cash hold when the balance is zero', async () => {
+  const f = await fixture();
+  try {
+    await f.db.query('UPDATE accounts SET deleted_at=now() WHERE id=$1', [f.account]);
+    assert.equal((await accountCloseoutReport(f.db, f.account)).latePaymentNeedsReview, false);
+    await transaction(f.db, sql => appendEntry(sql, f.account, 'late-retained-hold', 'reserve', 0n, 10n, 'synthetic'));
+    const report = await accountCloseoutReport(f.db, f.account);
+    assert.equal(report.latePaymentNeedsReview, true);
+    assert.equal(report.blockers.cashBalanceRemaining, false); assert.equal(report.blockers.cashReserved, true);
+    assert.equal(report.readyForExistingDeletionChecks, false);
+    assert.deepEqual((await f.db.query('SELECT balance_nano,reserved_nano FROM wallets WHERE account_id=$1', [f.account])).rows[0],
+      { balance_nano: '0', reserved_nano: '10' });
+  } finally { await f.close(); }
+});
+
 integration('support closeout report identifies receiptless orders and distinguishes confirmed full reversal', async () => {
   const f = await fixture();
   try {
@@ -72,8 +87,8 @@ integration('support closeout report identifies receiptless orders and distingui
     const order = await purchases.createOrder(f.account, 'stripe', product.sku, randomUUID());
     let report = await accountCloseoutReport(f.db, f.account);
     assert.equal(report.blockers.purchaseUnresolved, true);
-    assert.deepEqual(report.orders[0], { orderID: order.orderID, stripe: true, play: false, live: false, hasReceipt: false,
-      deliveryPending: false, unverified: true, pending: false, voided: false, minuteRefundDue: false });
+    assert.deepEqual(report.orders[0], { orderID: order.orderID, stripe: true, play: false, apple: false, live: false, hasReceipt: false,
+      deliveryPending: false, unverified: true, abandonedQuote: false, pending: false, voided: false, minuteRefundDue: false });
     const vault = new MinuteReceiptVault(f.db, 'synthetic', new Map([['synthetic', randomBytes(32)]]));
     await vault.save(order.orderID, adapter, 'cs_private_synthetic');
     evidence = { provider: 'stripe', environment: 'test', merchant: product.merchant, orderID: order.orderID, transactionID: 'cs_private_synthetic',

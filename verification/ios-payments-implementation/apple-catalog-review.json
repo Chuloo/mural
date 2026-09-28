@@ -1,0 +1,63 @@
+{
+  "checkedAt": "2026-09-28T09:21:01.063798+00:00",
+  "source": "App Store Connect > In-App Purchases > Current Price",
+  "settledPayoutVerified": false,
+  "commissionPlanningBasisPoints": 3000,
+  "observedProceedsBasis": "Current Apple price-table proceeds; equivalent to 15% after applicable tax. Small Business enrollment status not independently verified.",
+  "products": [
+    {
+      "pack": "small",
+      "appleID": "6816506070",
+      "US": {
+        "priceMinor": 700,
+        "proceedsMinor": 595,
+        "currency": "USD"
+      },
+      "Norway": {
+        "priceMinor": 8900,
+        "proceedsMinor": 6052,
+        "currency": "NOK"
+      },
+      "NorwegianLocalizationSaved": true,
+      "reviewNotesSaved": true,
+      "reviewScreenshotAttached": true
+    },
+    {
+      "pack": "medium",
+      "appleID": "6816521026",
+      "US": {
+        "priceMinor": 1300,
+        "proceedsMinor": 1105,
+        "currency": "USD"
+      },
+      "Norway": {
+        "priceMinor": 17900,
+        "proceedsMinor": 12172,
+        "currency": "NOK"
+      },
+      "NorwegianLocalizationSaved": true,
+      "reviewNotesSaved": true,
+      "reviewScreenshotAttached": true
+    },
+    {
+      "pack": "large",
+      "appleID": "6816522011",
+      "US": {
+        "priceMinor": 2000,
+        "proceedsMinor": 1700,
+        "currency": "USD"
+      },
+      "Norway": {
+        "priceMinor": 24900,
+        "proceedsMinor": 16932,
+        "currency": "NOK"
+      },
+      "NorwegianLocalizationSaved": true,
+      "reviewNotesSaved": true,
+      "reviewScreenshotAttached": true
+    }
+  ],
+  "pendingSubmission": "1.0 (3) Waiting for Review; unchanged",
+  "firstConsumableSubmission": "Apple requires submission with a new app version",
+  "appleSalesEnabled": false
+}

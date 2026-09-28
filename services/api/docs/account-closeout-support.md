@@ -20,16 +20,17 @@ The selector contains exactly `{ "accountID": "<verified-account-uuid>" }`. Supp
 
 1. Ask the user to end the current conversation. Allow trusted voice/helper settlement and any outstanding provider verification to finish. Unknown usage keeps its reservation; elapsed time alone does not prove its cost is zero.
 2. For each order with a saved receipt, use the configured provider reconciliation path or let its durable job run. Stripe Checkout expiry and provider-confirmed voids can resolve an unpaid order. A failed refund, pending refund, cancellation request or screenshot is not a confirmed completed refund.
-3. For a receiptless Play order, request recovery from the original signed-in Play account and inspect the actual store result. If no token arrives, do not invent a void or delete its binding. A delayed purchase can complete after the app closes; the current worker knows only saved tokens. The case remains for explicit operator resolution until authoritative evidence or a separately reviewed late-payment closeout design resolves it.
-4. Agree the refund amount and fee treatment before issuing it through the provider dashboard. Keep the provider action manual. Then verify its succeeded state and the resulting immutable ledger reversal. The backend has no operation that initiates refunds, forgives debt or writes off unused paid value.
-5. Use the existing authenticated account-deletion flow after financial blockers clear. A separately reviewed operator invocation of the same `deleteAccount` function must preserve its checks; do not directly update `deleted_at` or remove order rows to bypass them. It removes email, identities and auth sessions. Settled financial history retains an opaque account reference; a signup-only account is removed entirely. Apple revocation must succeed when applicable.
-6. Confirm completion to the requester and explain any necessary financial retention. Include backup retention in the privacy disclosure. Conversations and ordinary learning data remain on the device; account deletion does not remotely erase a user's local archive.
+3. A quote with no receipt and no verified transaction stops blocking account deletion after 24 hours. This is permission to remove identifying account data, not proof of cancellation. The opaque account, wallet, order, immutable quote and provider binding remain. A known pending transaction or saved receipt still requires reconciliation. Never invent a provider void or remove an order binding.
+4. If a charge arrives after account deletion, verified server delivery remains bound to that retained account. It cannot be spent, transferred to a new signup or accessed with a revoked session. Support must reconcile the provider charge and refund through the provider’s normal process. Apple notifications and historical reconciliation retain the transaction automatically. For a receiptless Play charge discovered through support, verify the provider token against the retained binding before saving it to the protected receipt vault; the existing worker then verifies and reconciles it. Do not accept a screenshot as payment evidence.
+5. Agree the refund amount and fee treatment before issuing it through the provider dashboard. Keep the provider action manual. Then verify its succeeded state and the resulting immutable ledger reversal. The backend has no operation that initiates refunds, forgives debt or writes off unused paid value.
+6. Use the existing authenticated account-deletion flow after financial blockers clear. A separately reviewed operator invocation of the same `deleteAccount` function must preserve its checks; do not directly update `deleted_at` or remove order rows to bypass them. It removes email, identities and auth sessions. Settled financial history retains an opaque account reference; a signup-only account is removed entirely. Apple revocation must succeed when applicable.
+7. Confirm completion to the requester and explain any necessary financial retention. Include backup retention in the privacy disclosure. Conversations and ordinary learning data remain on the device; account deletion does not remotely erase a user's local archive.
 
-If resolution is pending, explain the specific pending payment or refund rather than saying the account has been deleted. Support requests need an owner and a documented response schedule before paid launch; this runbook does not set an unapproved deadline.
+If resolution is pending, explain the specific pending payment or refund rather than saying the account has been deleted. William Imoh owns these cases through hi@hackmamba.io. Before paid launch, agree the response schedule and review retained deleted-account balances; `account-closeout-admin inspect` exposes `latePaymentNeedsReview` without disclosing identity or receipts.
 
 ## Current refund arithmetic and limits
 
-The app does not automatically refund a customer. Stripe or Google confirms a refund initiated outside Mural, and the verified fulfillment path then updates AI value. A full refund or void removes the full original AI allocation. Partial refunds remove `ceil(original AI allocation × cumulative refunded gross / original checkout gross)`. Replays and older provider snapshots cannot grant the same value twice or reverse the same portion twice.
+The app does not automatically refund a customer. Apple, Stripe or Google confirms the refund, and verified fulfillment then updates AI value. Apple’s in-app refund sheet submits a request; it does not by itself confirm a reversal. Apple signed refund revisions support retry-safe reversal and restoration when Apple reverses a refund. A full refund or void removes the full original AI allocation. Partial refunds remove `ceil(original AI allocation × cumulative refunded gross / original checkout gross)`. Replays and older provider snapshots cannot grant the same value twice or reverse the same portion twice.
 
 The original processing and currency-conversion fees are not returned by Stripe, and a refund may have additional costs under the merchant's fee schedule. Mural's quote separates estimated processing costs and a buffer; the backend does not retrieve the actual processor fee or automatically deduct that loss from the customer's refund. [Stripe refund fees](https://support.stripe.com/questions/understanding-fees-for-refunded-payments)
 
@@ -40,3 +41,17 @@ A refund after spending may leave negative AI value. New paid sessions cannot sp
 Stripe disputes conservatively void the entitlement. That state is intentionally monotonic; winning or withdrawing a dispute does not restore value automatically. A restoration needs a separately reviewed, audited adjustment after authoritative evidence. Do not edit the original purchase or reversal history.
 
 Known Play receipts are rechecked by the worker and void polling. There is no authenticated real-time notification intake for undiscovered tokens. Manual email support does not resolve that discovery gap, and elapsed time is not sufficient proof that an abandoned pending purchase cannot finish later.
+
+## Retained account review
+
+Review this aggregate with the protected operator database connection. Any nonzero result needs a private support case; it must not trigger an automatic transfer or write-off.
+
+```sql
+SELECT count(*) AS deleted_accounts_requiring_payment_review
+FROM accounts a JOIN wallets w ON w.account_id=a.id
+LEFT JOIN minute_wallets m ON m.account_id=a.id
+WHERE a.deleted_at IS NOT NULL
+  AND (w.balance_nano<>0 OR w.reserved_nano<>0 OR COALESCE(m.balance_ms,0)>0 OR COALESCE(m.reserved_ms,0)>0);
+```
+
+The 24-hour rule applies only to receiptless, unverified minute-pack quotes. It does not clear a paid balance, debt, reservation, known pending transaction or legacy checkout. Tests cover deletion, late verified delivery, duplicate delivery and a subsequent full reversal against the retained account.

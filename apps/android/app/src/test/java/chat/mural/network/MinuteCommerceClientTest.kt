@@ -68,7 +68,7 @@ class MinuteCommerceClientTest {
         assertEquals("/v1/minutes/orders", request.path)
         assertEquals("Bearer ${session.accessToken}", request.getHeader("Authorization"))
         assertEquals(id, request.getHeader("Idempotency-Key"))
-        assertEquals("""{"provider":"stripe","sku":"synthetic-value"}""", request.body.readUtf8())
+        assertEquals("""{"provider":"stripe","sku":"synthetic-value","quantity":1}""", request.body.readUtf8())
         for (invalid in listOf(body.replace("checkout.stripe.com", "checkout.stripe.com.evil.test"),
             body.replace("\"payment\":{\"orderID\":\"$id\"", "\"payment\":{\"orderID\":\"87654321-1234-1234-1234-123456789012\""),
             body.replace("\"serviceFeeMinor\":30", "\"serviceFeeMinor\":0"))) {

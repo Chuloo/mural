@@ -22,6 +22,7 @@ export async function accountCloseoutReport(db: Database, accountID: string) {
       EXISTS(SELECT 1 FROM hosted_helper_requests h JOIN hosted_sessions s ON s.id=h.session_id
         WHERE s.account_id=$1 AND h.state<>'settled') AS unresolved_helper`, [accountID])).rows[0];
     const orders = (await sql.query(`SELECT o.id,o.provider,o.environment,
+      o.created_at<=now()-interval '24 hours' AND r.order_id IS NULL AND v.order_id IS NULL AND m.order_id IS NULL AS abandoned_quote,
       r.order_id IS NOT NULL AS has_receipt,
       j.order_id IS NOT NULL AND j.state<>'done' AS delivery_pending,
       CASE WHEN o.entitlement_kind='ai_value' THEN v.order_id IS NULL ELSE m.order_id IS NULL END AS unverified,
@@ -41,7 +42,7 @@ export async function accountCloseoutReport(db: Database, accountID: string) {
       minuteReservation: Number(minutes?.reserved_ms ?? 0) !== 0,
       purchasedMinutesRemaining: facts.purchased_minutes && Number(minutes?.balance_ms ?? 0) > 0,
       legacyCheckoutUnresolved: facts.legacy_checkout as boolean,
-      purchaseUnresolved: orders.some(row => row.unverified || row.pending || row.minute_refund_due),
+      purchaseUnresolved: orders.some(row => (row.unverified && !row.abandoned_quote) || row.pending || row.minute_refund_due),
       activeConversation: facts.active_voice as boolean,
       helperUsageUnresolved: facts.unresolved_helper as boolean,
       orderListTruncated: orders.length > 1000,
@@ -49,11 +50,13 @@ export async function accountCloseoutReport(db: Database, accountID: string) {
     await sql.query('COMMIT');
     return { accountID: account.id as string, alreadyDeleted: account.deleted_at !== null, guest: account.is_guest as boolean,
       manualReviewOnly: true, cashProvenanceVerified: wallet?.cash_provenance_verified === true,
+      latePaymentNeedsReview: account.deleted_at !== null && (BigInt(wallet?.balance_nano ?? '0') !== 0n || BigInt(wallet?.reserved_nano ?? '0') !== 0n ||
+        Number(minutes?.balance_ms ?? 0) > 0 || Number(minutes?.reserved_ms ?? 0) > 0),
       appleRevocationRequired: facts.apple as boolean, blockers,
       readyForExistingDeletionChecks: !account.deleted_at && !Object.values(blockers).some(Boolean),
-      orders: orders.slice(0, 1000).map(row => ({ orderID: row.id as string, stripe: row.provider === 'stripe', play: row.provider === 'play',
+      orders: orders.slice(0, 1000).map(row => ({ orderID: row.id as string, stripe: row.provider === 'stripe', play: row.provider === 'play', apple: row.provider === 'apple',
         live: row.environment === 'live', hasReceipt: row.has_receipt as boolean, deliveryPending: row.delivery_pending as boolean,
-        unverified: row.unverified as boolean, pending: row.pending === true, voided: row.voided === true,
+        unverified: row.unverified as boolean, abandonedQuote: row.abandoned_quote === true, pending: row.pending === true, voided: row.voided === true,
         minuteRefundDue: row.minute_refund_due as boolean })) };
   } catch (error) {
     await sql.query('ROLLBACK');

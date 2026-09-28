@@ -51,3 +51,28 @@ test('hosted admission accepts every locale shipped by Android and iOS', async (
   for (const locale of androidLocales) assert.equal(supportsLanguage(locale), true, `Native locale rejected: ${locale}`);
   assert.equal(supportsLanguage('en-US'), true, 'Preserve existing client compatibility');
 });
+
+test('hosted provider preserves selected theme instructions and continuation history', async () => {
+  let payload: any;
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    payload = JSON.parse(Buffer.concat(chunks).toString());
+    response.writeHead(201, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ session: { id: 'live_theme_fixture' }, transport: { type: 'webrtc', sdp: 'v=0' } }));
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address() as { port: number };
+    const provider = new OpenAILiveProvider('test-no-real-provider-key', { testOrigin: `http://127.0.0.1:${address.port}` });
+    const instructions = 'Conversation direction: Plan dinner together. Ask about ingredients and preferences.';
+    const history = [{ type: 'message' as const, role: 'user' as const,
+      content: [{ type: 'input_text' as const, text: 'Jeg har tomater.' }] }];
+    await provider.create('v=0', 'nb-NO', { instructions, history });
+    assert.ok(payload.session.instructions.startsWith(instructions + '\n'));
+    assert.ok(payload.session.instructions.includes('Speak only Norwegian Bokmål'));
+    assert.deepEqual(payload.session.input, history);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});

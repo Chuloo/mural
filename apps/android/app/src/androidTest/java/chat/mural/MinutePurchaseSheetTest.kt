@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -48,7 +50,7 @@ class MinutePurchaseSheetTest {
     private val pack = MinutePack("test-30", 30, "5,99 €")
     private val ready = MinutePurchaseState(available = true, packs = listOf(pack))
 
-    @Test fun purchasedTimeIsEstimatedAndAllFeesAreVisibleBeforeCheckout() {
+    @Test fun selectionShowsMinutesAndLocalPriceWithoutInternalFees() {
         val quote = AIValueQuote("usd", 2, 200, 1500, 30, 39, 2, 271, 1, "synthetic-usd", "synthetic-estimate")
         val value = AIValueEntitlement("2000000000", 1_200_000, quote)
         val purchases = mutableListOf<String>()
@@ -56,12 +58,50 @@ class MinutePurchaseSheetTest {
             MinutePurchaseSheet(ready.copy(packs = listOf(MinutePack("synthetic-value", 20, "$2.71", value))),
                 true, { purchases += it }, {}, {}, {})
         } }
-        compose.onNodeWithText("About 20 minutes", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 20 minutes")
         for (label in listOf("For AI usage", "Mural fee (15%)", "Estimated payment fee", "Payment cost buffer")) {
-            compose.onNodeWithText(label, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(label, useUnmergedTree = true).assertDoesNotExist()
         }
         compose.onNodeWithTag("minute-purchase-pack-synthetic-value").performScrollTo().performClick()
+        compose.runOnIdle { assertTrue(purchases.isEmpty()) }
+        compose.onNodeWithTag("minute-purchase-continue").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(listOf("synthetic-value"), purchases) }
+    }
+
+    @Test fun quantityAggregatesBeforeFlooringAndRequiresExplicitCheckout() {
+        val quote = AIValueQuote("usd", 2, 369, 1500, 56, 70, 5, 500, 1, "synthetic-usd", "synthetic-estimate")
+        val value = AIValueEntitlement("3690000000", 2_214_000, quote)
+        val purchases = mutableListOf<Pair<String, Int>>()
+        compose.setContent { MuralTheme {
+            MinutePurchaseSheet(ready.copy(channel = PurchaseChannel.STRIPE, maximumQuantity = 10,
+                packs = listOf(MinutePack("starter", 36, "$5.00", value))), true,
+                { error("Quantity lost") }, {}, {}, {}, onBuyQuantity = { sku, quantity -> purchases += sku to quantity })
+        } }
+        compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 36 minutes")
+        compose.onNodeWithTag("minute-quantity-increase").performClick()
+        compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 73 minutes")
+        compose.onNodeWithTag("minute-purchase-continue").assertTextContains("$10.00", substring = true)
+        compose.runOnIdle { assertTrue(purchases.isEmpty()) }
+        repeat(8) { compose.onNodeWithTag("minute-quantity-increase").performClick() }
+        compose.onNodeWithTag("minute-quantity-increase").assertIsNotEnabled()
+        compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 369 minutes")
+        capture("minute-packs-quantity-ten.png")
+        compose.onNodeWithTag("minute-purchase-continue").performClick()
+        compose.runOnIdle { assertEquals(listOf("starter" to 10), purchases) }
+    }
+
+    @Test fun compactHeaderKeepsThreePackChoicesVisibleBeforeCheckout() {
+        compose.setContent { MuralTheme {
+            MinutePurchaseSheet(ready.copy(channel = PurchaseChannel.STRIPE, maximumQuantity = 10,
+                packs = listOf(MinutePack("small", 36, "$5.00"), MinutePack("medium", 79, "$10.00"),
+                    MinutePack("large", 123, "$15.00"))), true, {}, {}, {}, {}, onBuyQuantity = { _, _ -> })
+        } }
+        for (sku in listOf("small", "medium", "large")) {
+            compose.onNodeWithTag("minute-purchase-pack-$sku").assertIsDisplayed()
+        }
+        compose.onNodeWithTag("minute-purchase-pack-medium").performClick()
+        compose.onNodeWithTag("minute-purchase-continue").assertIsDisplayed().assertTextContains("$10.00", substring = true)
+        capture("minute-packs-compact-three.png")
     }
 
     private fun capture(name: String) {
@@ -78,6 +118,8 @@ class MinutePurchaseSheetTest {
         compose.onNodeWithText("5,99 €", useUnmergedTree = true).assertExists()
         capture("minute-packs-english.png")
         compose.onNodeWithTag("minute-purchase-pack-test-30").performScrollTo().assertIsEnabled().performClick()
+        compose.runOnIdle { assertTrue(purchases.isEmpty()) }
+        compose.onNodeWithTag("minute-purchase-continue").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(listOf("test-30"), purchases) }
         compose.onNodeWithTag("minute-purchase-minimum").performScrollTo().assertTextContains("15-second minimum", substring = true)
     }
@@ -104,13 +146,13 @@ class MinutePurchaseSheetTest {
     }
     @Test fun spanishAndLargeTextKeepControlsReachableAndSmallBalanceHonest() {
         var refreshed = 0
-        compose.setContent { MuralTheme {
+        compose.setContent { CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) { MuralTheme {
             MinutePurchaseSheet(ready.copy(balance = MinuteBalance("milliseconds", "connected-conversation-time", 5_000, 0, 5_000)),
                 true, {}, {}, { refreshed++ }, {})
-        } }
-        compose.onNodeWithText("Más tiempo para hablar").assertExists()
+        } } }
+        compose.onNodeWithText("Añadir minutos de Mural").assertExists()
         capture("minute-packs-spanish.png")
-        compose.onNodeWithTag("minute-purchase-balance").performScrollTo().assertTextEquals("Menos de un minuto disponible")
+        compose.onNodeWithTag("paid-minute-estimate").performScrollTo().assertTextEquals("0 min 5 s")
         compose.onNodeWithTag("minute-purchase-pack-test-30").performScrollTo().assertIsEnabled()
         compose.onNodeWithTag("minute-purchase-minimum").performScrollTo().assertTextContains("Mínimo de 15 segundos", substring = true)
         compose.onNodeWithTag("minute-purchase-refresh").performScrollTo().performClick()

@@ -1,0 +1,93 @@
+{
+  "checkedAt": "2026-09-28T11:35:09.684483+00:00",
+  "mode": "read_only_no_mail",
+  "results": {
+    "production": [
+      {
+        "kind": "settlement_overdue",
+        "reference": "046e1b3e71a8"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "0e15c8f78b30"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "1310a7fa092d"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "17bb89bb0a91"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "38d765790126"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "39faceaac96f"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "45d997c0fa3f"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "4a546c7895da"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "518ce360540f"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "6331795eef00"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "652be1276232"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "6ebc7f44533a"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "bfe21d3e0822"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "c3d4c1ca4b2b"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "cdc83019c19b"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "d33f7019618f"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "d7642c764313"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "dd61eaebeb4b"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "e040f96035ff"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "e32a204cefd1"
+      },
+      {
+        "kind": "settlement_overdue",
+        "reference": "eb3451fef61a"
+      }
+    ],
+    "sandbox": []
+  }
+}

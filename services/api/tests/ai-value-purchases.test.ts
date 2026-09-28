@@ -258,3 +258,39 @@ integration('legacy Stripe sandbox grants and refunds cannot become public paid 
     assert.equal((await f.db.query('SELECT balance_nano,sandbox_balance_nano FROM wallets WHERE account_id=$1',[member])).rows[0].balance_nano,'0');
   }finally{await f.cleanup();}
 });
+
+for (const quantity of [1,2,10]) integration(`quantity ${quantity} pins quote, grants once, refunds aggregate and survives sales rollback`,async()=>{
+  const f=await fixture();try{
+    const account=await f.account(),key=randomUUID();
+    const enabled=new AIValuePurchases(f.db,{catalog:[f.product],verifiers:[f.verifier],salesEnabled:true,quantityEnabled:['stripe']});
+    const order=await enabled.createOrder(account,'stripe',f.product.sku,key,quantity);
+    assert.equal(order.totalMinor,f.product.totalMinor*quantity);
+    assert.equal(BigInt(order.aiValueNanoUSD),BigInt(f.product.aiValueNanoUSD)*BigInt(quantity));
+    assert.deepEqual(await enabled.createOrder(account,'stripe',f.product.sku,key,quantity),order);
+    await assert.rejects(enabled.createOrder(account,'stripe',f.product.sku,key,quantity===1?2:1),/idempotency_conflict/);
+    // Rolling quantity sales back does not rewrite the original quote or strand recovery.
+    assert.deepEqual(await f.ai.createOrder(account,'stripe',f.product.sku,key,quantity),order);
+    if(quantity>1) await assert.rejects(f.ai.createOrder(account,'stripe',f.product.sku,randomUUID(),quantity),/purchase_quantity_unavailable/);
+    const proof=f.proof(order,{quantity});
+    await Promise.all(Array.from({length:6},()=>f.router.reconcile('stripe',proof.key)));
+    assert.equal((await paidAIBalance(f.db,account)).balanceNanoUSD,order.aiValueNanoUSD);
+    const half=Math.floor(order.totalMinor/2);
+    const refund=f.proof(order,{quantity,transactionID:proof.value.transactionID,refundedMinor:half});
+    await f.router.reconcile('stripe',refund.key);
+    assert.equal((await f.ai.status(account,order.orderID)).reversedNanoUSD,refundedAIValue(BigInt(order.aiValueNanoUSD),half,order.totalMinor).toString());
+    await f.router.reconcile('stripe',proof.key);
+    await f.router.reconcile('stripe',f.proof(order,{quantity,transactionID:proof.value.transactionID,refundedMinor:order.totalMinor}).key);
+    assert.equal((await paidAIBalance(f.db,account)).balanceNanoUSD,'0');
+    await assert.rejects(f.db.query('UPDATE minute_purchase_orders SET quantity=1 WHERE id=$1',[order.orderID]),/immutable/);
+  }finally{await f.cleanup();}
+});
+integration('quantity rejects malformed values and mismatched verified evidence without granting',async()=>{
+  const f=await fixture();try{
+    const account=await f.account(),enabled=new AIValuePurchases(f.db,{catalog:[f.product],verifiers:[f.verifier],salesEnabled:true,quantityEnabled:['stripe']});
+    for(const quantity of [0,-1,1.5,11,Number.MAX_SAFE_INTEGER,NaN,Infinity])
+      await assert.rejects(enabled.createOrder(account,'stripe',f.product.sku,randomUUID(),quantity),/invalid_purchase_quantity/);
+    const order=await enabled.createOrder(account,'stripe',f.product.sku,randomUUID(),2);
+    await assert.rejects(f.router.reconcile('stripe',f.proof(order,{quantity:1}).key),/ai_value_purchase_mismatch/);
+    assert.equal((await paidAIBalance(f.db,account)).balanceNanoUSD,'0');
+  }finally{await f.cleanup();}
+});

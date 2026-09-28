@@ -20,6 +20,7 @@ export interface HostedHelperConfig {
   aggregateFundingCapNano: bigint;
   publicMinuteAccess?: boolean;
   publicPaidAccess?: boolean;
+  restrictToAllowlist?: boolean;
   helperBudgetNanoPerMinute: bigint;
   maxRequestsPerMinute: number;
   maxSearchesPerSession: number;
@@ -134,7 +135,8 @@ export class HostedHelpers {
   get available(): boolean { return true; }
   get paidFundingPolicy() { return { enabled: this.config.publicPaidAccess===true,
     helperBudgetNanoPerMinute: this.config.helperBudgetNanoPerMinute, rateVersion: HOSTED_HELPER_RATE_VERSION }; }
-  allows(account: string): boolean { return this.config.publicMinuteAccess===true || this.config.accountAllowlist.has(account); }
+  allows(account: string): boolean { return (!this.config.restrictToAllowlist || this.config.accountAllowlist.has(account)) &&
+    (this.config.publicMinuteAccess===true || this.config.accountAllowlist.has(account)); }
   /** Call inside voice admission's transaction after inserting its minute-funded session, before provider creation. */
   async reserveSessionBudget(sql: PoolClient, account: string, sessionID: string): Promise<void> {
     if (!this.allows(account)) throw new ServiceError('hosted_helpers_not_ready', 503);

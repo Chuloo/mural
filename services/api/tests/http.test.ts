@@ -1,8 +1,44 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../src/app.js';
-import { connectDatabase } from '../src/db.js';
+import { createApp, type Services } from '../src/app.js';
+import { connectDatabase, type Database } from '../src/db.js';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { SandboxPayments } from '../src/payments.js';
+
+test('close intents reject excess requests before authentication and provider work', async () => {
+  for (const trustedProxy of [false, true]) {
+    const account = randomUUID(), key = randomUUID();
+    let authentications = 0, providerCalls = 0;
+    const db = { query: async () => { authentications++; return { rows: [{ account_id: account }] }; } } as unknown as Database;
+    const proxyToken = randomBytes(32).toString('hex');
+    const app = createApp({ db, auth: {},
+      accounts: trustedProxy ? { admission: { config: { proxyToken, hmacKey: randomBytes(32).toString('hex') } } } as Services['accounts'] : undefined,
+      hosted: { minuteFunded: true, closeByKey: async () => { providerCalls++; return { state: 'closed' }; } } as unknown as Services['hosted'],
+    });
+    const headers = { authorization: `Bearer ${randomBytes(32).toString('base64url')}`,
+      ...(trustedProxy ? { 'x-mural-proxy-token': proxyToken, 'x-mural-client-ip': '198.51.100.10' } : {}) };
+    const request = (index: number) => ({ method: 'POST' as const,
+      url: `/v1/live/requests/${key}/${index % 2 ? '%63lose' : 'close'}`,
+      headers: { ...headers, 'x-forwarded-for': `203.0.113.${index % 250 + 1}` },
+      payload: {} });
+    try {
+      for (let i = 0; i < 120; i++) assert.equal((await app.inject(request(i))).statusCode, 200);
+      assert.equal(authentications, 120); assert.equal(providerCalls, 120);
+      for (const i of [120, 121, 122]) {
+        const denied = await app.inject(request(i));
+        assert.equal(denied.statusCode, 429);
+        assert.deepEqual(denied.json(), { error: { code: 'rate_limit' } });
+      }
+      assert.equal(authentications, 120); assert.equal(providerCalls, 120);
+      if (trustedProxy) {
+        const forged = await app.inject({ ...request(123), headers: { ...headers, 'x-mural-proxy-token': 'wrong' } });
+        assert.equal(forged.statusCode, 503); assert.equal(authentications, 120);
+        const other = await app.inject({ ...request(124), headers: { ...headers, 'x-mural-client-ip': '198.51.100.11' } });
+        assert.equal(other.statusCode, 200); assert.equal(providerCalls, 121);
+      }
+    } finally { await app.close(); }
+  }
+});
 
 test('unconfigured trial and hosted voice fail closed without database or provider access', async () => {
   const db = connectDatabase('postgresql://unused@127.0.0.1:1/unused');

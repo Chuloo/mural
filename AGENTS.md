@@ -1,5 +1,9 @@
 # Mural agent instructions
 
+## Keep Talk minimal
+
+William reaffirmed on September 28, 2026 that Talk should retain its original minimal layout. Put funding-boundary explanations and Continue/New conversation choices together in one native sheet, not inline on the home screen. Dismissal must preserve the conversation; the microphone can reopen the pending choice. Use the existing orange primary action and native platform patterns. Avoid additional splash/logo stages before Android's animated Talk orb.
+
 ## Ship UI and server changes together
 
 When changing Mural's UI or native apps, check whether the experience depends on server changes: API contracts, error responses, prompts, capabilities, configuration, migrations or runtime permissions.

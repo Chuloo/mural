@@ -9,6 +9,7 @@ struct ManagedAccountView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmSignOut = false
     @State private var confirmDeletion = false
+    @State private var confirmGoogleConnection = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -29,6 +30,11 @@ struct ManagedAccountView: View {
                 }
                 Text("Your conversations and learning history stay on this iPhone.")
                     .font(.subheadline).foregroundStyle(MuralColor.secondary)
+                if HostedCloseRecovery.shared.needsSignIn {
+                    Text("Sign in to the account used for your last conversation so Mural can finish updating its minutes.")
+                        .font(.callout).foregroundStyle(MuralColor.secondary)
+                        .accessibilityIdentifier("conversation-settlement-sign-in")
+                }
                 if store.configuration == nil && store.session == nil {
                     Text("Account sign-in isn’t available in this build. You can continue as a guest.")
                         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
@@ -38,12 +44,13 @@ struct ManagedAccountView: View {
                     if coordinator.conversationProvider == .hosted {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Mural minutes").font(.headline)
-                            if let balance = store.hostedBalanceMilliseconds {
-                                let seconds = MinuteBalanceTime.roundedSeconds(balance)
-                                Text("\(seconds / 60) min \(seconds % 60) sec")
+                            if let balance = store.hostedBalance {
+                                Text(balance.displayText)
                                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                                     .accessibilityIdentifier("managed-account-minutes")
-                                Text("conversation time remaining").font(.subheadline)
+                                Text(balance.paidReserved && !balance.canStart ? "Some minutes are in use" :
+                                     balance.hasPaidRemainder ? "estimated conversation time remaining" : "conversation time remaining")
+                                    .font(.subheadline)
                             } else {
                                 Text(store.isBusy ? "Checking your minutes…" : "Couldn’t check your minutes. Pull down to retry.")
                                     .font(.subheadline)
@@ -52,6 +59,22 @@ struct ManagedAccountView: View {
                                 .foregroundStyle(MuralColor.secondary)
                         }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
                             .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 22))
+                    }
+                    if AppleMinutePurchases.shared.enabled {
+                        if coordinator.conversationProvider == .hosted {
+                            NavigationLink { AddMinutesView(account: store) } label: {
+                                Label("Add minutes", systemImage: "plus.circle").frame(minHeight: 44)
+                            }.accessibilityIdentifier("account-add-minutes")
+                                .disabled(store.isBusy || coordinator.isRunning)
+                        }
+                        NavigationLink { ApplePurchaseHistoryView(account: store) } label: {
+                            Label("Purchase history", systemImage: "clock.arrow.circlepath").frame(minHeight: 44)
+                        }.accessibilityIdentifier("account-purchase-history")
+                    }
+                    if store.profile?.providers.contains(.apple) == true && store.profile?.providers.contains(.google) == false {
+                        Button("Connect Google for Android access") { confirmGoogleConnection = true }
+                            .frame(minHeight: 44).disabled(store.isBusy || coordinator.isRunning)
+                            .accessibilityIdentifier("account-connect-google")
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Button("Sign out on all devices") { confirmSignOut = true }
@@ -97,13 +120,25 @@ struct ManagedAccountView: View {
                     Text(message).font(.callout).foregroundStyle(MuralColor.secondary)
                         .accessibilityIdentifier("managedAccountMessage")
                 }
+                if store.deletionNeedsSupport {
+                    Link("Account deletion support", destination: URL(string: "https://mural.chat/support/#delete-account")!)
+                        .frame(minHeight: 44)
+                }
             }.padding(24).frame(maxWidth: 520).frame(maxWidth: .infinity)
         }
         .background(MuralColor.cream).foregroundStyle(MuralColor.ink)
         .navigationTitle("Account").navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refreshAndWait() }
         .task { store.refresh() }
+        .onChange(of: AppleMinutePurchases.shared.balanceRevision) { _, _ in store.refresh() }
+        .onChange(of: HostedCloseRecovery.shared.revision) { _, _ in store.refresh() }
         .onDisappear { store.cancelSignIn() }
+        .confirmationDialog("Connect Google to this Mural account?", isPresented: $confirmGoogleConnection, titleVisibility: .visible) {
+            Button("Verify Apple and connect Google") { store.connectGoogle() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Verify your Apple account, then choose Google. You can use that Google sign-in to access these Mural minutes on Android. Your learning history stays on this iPhone.")
+        }
         .confirmationDialog("Sign out on all devices?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign out") { store.signOut() }
             Button("Stay signed in", role: .cancel) {}

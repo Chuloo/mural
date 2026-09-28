@@ -1,0 +1,7 @@
+{
+  "fixture": "free_to_paid_boundary",
+  "freeMillisecondsAdded": 20000,
+  "paidBalanceChanged": false,
+  "capNanoUSD": "1500000000",
+  "environment": "test"
+}

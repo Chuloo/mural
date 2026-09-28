@@ -1,0 +1,170 @@
+[
+  {
+    "name": "free",
+    "freeMilliseconds": 260000,
+    "paidNanoUSD": "0",
+    "reservedNanoUSD": "0",
+    "text": "4 min 20 sec",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 260000,
+      "paidEstimatedMilliseconds": 0,
+      "hasPurchasedRemainder": false,
+      "totalDisplayMilliseconds": 260000,
+      "displayKind": "exactFree",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "ready",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "paid",
+    "freeMilliseconds": 0,
+    "paidNanoUSD": "3690000000",
+    "reservedNanoUSD": "0",
+    "text": "About 36 min",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 0,
+      "paidEstimatedMilliseconds": 2214000,
+      "hasPurchasedRemainder": true,
+      "totalDisplayMilliseconds": 2214000,
+      "displayKind": "approximate",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "ready",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "mixed",
+    "freeMilliseconds": 260000,
+    "paidNanoUSD": "3690000000",
+    "reservedNanoUSD": "0",
+    "text": "About 41 min",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 260000,
+      "paidEstimatedMilliseconds": 2214000,
+      "hasPurchasedRemainder": true,
+      "totalDisplayMilliseconds": 2474000,
+      "displayKind": "approximate",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "ready",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "small",
+    "freeMilliseconds": 0,
+    "paidNanoUSD": "50000000",
+    "reservedNanoUSD": "0",
+    "text": "Less than 1 min",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 0,
+      "paidEstimatedMilliseconds": 30000,
+      "hasPurchasedRemainder": true,
+      "totalDisplayMilliseconds": 30000,
+      "displayKind": "approximate",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "ready",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "tiny",
+    "freeMilliseconds": 0,
+    "paidNanoUSD": "1",
+    "reservedNanoUSD": "0",
+    "text": "Less than 1 min",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 0,
+      "paidEstimatedMilliseconds": 0,
+      "hasPurchasedRemainder": true,
+      "totalDisplayMilliseconds": 0,
+      "displayKind": "approximate",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "insufficient_remaining_time",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "empty",
+    "freeMilliseconds": 0,
+    "paidNanoUSD": "0",
+    "reservedNanoUSD": "0",
+    "text": "No minutes left",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 0,
+      "paidEstimatedMilliseconds": 0,
+      "hasPurchasedRemainder": false,
+      "totalDisplayMilliseconds": 0,
+      "displayKind": "exactFree",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "insufficient_remaining_time",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "held",
+    "freeMilliseconds": 0,
+    "paidNanoUSD": "3690000000",
+    "reservedNanoUSD": "3690000000",
+    "text": "Updating your minutes\u2026",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 0,
+      "paidEstimatedMilliseconds": 0,
+      "hasPurchasedRemainder": false,
+      "totalDisplayMilliseconds": 0,
+      "displayKind": "exactFree",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "settling",
+      "settlementState": "pending",
+      "paidSupported": true
+    }
+  },
+  {
+    "name": "debt",
+    "freeMilliseconds": 0,
+    "paidNanoUSD": "-100000000",
+    "reservedNanoUSD": "0",
+    "text": "No minutes left",
+    "presentation": {
+      "schemaVersion": 1,
+      "asOf": "2026-09-26T20:00:00.000Z",
+      "revision": "12",
+      "freeAvailableMilliseconds": 0,
+      "paidEstimatedMilliseconds": 0,
+      "hasPurchasedRemainder": false,
+      "totalDisplayMilliseconds": 0,
+      "displayKind": "exactFree",
+      "estimateRateVersion": "nano-usd-per-minute-100000000",
+      "availabilityReason": "insufficient_remaining_time",
+      "settlementState": "settled",
+      "paidSupported": true
+    }
+  }
+]

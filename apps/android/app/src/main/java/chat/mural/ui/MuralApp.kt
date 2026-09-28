@@ -68,7 +68,7 @@ fun MuralApp(
     onDeleteAccount: () -> Unit = {},
     accountTransitionBusy: Boolean = false,
     purchases: MinutePurchaseViewModel? = null,
-    onBuyMinutes: (String) -> Unit = {},
+    onBuyMinutes: (String, Int) -> Unit = { _, _ -> },
 ) {
     val reportState by vm.reportState.collectAsStateWithLifecycle()
     val accountState = account?.state?.collectAsStateWithLifecycle()?.value
@@ -100,10 +100,7 @@ fun MuralApp(
     MuralTheme {
         Surface(Modifier.fillMaxSize(), color = MuralColors.Cream) {
             if (vm.loadingHistory) {
-                Box(Modifier.fillMaxSize().testTag("history-loading"), contentAlignment = Alignment.Center) {
-                    SoftAnimatedBackground(Modifier.fillMaxSize())
-                    MuralOrb(modifier = Modifier.size(150.dp))
-                }
+                Box(Modifier.fillMaxSize().testTag("history-loading"))
             } else if (!prefs.hasOnboarded) {
                 OnboardingScreen(prefs.learningLanguageID, prefs.meaningLanguage) { language, meaning ->
                     vm.selectLanguage(language)
@@ -142,6 +139,7 @@ fun MuralApp(
                             0 -> TalkScreen(
                                 vm = vm,
                                 onOpenAdvanced = { focusAdvanced = true; showSettings = true },
+                                onOpenAccount = { account?.refresh(); showAccount = true },
                                 microphoneMessage = microphoneMessage,
                                 onMicrophone = { withConsent(CloudAction.StartVoice) },
                                 onOpenAppSettings = onOpenAppSettings,
@@ -211,7 +209,7 @@ fun MuralApp(
             }
 
             if (showAccount && !showMinutes) {
-                AccountSheet(accountState ?: AccountState(), onDismiss = { showAccount = false }, onSignIn = onGoogleSignIn,
+                AccountSheet(accountState ?: AccountState(), onDismiss = { showAccount = false; vm.refreshHostedReadiness() }, onSignIn = onGoogleSignIn,
                     onSignOut = onSignOut, onDelete = onDeleteAccount, onRefresh = { account?.refresh() },
                     transitionBusy = accountTransitionBusy, provider = vm.conversationProvider,
                     conversationRunning = vm.isRunning,
@@ -221,10 +219,10 @@ fun MuralApp(
             if (showMinutes && purchases?.enabled == true && account != null) {
                 val purchaseState by purchases.state.collectAsStateWithLifecycle()
                 val accountState by account.state.collectAsStateWithLifecycle()
-                MinutePurchaseSheet(purchaseState, accountState.signedIn, onBuyMinutes,
+                MinutePurchaseSheet(purchaseState, accountState.signedIn, { onBuyMinutes(it, 1) },
                     onSignIn = onGoogleSignIn, onRefresh = purchases::refresh,
                     onDismiss = { showMinutes = false; account.refresh() },
-                    accountBusy = accountTransitionBusy || accountState.busy)
+                    accountBusy = accountTransitionBusy || accountState.busy, onBuyQuantity = onBuyMinutes)
             }
 
             reportState.selection?.let { selected ->

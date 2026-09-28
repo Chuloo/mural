@@ -36,9 +36,15 @@ class StripeMinutePurchaseControllerTest {
         var lookups = 0
         var onLookup: suspend () -> Unit = {}
         val keys = mutableListOf<String>()
+        val quantities = mutableListOf<Int>()
         override suspend fun catalog(): MinuteCatalog { calls++; return catalogValue }
         override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder {
             calls++; keys += idempotencyKey; onCreate(); return StripeMinuteOrder(id, "usd", 271, checkout, value)
+        }
+        override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String, quantity: Int): StripeMinuteOrder {
+            if (quantity == 1) return createStripe(session, sku, idempotencyKey)
+            calls++; keys += idempotencyKey; quantities += quantity; onCreate()
+            return StripeMinuteOrder(id, "usd", 271L * quantity, checkout, value.multiplied(quantity), quantity)
         }
         override suspend fun findStripeOrder(session: AccountSession, idempotencyKey: String): String? {
             lookups++; onLookup(); return foundOrder
@@ -48,6 +54,27 @@ class StripeMinutePurchaseControllerTest {
     }
     private fun controller(api: API, memory: Memory, current: suspend () -> AccountSession? = { member }) =
         StripeMinutePurchaseController(api, memory, current, enabled = true, now = { 1000 }, pause = {})
+
+    @Test fun quantitySurvivesInterruptedCheckoutAndCannotChangeOnRetry() = runTest {
+        for (quantity in listOf(2, 10)) {
+            val api = API().apply { catalogValue = MinuteCatalog(true, listOf(product), 10) }
+            val memory = Memory(); var current = controller(api, memory)
+            current.onForeground(); api.onCreate = { throw MinuteCommerceFailure.Unavailable }
+            current.buy(product.sku, quantity) { error("unprepared checkout") }
+            val attempt = memory.attempts[id]!!
+            assertEquals(quantity, attempt.quantity)
+            current.close(); api.onCreate = {}; current = controller(api, memory)
+            current.onForeground()
+            assertEquals(listOf(quantity, quantity), api.quantities)
+            assertEquals(listOf(attempt.key, attempt.key), api.keys)
+            current.buy(product.sku, 1) { error("changed quantity launched") }
+            assertEquals(2, api.quantities.size)
+            var launches = 0
+            current.buy(product.sku, quantity) { launches++; MinuteStoreOutcome.OPENED }
+            assertEquals(1, launches)
+            assertEquals(attempt.key, api.keys.last())
+        }
+    }
 
     @Test fun disabledMakesNoRequestsAndGuestCannotCreate() = runTest {
         val api = API(); val memory = Memory()

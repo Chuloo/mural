@@ -97,9 +97,9 @@ struct HostedConnectRequest {
         if let hosted {
             let lease = try await hosted.client.create(owner: hosted.owner, sdp: sdp, language: hosted.language,
                                                        instructions: instructions, requestedMilliseconds: hosted.requestedMilliseconds,
-                                                       requestID: UUID())
+                                                       requestID: UUID(), history: history)
             guard attempt == token else {
-                Task { try? await hosted.client.close(lease) }
+                HostedCloseRecovery.shared.close(lease)
                 throw CancellationError()
             }
             self.hostedLease = lease; self.hostedClient = hosted.client
@@ -162,9 +162,9 @@ struct HostedConnectRequest {
         lastInput = 0; lastOutput = 0; onLevels?(0, 0)
     }
     private func closeHostedSession() {
-        guard !hostedCloseRequested, let lease = hostedLease, let client = hostedClient else { return }
+        guard !hostedCloseRequested, let lease = hostedLease, hostedClient != nil else { return }
         hostedCloseRequested = true
-        Task { try? await client.close(lease) }
+        HostedCloseRecovery.shared.close(lease)
     }
     private func startMetering() {
         meterTask?.cancel()

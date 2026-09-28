@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-09-28T11:29:04.014887+00:00",
+  "production": {
+    "jobs": [
+      {
+        "order_id": "fbea14e1-bd07-4fbe-bff4-fa7ed8470c73",
+        "state": "pending",
+        "attempts": 1058,
+        "last_error_code": "provider_still_pending",
+        "created_at": "2026-09-27T17:28:22.737507+00:00",
+        "available_at": "2026-09-28T11:29:56.244236+00:00",
+        "provider": "stripe",
+        "environment": "live",
+        "quantity": 1,
+        "transaction_state": "pending",
+        "granted_nano": "0"
+      }
+    ],
+    "unresolvedCalls": [
+      {
+        "state": "incomplete",
+        "funding_mode": "minutes",
+        "count": 21,
+        "oldest": "2026-09-14T12:25:55.943031+00:00",
+        "newest": "2026-09-16T15:35:13.217198+00:00",
+        "exposure_nano": "9774166669"
+      }
+    ]
+  },
+  "sandbox": {
+    "jobs": [],
+    "unresolvedCalls": []
+  },
+  "mailCommands": {
+    "sendmail": false,
+    "msmtp": false,
+    "mail": false
+  },
+  "mailConfigFiles": [],
+  "serviceNames": [
+    "lvm2-monitor.service",
+    "mdmonitor-oneshot.service",
+    "mdmonitor.service",
+    "mural-database-backup.service"
+  ],
+  "configKeys": {}
+}
