@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "scope": "hosted-minute-release",
   "packageName": "chat.mural.android",
-  "versionCode": 15,
+  "versionCode": 14,
   "versionName": "0.1",
   "candidate": {
-    "track": "production",
+    "track": "internal-testing",
     "purchaseChannel": "play",
-    "purchaseEnvironment": "live",
-    "apiOrigin": "https://api.mural.chat",
-    "productionEligible": true
+    "purchaseEnvironment": "test",
+    "apiOrigin": "https://sandbox-api.mural.chat",
+    "productionEligible": false
   },
   "minSdk": 26,
   "targetSdk": 36,

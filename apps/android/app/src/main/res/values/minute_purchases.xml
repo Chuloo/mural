@@ -13,6 +13,7 @@
     <string name="minute_purchases_sign_in">Sign in to add minutes</string>
     <string name="minute_purchases_sign_in_detail">Your minutes stay with your account. Your conversations stay on this device.</string>
     <string name="minute_purchases_unavailable">Minute packs aren’t available right now. Please check again later.</string>
+    <string name="minute_purchases_region_unavailable">Minute packs aren’t available in your Google Play country.</string>
     <string name="minute_purchases_loading">Finding your minute packs…</string>
     <string name="minute_purchases_check">Check purchases</string>
     <string name="minute_purchases_checking">Checking your purchase…</string>

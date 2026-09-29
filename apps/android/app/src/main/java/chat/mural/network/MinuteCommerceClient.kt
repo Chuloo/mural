@@ -35,8 +35,11 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         .apply { interceptors().clear(); networkInterceptors().clear() }.build()
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun catalog(): MinuteCatalog = decoded {
-        val body = request("GET", "minutes/products", providerQuery = true)
+    override suspend fun catalog(): MinuteCatalog = catalog(null)
+    override suspend fun catalog(regionCode: String?): MinuteCatalog = decoded {
+        if (regionCode != null && (channel != PurchaseChannel.PLAY || !Regex("[A-Z]{2}").matches(regionCode)))
+            throw MinuteCommerceFailure.InvalidResponse
+        val body = request("GET", "minutes/products", providerQuery = true, regionCode = regionCode)
         val basis = body.text("billingBasis")
         if (basis !in listOf("connected-conversation-time", "actual-ai-usage")) throw MinuteCommerceFailure.InvalidResponse
         val products = body["products"] as? JsonArray ?: throw MinuteCommerceFailure.InvalidResponse
@@ -46,13 +49,20 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
             val ai = if (basis == "actual-ai-usage") parseAIValue(item) else null
             MinuteProduct(item.text("sku"), item.text("providerProduct"), ai?.displayMinutes ?: item.count("minutes", 1440).toInt(), item.text("currency"),
                 item.count("totalMinor", 100_000_000), item.text("environment"), ai)
-        }, maximumQuantity = if (body["maximumQuantity"] == null) 1 else body.count("maximumQuantity", 10).toInt())
+        }, maximumQuantity = if (body["maximumQuantity"] == null) 1 else body.count("maximumQuantity", 10).toInt(),
+            regionUnavailable = body["availabilityReason"]?.let {
+                if (body.text("availabilityReason") != "unsupported_country" || regionCode == null) throw MinuteCommerceFailure.InvalidResponse
+                true
+            } ?: false)
     }
-    override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String): MinuteOrder = decoded {
+    override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String, selection: PlayPriceSnapshot?): MinuteOrder = decoded {
         if (channel != PurchaseChannel.PLAY) throw MinuteCommerceFailure.Unavailable
         if (sku.length > 128 || !minuteIdentifier.matches(sku) || !Regex("[A-Za-z0-9._:-]{8,128}").matches(idempotencyKey))
             throw MinuteCommerceFailure.InvalidResponse
-        val body = request("POST", "minutes/orders", session, buildJsonObject { put("provider", "play"); put("sku", sku) }, idempotencyKey)
+        val body = request("POST", "minutes/orders", session, buildJsonObject {
+            put("provider", "play"); put("sku", sku)
+            selection?.regionCode?.let { put("regionCode", it); put("scheduleVersion", selection.scheduleVersion) }
+        }, idempotencyKey)
         val payment = body["payment"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
         val ai = if (body["entitlementKind"] == JsonPrimitive("ai_value")) parseAIValue(body) else null
         MinuteOrder(body.text("orderID"), ai?.displayMinutes ?: body.count("minutes", 1440).toInt(), body.text("currency"), body.count("totalMinor", 100_000_000),
@@ -127,9 +137,12 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         catch (error: IllegalArgumentException) { throw MinuteCommerceFailure.InvalidResponse }
 
     private suspend fun request(method: String, path: String, session: AccountSession? = null, body: JsonObject? = null,
-        idempotencyKey: String? = null, providerQuery: Boolean = false): JsonObject {
+        idempotencyKey: String? = null, providerQuery: Boolean = false, regionCode: String? = null): JsonObject {
         if (session != null && !session.isValid(now())) throw MinuteCommerceFailure.SignInRequired
-        val url = origin.newBuilder().addPathSegments("v1/$path").apply { if (providerQuery) addQueryParameter("provider", channel.provider) }.build()
+        val url = origin.newBuilder().addPathSegments("v1/$path").apply {
+            if (providerQuery) addQueryParameter("provider", channel.provider)
+            regionCode?.let { addQueryParameter("regionCode", it) }
+        }.build()
         val request = Request.Builder().url(url).header("Accept", "application/json").header("Cache-Control", "no-store")
             .apply { session?.let { header("Authorization", "Bearer ${it.accessToken}") }; idempotencyKey?.let { header("Idempotency-Key", it) } }
             .method(method, body?.toString()?.toRequestBody("application/json".toMediaType())).build()

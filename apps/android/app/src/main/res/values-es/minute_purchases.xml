@@ -13,6 +13,7 @@
     <string name="minute_purchases_sign_in">Inicia sesión para añadir minutos</string>
     <string name="minute_purchases_sign_in_detail">Tus minutos se guardan en tu cuenta. Tus conversaciones se quedan en este dispositivo.</string>
     <string name="minute_purchases_unavailable">Los paquetes de minutos no están disponibles ahora. Vuelve a comprobarlo más tarde.</string>
+    <string name="minute_purchases_region_unavailable">Los paquetes de minutos no están disponibles en tu país de Google Play.</string>
     <string name="minute_purchases_loading">Buscando tus paquetes de minutos…</string>
     <string name="minute_purchases_check">Comprobar compras</string>
     <string name="minute_purchases_checking">Comprobando tu compra…</string>

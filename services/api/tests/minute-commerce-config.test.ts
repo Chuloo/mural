@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, readFile, chmod, symlink, link, rm } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, generateKeyPairSync } from 'node:crypto';
-import { makeAIValueProduct } from '../src/ai-value-purchases.js';
+import { makeAIValueProduct, makeRegionalPlayAIValueProduct } from '../src/ai-value-purchases.js';
 import { configuredMinuteCommerce } from '../src/minute-commerce-config.js';
 
 const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
@@ -216,5 +216,24 @@ test('Managed Payments mode is an explicit boolean and configuration remains sid
       await f.file('COMMERCE_CONFIG_FILE',f.manifest);
       await assert.rejects(configuredMinuteCommerce(f.db,f.env,f.dependencies),configError);
     }
+  } finally {await f.clean();}
+});
+
+
+test('protected regional catalog supports more than 100 countries and validates local currency exponents',async()=>{
+  const f=await fixture(true);
+  try {
+    f.manifest.play.currencyExponents={jpy:0};
+    await f.file('COMMERCE_CONFIG_FILE',f.manifest);
+    const products=Array.from({length:160},(_,i)=>makeRegionalPlayAIValueProduct({provider:'play',environment:'test',merchant:'chat.mural.android',
+      sku:`regional-${i}`,providerProduct:'regional_small',aiValueMinor:369,policyVersion:1,serviceFeeBasisPoints:1500,
+      estimate:{nanoUSDPerMinute:'100000000',rateVersion:'synthetic'},play:{pricingBasis:'fixed-usd-allocation',taxBasis:'google-conversion',
+        regionCode:String.fromCharCode(65+Math.floor(i/26))+String.fromCharCode(65+i%26),currency:'jpy',currencyExponent:0,
+        unitTotalMinor:1200,taxMinor:100,commissionBasisPoints:3000,commissionMinor:330,proceedsMinor:770,scheduleVersion:'synthetic'}}));
+    await f.file('CATALOG_FILE',{version:2,products});await f.approve();f.env.MURAL_MINUTE_SALES_ENABLED='true';
+    const service=(await configuredMinuteCommerce(f.db,f.env,f.dependencies))!;
+    assert.equal(service.aiPurchases.products('play').length,160);await service.runner.stop();
+    f.manifest.play.currencyExponents={jpy:2};await f.file('COMMERCE_CONFIG_FILE',f.manifest);
+    await assert.rejects(configuredMinuteCommerce(f.db,f.env,f.dependencies),configError);
   } finally {await f.clean();}
 });

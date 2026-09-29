@@ -1,1 +1,1 @@
-Practise eight languages through voice conversations. This update adds optional minute packs through Google Play, alongside guest minutes for eligible new learners. Revisit words, turn on meaning subtitles and keep a local backup of your learning. Personal OpenAI keys remain optional.
+Minute packs now use local Google Play prices in supported countries. We also improved purchase recovery and availability messages.

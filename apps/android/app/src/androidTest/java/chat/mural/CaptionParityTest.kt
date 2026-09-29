@@ -133,8 +133,16 @@ class CaptionParityTest {
             state("meaning", meaning)
             // Written fixture: the microphone is off throughout the recording.
             state("state", "active")
+            assertEquals("Caption fixture language was not applied", language, vm.language.id)
+            assertEquals(language, vm.session?.languageID)
         }
-        compose.waitForIdle()
+        // Wait for this fixture's captions, not just an idle frame of the previous language.
+        // The Mandarin reading is produced off the Compose test clock.
+        val displayedCaption = text.ifBlank { LanguageRegistry.get(language)!!.greeting }
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(hasTestTag("target-caption") and hasText(displayedCaption)).fetchSemanticsNodes().size == 1 &&
+                compose.onAllNodes(hasTestTag("meaning-caption") and hasText(meaning)).fetchSemanticsNodes().size == 1
+        }
         if (language == "zh") compose.waitUntil(10_000) {
             compose.onAllNodesWithTag("pinyin-reading").fetchSemanticsNodes().isNotEmpty()
         }
@@ -248,6 +256,8 @@ class CaptionParityTest {
     }
 
     @Test fun spanishCaptionAndContextualLookupMatchIOS() {
+        show("zh", "我想去银行。", "I want to go to the bank.")
+        compose.onNodeWithTag("pinyin-toggle").assertExists()
         val sentence = "Quiero un café con leche."
         show("es", sentence, "I want a coffee with milk.")
         response = "Café means ‘coffee’ in this sentence. Un café con leche is a coffee with milk."
@@ -267,6 +277,7 @@ class CaptionParityTest {
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
+            if (language != "zh") compose.onNodeWithTag("pinyin-toggle").assertDoesNotExist()
             compose.onNodeWithTag("target-caption").performScrollTo()
             tap(word, sentence)
             compose.onNodeWithTag("word-lookup-close").performClick()

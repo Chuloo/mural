@@ -19,8 +19,8 @@ class MinutePurchaseLaunchTest {
     private inner class API : MinuteCommerceService {
         val creating = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
-        override suspend fun catalog() = MinuteCatalog(true, listOf(product))
-        override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String): MinuteOrder {
+        override suspend fun catalog(regionCode: String?) = MinuteCatalog(true, listOf(product))
+        override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String, selection: PlayPriceSnapshot?): MinuteOrder {
             creating.complete(Unit); finish.await()
             return MinuteOrder(id, 30, "usd", 599, PlayOrderBinding(id, "b".repeat(64), "c".repeat(64)))
         }
@@ -32,6 +32,7 @@ class MinutePurchaseLaunchTest {
     private inner class Store : MinuteStoreGateway {
         override val events = MutableSharedFlow<MinuteStoreEvent>()
         override suspend fun connect() { }
+        override suspend fun billingRegion() = "US"
         override suspend fun offers(productIDs: List<String>) = listOf(MinuteStoreOffer(id, product.providerProduct, "USD", 5_990_000, "$5.99"))
         override suspend fun purchases() = emptyList<MinuteStorePurchase>()
         override fun close() { }

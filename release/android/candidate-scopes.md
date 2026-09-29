@@ -1,11 +1,13 @@
 # Android candidate scopes
 
-The default Android build uses version code **13**. Version **12** is reserved for an isolated Play Billing license test. The existing Play production release is **version 4**. All use the package `chat.mural.android` and version name `0.1`; their configuration and test evidence are separate.
+The default Android build uses version code **15**. Version **14** is reserved for the regional Play Billing license test. The current Play production release is **version 13**. All use the package `chat.mural.android` and version name `0.1`; their configuration and test evidence are separate.
 
 | Specification | Intended build | Release status and evidence |
 | --- | --- | --- |
-| [release-spec.json](release-spec.json) | Planned v13 production identity and assets. Clean Gradle builds default purchases off, channel `play`, environment `test` | Default validation target; paid release requires explicit live flags |
-| [specs/play-v13.json](specs/play-v13.json) | Signed v13 paid Play production candidate with purchases enabled, channel `play`, environment `live` and the production API origin | Built and validated on 29 September from `5772ec6`; production submission awaits the license test and backend activation |
+| [release-spec.json](release-spec.json) | Planned v15 production identity and assets. Clean Gradle builds default purchases off, channel `play`, environment `test` | Default validation target; paid release requires explicit live flags |
+| [specs/play-v15.json](specs/play-v15.json) | Regional Play production candidate with live service and purchases enabled | Requires regional backend deployment and Play-installed test evidence |
+| [specs/play-v14.json](specs/play-v14.json) | Regional internal test candidate using the isolated sandbox | Never promote to production |
+| [specs/play-v13.json](specs/play-v13.json) | Signed v13 paid Play production candidate with purchases enabled, channel `play`, environment `live` and the production API origin | Published on 29 September after the Play license purchase test and production backend activation |
 | [specs/play-v12.json](specs/play-v12.json) | Internal-only Play sandbox candidate with purchases enabled, channel `play`, environment `test` and the sandbox API origin | Built and validated from `5772ec6`, then published to internal testers on 29 September. License-test receipts belong only to the isolated test backend; never promote this bundle to production |
 | [specs/play-v11.json](specs/play-v11.json) | Historical v11 Play candidate with purchases enabled and `live` environment | Signed AAB was uploaded to internal testing before the latest fixes; its evidence does not cover v12 |
 | [specs/direct-v10.json](specs/direct-v10.json) | Historical v10 direct distribution, with Stripe configured explicitly | Separate candidate; it has not been published as the website's primary Android download |
@@ -18,6 +20,8 @@ The default Android build uses version code **13**. Version **12** is reserved f
 
 The historical v4 bundle has SHA-256 `8e408404ac2c9cf397eeceac0e0d71b245b8d24884169df2b424729bc62a8946`. Its [packaging and test record](signed-candidate-2026-09-14-v4.md) applies to that bundle and its identified preview APK. It does not cover v5 or later source changes.
 
-The [Play listing copy](metadata/en-US) and [eight screenshots](assets/README.md) are prepared for the paid release. Compare them with the final v13 bundle before upload. The Console listing, [declarations](declarations.md) and real purchase behavior still need verification before production. Text-length, image-format and hash checks cannot establish that the copy describes the live app correctly.
+The [Play listing copy](metadata/en-US) and [eight screenshots](assets/README.md) are prepared for the paid release. Compare them with the final v15 bundle before upload. The Console listing, [declarations](declarations.md) and real purchase behavior still need verification before production. Text-length, image-format and hash checks cannot establish that the copy describes the live app correctly.
 
 The checker records the selected spec's filename, SHA-256 and version. It enforces the same package, version, SDK, manifest, native-layout and credential checks for an explicit historical spec as for the default. [Validation instructions](build-and-verify.md#3-validate-the-exact-bundle-and-assets) show how to select a spec without changing the current candidate version.
+
+The regional pricing snapshot retains all 174 Google price previews. The release catalog enables only the 163-country intersection with supported AI service coverage, including Ethiopia, and excludes 11 countries with source-backed reasons. Its 495 Play rows contain 489 regional offers plus the six US/Norway compatibility offers. The availability change in Play Console and the matching backend catalog must be verified separately before this candidate is released.

@@ -391,8 +391,8 @@ class AndroidReleaseTests(unittest.TestCase):
     def test_checked_in_specs_separate_sandbox_production_direct_and_historical_versions(self):
         directory = release.ROOT / "release/android"
         current = json.loads((directory / "release-spec.json").read_text())
-        production = json.loads((directory / "specs/play-v13.json").read_text())
-        sandbox = json.loads((directory / "specs/play-v12.json").read_text())
+        production = json.loads((directory / "specs/play-v15.json").read_text())
+        sandbox = json.loads((directory / "specs/play-v14.json").read_text())
         previous_play = json.loads((directory / "specs/play-v11.json").read_text())
         direct = json.loads((directory / "specs/direct-v10.json").read_text())
         previous_direct = json.loads((directory / "specs/direct-v9.json").read_text())
@@ -406,8 +406,8 @@ class AndroidReleaseTests(unittest.TestCase):
         self.assertEqual(previous_direct["versionCode"], 9)
         self.assertEqual(direct["versionCode"], 10)
         self.assertEqual(current, production)
-        self.assertEqual(production["versionCode"], 13)
-        self.assertEqual(sandbox["versionCode"], 12)
+        self.assertEqual(production["versionCode"], 15)
+        self.assertEqual(sandbox["versionCode"], 14)
         self.assertEqual(previous_play["versionCode"], 11)
         self.assertEqual(sandbox["candidate"], {
             "track": "internal-testing", "purchaseChannel": "play", "purchaseEnvironment": "test",
