@@ -115,14 +115,16 @@ fun TalkScreen(
     BoxWithConstraints(Modifier.fillMaxSize().testTag("talk-screen")) {
     val scrollPage = LocalDensity.current.fontScale > 1.3f || maxHeight < 480.dp
     val compact = !scrollPage && maxHeight < 620.dp
+    val hasMandarinReading = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+        vm.language.id == "zh" && chat.mural.core.MandarinPinyin.containsHan(caption)
+    val compactReading = compact && hasMandarinReading
     val captionWidth = with(LocalDensity.current) { (maxWidth - 56.dp).roundToPx().coerceAtLeast(1) }
     val longPassage = passage != null && !scrollPage && textMeasurer.measure(
         caption, style = MaterialTheme.typography.headlineSmall,
         constraints = Constraints(maxWidth = captionWidth),
     ).lineCount > 2
     val readingSpace by animateFloatAsState(
-        if (longPassage || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-            vm.language.id == "zh" && chat.mural.core.MandarinPinyin.containsHan(caption))) 1f else 0f, spring(dampingRatio = 1f, stiffness = 260f), label = "passage reading space",
+        if (longPassage || hasMandarinReading) 1f else 0f, spring(dampingRatio = 1f, stiffness = 260f), label = "passage reading space",
     )
     val orbSize = when {
         scrollPage -> 170.dp
@@ -143,14 +145,15 @@ fun TalkScreen(
                 style = MaterialTheme.typography.labelMedium, color = MuralColors.Secondary,
             )
         }
-        Spacer(Modifier.height(if (compact) 8.dp else 24.dp - 16.dp * readingSpace))
+        Spacer(Modifier.height(if (compactReading) 4.dp else if (compact) 8.dp else 24.dp - 16.dp * readingSpace))
         MuralOrb(
             energy = maxOf(vm.outputLevel.toFloat(), vm.inputLevel.toFloat() * .45f),
             listening = vm.state == "active" && vm.isVoiceSession && !vm.isMuted,
             active = vm.state != "closing",
             modifier = Modifier.size(orbSize).testTag("talk-orb"),
         )
-        Box(Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 12.dp).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(top = if (compactReading) 0.dp else if (compact) 8.dp else 12.dp)
+            .heightIn(min = if (compactReading) 24.dp else 40.dp), contentAlignment = Alignment.Center) {
             val status = if (vm.hasContinuation) {
                 stringResource(if (vm.continuationReady) R.string.talk_status_continue_ready
                     else if (vm.continuationNeedsMinutes) R.string.talk_status_continue_saved else R.string.talk_status_continue_settling)
@@ -173,7 +176,7 @@ fun TalkScreen(
                 }
             }
         }
-        Spacer(Modifier.height(if (compact) 12.dp else 20.dp - 8.dp * readingSpace))
+        Spacer(Modifier.height(if (compactReading) 0.dp else if (compact) 12.dp else 20.dp - 8.dp * readingSpace))
         Column(
             // Each language keeps a share of the available space. A single scroller let
             // long target-language replies push their meaning entirely below the viewport.
@@ -183,7 +186,7 @@ fun TalkScreen(
             verticalArrangement = Arrangement.Center,
         ) {
         Column(
-            modifier = (if (scrollPage || passage == null) Modifier else Modifier.weight(1f, fill = false).passageScroll(targetScroll))
+            modifier = (if (scrollPage || passage == null) Modifier else Modifier.weight(if (compactReading) 3f else 1f, fill = false).passageScroll(targetScroll))
                 .fillMaxWidth().testTag("target-passage-scroll"),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -241,7 +244,7 @@ fun TalkScreen(
                 Text(stringResource(R.string.talk_checking), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
             }
         }
-        Spacer(Modifier.height(when { scrollPage -> 28.dp; compact -> 10.dp; else -> 24.dp }))
+        Spacer(Modifier.height(when { scrollPage -> 28.dp; compactReading -> 0.dp; compact -> 10.dp; else -> 24.dp }))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             RoundAction(MuralSymbol.Captions, stringResource(R.string.talk_meaning_label),
                 selected = vm.archive.preferences.meaningVisible, onClick = vm::toggleMeaning)
