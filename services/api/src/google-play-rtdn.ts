@@ -27,7 +27,8 @@ async function boundedJSON(response: Response, limit: number): Promise<any> {
   finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export type PlayNotification = { kind: 'purchase'; purchaseToken: string; sku?: string } | { kind: 'ignore' };
+export type PlayNotification = { kind: 'purchase'; eventType: 'purchased' | 'canceled' | 'voided';
+  purchaseToken: string; sku?: string } | { kind: 'ignore' };
 /** Pub/Sub is authenticated by the subscriber credential; every purchase is rechecked with Play. */
 export function parsePlayNotification(data: unknown, packageName: string): PlayNotification {
   if (typeof data !== 'string' || data.length < 4 || data.length > 16_384 || !base64Pattern.test(data)) throw invalid();
@@ -43,13 +44,14 @@ export function parsePlayNotification(data: unknown, packageName: string): PlayN
     if (!one || typeof one !== 'object' || Array.isArray(one) || one.version !== '1.0' ||
       ![1, 2].includes(one.notificationType) || typeof one.purchaseToken !== 'string' || !tokenPattern.test(one.purchaseToken) ||
       typeof one.sku !== 'string' || !/^[A-Za-z0-9_.-]{1,200}$/.test(one.sku)) throw invalid();
-    return { kind: 'purchase', purchaseToken: one.purchaseToken, sku: one.sku };
+    return { kind: 'purchase', eventType: one.notificationType === 1 ? 'purchased' : 'canceled',
+      purchaseToken: one.purchaseToken, sku: one.sku };
   }
   const voided = notification.voidedPurchaseNotification;
   if (voided !== undefined && (!voided || typeof voided !== 'object' || Array.isArray(voided))) throw invalid();
   if (voided !== undefined && voided.productType === 2) {
     if (typeof voided.purchaseToken !== 'string' || !tokenPattern.test(voided.purchaseToken)) throw invalid();
-    return { kind: 'purchase', purchaseToken: voided.purchaseToken };
+    return { kind: 'purchase', eventType: 'voided', purchaseToken: voided.purchaseToken };
   }
   if (notification.testNotification || notification.subscriptionNotification ||
     notification.pendingRefundReviewNotification || voided) return { kind: 'ignore' };
@@ -65,7 +67,8 @@ export class PlayRtdnSubscriber {
   #operationalUntil = 0;
   constructor(readonly config: PlayRtdnConfig, readonly tokens: GoogleAccessTokenSource,
     readonly fulfillment: PlayNotificationFulfillment, readonly request: typeof fetch = fetch,
-    readonly isForeignEnvironmentPurchase?: (purchaseToken: string) => Promise<boolean>) {
+    readonly isForeignEnvironmentPurchase?: (purchaseToken: string) => Promise<boolean>,
+    readonly onPurchaseHandled?: (eventType: 'purchased' | 'canceled' | 'voided') => void) {
     const topic = namePattern.exec(config.topic), sub = namePattern.exec(config.subscription);
     if (!topic || !sub || topic[2] !== 'topics' || sub[2] !== 'subscriptions' ||
       topic[1] !== config.projectID || sub[1] !== config.projectID || config.packageName !== 'chat.mural.android')
@@ -108,11 +111,17 @@ export class PlayRtdnSubscriber {
           if (!message || typeof message !== 'object' || typeof message.ackId !== 'string' || !ackPattern.test(message.ackId) ||
             !message.message || typeof message.message !== 'object') throw invalid();
           const notification = parsePlayNotification(message.message.data, this.config.packageName);
-          if (notification.kind === 'purchase' && !(await this.isForeignEnvironmentPurchase?.(notification.purchaseToken)))
+          const sameEnvironment = notification.kind === 'purchase' &&
+            !(await this.isForeignEnvironmentPurchase?.(notification.purchaseToken));
+          if (notification.kind === 'purchase' && sameEnvironment)
             await this.fulfillment.reconcile('play', { kind: 'notification', purchaseToken: notification.purchaseToken,
               ...(notification.sku ? { sku: notification.sku } : {}) });
           // The verifier saves the encrypted receipt and commits fulfillment before this message is acknowledged.
           await this.#call(`${this.#base}:acknowledge`, { ackIds: [message.ackId] });
+          if (sameEnvironment) {
+            // Fixed, payload-free operational evidence; an observer cannot change fulfillment.
+            try { this.onPurchaseHandled?.(notification.eventType); } catch { /* Diagnostics are best effort. */ }
+          }
           handled++;
         } catch (error) {
           // One unverified purchase must not starve later messages or open the account-deletion gate.

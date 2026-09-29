@@ -79,6 +79,7 @@ export interface MinuteCommerceDependencies {
   appleTransport?: AppleMinuteTransport;
   request?: typeof fetch;
   onFailure?: CommerceRunnerOptions['onFailure'];
+  onPlayNotificationHandled?: (eventType: 'purchased' | 'canceled' | 'voided') => void;
 }
 
 /** Optional startup boundary. Credentials never come from HTTP input or database configuration. */
@@ -172,7 +173,7 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
   const fulfillment = new PurchaseFulfillmentRouter(db, purchases, aiPurchases, adapters);
   const playNotifications = playNotificationConfig && playNotificationTokens
     ? new PlayRtdnSubscriber(playNotificationConfig, playNotificationTokens, fulfillment, dependencies.request,
-      token => play!.isForeignEnvironmentPurchase(token)) : undefined;
+      token => play!.isForeignEnvironmentPurchase(token), dependencies.onPlayNotificationHandled) : undefined;
   // Removing a historical decryption key or provider would strand settled purchases and refunds.
   const receipts = (await db.query(`SELECT DISTINCT encryption_key_id,provider,environment,merchant FROM minute_provider_receipts
     UNION SELECT NULL AS encryption_key_id,provider,environment,merchant FROM minute_purchase_orders`)).rows;

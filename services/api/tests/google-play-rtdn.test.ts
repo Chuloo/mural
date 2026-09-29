@@ -14,10 +14,13 @@ const json = (value: unknown) => new Response(JSON.stringify(value), { status: 2
 
 test('Play notification parser accepts only package-scoped, bounded one-time events', () => {
   assert.deepEqual(parsePlayNotification(message(purchase), packageName),
-    { kind: 'purchase', purchaseToken: 'token-1', sku: 'mural_small' });
+    { kind: 'purchase', eventType: 'purchased', purchaseToken: 'token-1', sku: 'mural_small' });
+  assert.deepEqual(parsePlayNotification(message({ ...purchase, oneTimeProductNotification: {
+    ...purchase.oneTimeProductNotification, notificationType: 2 } }), packageName),
+    { kind: 'purchase', eventType: 'canceled', purchaseToken: 'token-1', sku: 'mural_small' });
   assert.deepEqual(parsePlayNotification(message({ ...purchase, oneTimeProductNotification: undefined,
     voidedPurchaseNotification: { productType: 2, purchaseToken: 'token-1' } }), packageName),
-    { kind: 'purchase', purchaseToken: 'token-1' });
+    { kind: 'purchase', eventType: 'voided', purchaseToken: 'token-1' });
   assert.deepEqual(parsePlayNotification(message({ version: '1.0', packageName, testNotification: { version: '1.0' } }), packageName),
     { kind: 'ignore' });
   assert.throws(() => parsePlayNotification(message({ ...purchase, packageName: 'attacker.app' }), packageName),
@@ -78,7 +81,7 @@ test('subscriber leaves failed purchases unacknowledged and closes deletion gate
 });
 
 test('subscriber handles later purchases after an unverified message without opening deletion gate', async () => {
-  const acknowledgements: string[] = [], reconciled: string[] = [];
+  const acknowledgements: string[] = [], reconciled: string[] = [], reported: string[] = [];
   const second = { ...purchase, oneTimeProductNotification: {
     ...purchase.oneTimeProductNotification, purchaseToken: 'token-2' } };
   const request = (async (url: string, options: RequestInit) => {
@@ -95,11 +98,33 @@ test('subscriber handles later purchases after an unverified message without ope
     { reconcile: async (_, input) => {
       reconciled.push(input.purchaseToken);
       if (input.purchaseToken === 'token-1') throw new Error('purchase cannot be verified');
-    } }, request);
+    } }, request, undefined, kind => reported.push(kind));
   await assert.rejects(subscriber.poll(), /purchase cannot be verified/);
   assert.deepEqual(reconciled, ['token-1', 'token-2']);
   assert.deepEqual(acknowledgements, ['ack-success']);
+  assert.deepEqual(reported, ['purchased']);
   assert.equal(subscriber.isOperational(), false);
+});
+
+test('subscriber reports only verified, acknowledged one-time and voided events, never test pings', async () => {
+  const reported: string[] = [], acknowledged: string[] = [];
+  const canceled = { ...purchase, oneTimeProductNotification: {
+    ...purchase.oneTimeProductNotification, notificationType: 2, purchaseToken: 'token-2' } };
+  const voided = { version: '1.0', packageName,
+    voidedPurchaseNotification: { productType: 2, purchaseToken: 'token-3' } };
+  const ping = { version: '1.0', packageName, testNotification: { version: '1.0' } };
+  const subscriber = new PlayRtdnSubscriber({ topic, subscription, packageName, projectID: 'mural-prod' },
+    { accessToken: async () => 'test-access-token-1234567890' }, { reconcile: async () => {} },
+    (async (url: string, options: RequestInit) => {
+      if (url.endsWith(subscription)) return json({ name: subscription, topic, pushConfig: {} });
+      if (url.endsWith(':pull')) return json({ receivedMessages: [ping, purchase, canceled, voided].map((body, index) =>
+        ({ ackId: `ack-${index}`, message: { data: message(body) } })) });
+      if (url.endsWith(':acknowledge')) acknowledged.push(...JSON.parse(String(options.body)).ackIds);
+      return json({});
+    }) as typeof fetch, undefined, kind => reported.push(kind));
+  assert.deepEqual(await subscriber.poll(), { received: 4, handled: 4 });
+  assert.deepEqual(acknowledged, ['ack-0', 'ack-1', 'ack-2', 'ack-3']);
+  assert.deepEqual(reported, ['purchased', 'canceled', 'voided']);
 });
 
 test('subscriber refuses a mismatched subscription topic before pulling', async () => {
@@ -131,7 +156,7 @@ test('subscriber classifies provider HTTP status and timeouts without response d
 });
 
 test('verified foreign-environment tokens are acknowledged without a ledger grant', async () => {
-  let grants = 0, acknowledged = 0, checked = 0;
+  let grants = 0, acknowledged = 0, checked = 0, reported = 0;
   const subscriber = new PlayRtdnSubscriber({ topic, subscription, packageName, projectID: 'mural-prod' },
     { accessToken: async () => 'test-access-token-1234567890' },
     { reconcile: async () => { grants++; } },
@@ -141,9 +166,9 @@ test('verified foreign-environment tokens are acknowledged without a ledger gran
       if (url.endsWith(':acknowledge')) acknowledged++;
       return json({});
     }) as typeof fetch,
-    async token => { checked++; assert.equal(token, 'token-1'); return true; });
+    async token => { checked++; assert.equal(token, 'token-1'); return true; }, () => { reported++; });
   await subscriber.poll();
-  assert.equal(checked, 1); assert.equal(grants, 0); assert.equal(acknowledged, 1);
+  assert.equal(checked, 1); assert.equal(grants, 0); assert.equal(acknowledged, 1); assert.equal(reported, 0);
 });
 
 test('Play environment preflight distinguishes license tests from paid purchases', async () => {
