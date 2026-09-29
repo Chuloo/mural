@@ -121,7 +121,21 @@ finally:
         'user':shell('am','get-current-user'),'fontScale':shell('settings','get','system','font_scale'),
         'demoAllowed':shell('settings','get','global','sysui_demo_allowed')}
     evidence['testLogSHA256'] = digest(work/'capture-test.log') if (work/'capture-test.log').exists() else None
-    evidence_path = output_root/'assets'/'capture-evidence.json'
-    evidence_path.parent.mkdir(parents=True, exist_ok=True)
-    evidence_path.write_text(json.dumps(evidence,indent=2)+'\n')
-    print('Capture evidence: ' + str(evidence_path), flush=True)
+
+# Publish evidence only after every capture passed and the emulator was restored.
+# A failed run must leave the last successful capture record intact.
+assert len(evidence['assets']) == 9, 'Incomplete Play capture.'
+assert evidence['restoredDeviceSettings'] == {key: original[key] for key in
+    ('size', 'density', 'user', 'fontScale', 'demoAllowed')}, 'Emulator settings were not restored.'
+evidence_path = output_root/'assets'/'capture-evidence.json'
+evidence_path.parent.mkdir(parents=True, exist_ok=True)
+with tempfile.NamedTemporaryFile('w', dir=evidence_path.parent, prefix='.capture-evidence-',
+                                 suffix='.json', delete=False) as staged:
+    json.dump(evidence, staged, indent=2)
+    staged.write('\n')
+try:
+    os.replace(staged.name, evidence_path)
+except BaseException:
+    Path(staged.name).unlink(missing_ok=True)
+    raise
+print('Capture evidence: ' + str(evidence_path), flush=True)

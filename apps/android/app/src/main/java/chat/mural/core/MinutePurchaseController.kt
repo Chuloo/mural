@@ -59,9 +59,11 @@ class MinutePurchaseController(
         store.connect()
         val owned = store.purchases()
         if (owned.isNotEmpty()) {
-            processPurchases(owned, member)
+            val recovered = processPurchases(owned, member)
             updateBalance(member)
-            return@operation
+            // A receipt belonging to another Mural account can remain in Play's
+            // owned list. Only a receipt this account can recover defers checkout.
+            if (recovered) return@operation
         }
         val shown = products[sku]?.first ?: throw MinuteCommerceFailure.Unavailable
         // Re-fetch both sources before creating a payable order. A changed quote needs a new tap.
@@ -132,9 +134,10 @@ class MinutePurchaseController(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) { failure(error) }
     }
-    private suspend fun processPurchases(purchases: List<MinuteStorePurchase>, member: AccountSession) {
+    private suspend fun processPurchases(purchases: List<MinuteStorePurchase>, member: AccountSession): Boolean {
         if (purchases.size > 100) throw MinuteCommerceFailure.InvalidResponse
         var pending = false
+        var recovered = false
         var verificationFailed = false
         for (purchase in purchases.distinctBy { it.token }) {
             requireCurrent(member)
@@ -142,7 +145,7 @@ class MinutePurchaseController(
             // Pending tokens are uploaded too so the server can observe completion without this app.
             try {
                 val result = api.recover(member, purchase.token)
-                requireCurrent(member); applyStatus(result)
+                requireCurrent(member); recovered = true; applyStatus(result)
                 pending = pending || result.state in listOf("created", "pending")
             } catch (error: MinuteCommerceFailure.Http) {
                 // An unrelated account's old receipt must not block this account's valid purchases.
@@ -152,6 +155,7 @@ class MinutePurchaseController(
         }
         mutable.value = mutable.value.copy(purchaseInProgress = pending,
             notice = if (pending) MinutePurchaseNotice.PENDING else if (verificationFailed) MinutePurchaseNotice.VERIFICATION_FAILED else mutable.value.notice)
+        return recovered
     }
     private fun applyStatus(result: MinutePurchaseStatus) {
         mutable.value = mutable.value.copy(purchaseInProgress = result.state in listOf("created", "pending"), notice = when {

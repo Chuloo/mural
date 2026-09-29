@@ -186,6 +186,18 @@ class MinutePurchaseControllerTest {
         assertEquals(MinutePurchaseNotice.VERIFICATION_FAILED, controller.state.value.notice)
         assertNotNull(controller.state.value.balance)
     }
+    @Test fun unrelatedAccountReceiptDoesNotBlockANewCheckout() = runTest {
+        val api = API(); val store = Store(); val controller = controller(api, store)
+        controller.refresh()
+        store.owned = listOf(MinuteStorePurchase("other-account-token", MinuteStorePurchaseState.PURCHASED))
+        api.onRecover = { throw MinuteCommerceFailure.Http(502, "purchase_verification_failed") }
+        var launched = false
+        controller.buy(product.sku) { launched = true; MinuteStoreOutcome.OPENED }
+        assertEquals(listOf("other-account-token"), api.tokens)
+        assertTrue(launched)
+        assertEquals(1, api.keys.size)
+        assertTrue(controller.state.value.purchaseInProgress)
+    }
     @Test fun cancelAndRefundShowServerStatesWithoutChangingWalletLocally() = runTest {
         val api = API(); val store = Store(); val controller = controller(api, store)
         controller.refresh(); runCurrent(); controller.buy(product.sku) { MinuteStoreOutcome.OPENED }
