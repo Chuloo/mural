@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { makeRegionalPlayCatalog } from '../../services/api/src/play-regional-catalog.js';
+import { reviewedStoreRegionCodes } from '../../services/api/src/store-markets.js';
 
 // Run with services/api/node_modules/.bin/tsx. Output is a deployment candidate, never store activation.
 const [environment = 'live'] = process.argv.slice(2);
@@ -13,9 +14,15 @@ const snapshot = JSON.parse(readFileSync(new URL('./play-regional-prices.json', 
 const legacy = JSON.parse(readFileSync(new URL('./play-catalog-draft.json', import.meta.url), 'utf8'));
 assert.equal(snapshot.version, 1);
 assert.equal(snapshot.taxBasis, 'console-rate-estimate');
-const excluded = new Set(snapshot.excludedRegions.map((r: {regionCode: string}) => r.regionCode));
-const regions = snapshot.regions.filter((r: {regionCode: string}) => !excluded.has(r.regionCode));
-assert.equal(new Set(snapshot.regions.map((r: {regionCode: string}) => r.regionCode)).size, snapshot.regions.length);
+assert.equal(snapshot.serviceAvailability.provider, 'openai');
+assert.equal(snapshot.serviceAvailability.sourceURL, 'https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories');
+assert.match(snapshot.serviceAvailability.reviewedOn, /^\d{4}-\d{2}-\d{2}$/);
+const enabled = new Set(reviewedStoreRegionCodes(
+  snapshot.regions.map((r: {regionCode: string}) => r.regionCode),
+  snapshot.serviceAvailability.regionCodes,
+  snapshot.excludedRegions.map((r: {regionCode: string}) => r.regionCode),
+));
+const regions = snapshot.regions.filter((r: {regionCode: string}) => enabled.has(r.regionCode));
 const regional = makeRegionalPlayCatalog({
   environment, merchant: 'chat.mural.android', scheduleVersion: snapshot.scheduleVersion,
   policyVersion: 1, serviceFeeBasisPoints: 1500, commissionBasisPoints: 3000,

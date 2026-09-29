@@ -13,6 +13,7 @@ import { paidAIBalance } from '../src/ledger.js';
 import { createApp } from '../src/app.js';
 import { AuthAdmission } from '../src/auth-admission.js';
 import { digest } from '../src/auth.js';
+import { reviewedStoreRegionCodes } from '../src/store-markets.js';
 
 const databaseURL=process.env.TEST_DATABASE_URL;
 if(databaseURL && !new URL(databaseURL).pathname.endsWith('_test')) throw new Error('Use an isolated test database.');
@@ -236,5 +237,59 @@ integration('database regional quote constraint rejects missing country, altered
       assert.equal((await f.db.query('SELECT count(*) FROM minute_purchase_orders WHERE id=$1',[id])).rows[0].count,'0');
     }
     assert.equal((await f.db.query('SELECT count(*) FROM minute_purchase_orders')).rows[0].count,'1');
+  } finally {await f.cleanup();}
+});
+
+
+test('regional activation requires a complete positive service allowlist and rejects conflicting decisions',()=>{
+  assert.deepEqual(reviewedStoreRegionCodes(['GB','ET','HK'],['GB','ET'],['HK']),['ET','GB']);
+  for(const [priced,allowed,excluded] of [
+    [['GB','ET','HK'],['GB'],['HK']], // A new priced country is not implicitly enabled.
+    [['GB','ET','HK'],['GB','HK'],['ET','HK']],
+    [['GB','ET'],['GB','ET','AW'],[]],
+    [['GB','ET'],['GB','GB'],['ET']],
+  ]) assert.throws(()=>reviewedStoreRegionCodes(priced!,allowed!,excluded!),/invalid_store_market_availability/);
+});
+
+async function releaseRegionalCatalog() {
+  const snapshot=JSON.parse(await readFile(new URL('../../../release/android/play-regional-prices.json',import.meta.url),'utf8'));
+  const regionCodes=reviewedStoreRegionCodes(snapshot.regions.map((r:any)=>r.regionCode),snapshot.serviceAvailability.regionCodes,
+    snapshot.excludedRegions.map((r:any)=>r.regionCode));
+  const rows=makeRegionalPlayCatalog({environment:'test',merchant:scope.merchant,scheduleVersion:snapshot.scheduleVersion,
+    policyVersion:1,serviceFeeBasisPoints:1500,commissionBasisPoints:3000,estimate,currencyExponents:snapshot.currencyExponents,regionCodes,
+    packs:(['small','medium','large'] as const).map(pack=>({pack,providerProduct:`chat.mural.android.minutes.${pack}.v1`,
+      convertedRegionPrices:Object.fromEntries(snapshot.regions.map((r:any)=>[r.regionCode,{regionCode:r.regionCode,price:r.prices[pack],
+        consoleTax:{rateBasisPoints:r.taxRateBasisPoints,hasLocationOverrides:r.hasLocationOverrides}}]))}))});
+  return {snapshot,regionCodes,rows};
+}
+
+test('reviewed release activates Ethiopia and all 163 supported markets while retaining excluded price previews',async()=>{
+  const {snapshot,regionCodes,rows}=await releaseRegionalCatalog();
+  assert.equal(snapshot.regions.length,174);assert.equal(regionCodes.length,163);assert.equal(rows.length,489);
+  assert.equal(snapshot.serviceAvailability.provider,'openai');
+  const excluded=['AW','BM','BY','GI','HK','KY','MO','RU','TC','VE','VG'];
+  assert.deepEqual(snapshot.excludedRegions.map((r:any)=>r.regionCode).sort(),excluded);
+  assert.ok(excluded.every(code=>snapshot.regions.some((r:any)=>r.regionCode===code)&&!regionCodes.includes(code)));
+  const ai=new AIValuePurchases({} as any,{catalog:rows,verifiers:[verifier],salesEnabled:true});
+  const app=createApp({db:{} as any,auth:{},minuteCommerce:{purchases:new MinutePurchases({} as any),aiPurchases:ai}});
+  try {
+    const et=(await app.inject('/v1/minutes/products?provider=play&regionCode=ET')).json();
+    assert.equal(et.available,true);assert.equal(et.products.length,3);assert.ok(et.products.every((p:any)=>p.currency==='etb'));
+    for(const region of excluded) {
+      const response=(await app.inject(`/v1/minutes/products?provider=play&regionCode=${region}`)).json();
+      assert.equal(response.available,false);assert.equal(response.availabilityReason,'unsupported_country');assert.deepEqual(response.products,[]);
+    }
+  } finally {await app.close();}
+});
+
+integration('excluded regional SKUs cannot create payable orders even when callers supply their saved preview prices',async()=>{
+  const f=await fixture();try {
+    const {snapshot,rows}=await releaseRegionalCatalog();
+    const active=new AIValuePurchases(f.db,{catalog:rows,verifiers:[f.play],salesEnabled:true});
+    for(const region of ['HK','AW','VE']) await assert.rejects(active.createOrder(f.account,'play',
+      `play-${region.toLowerCase()}-small-${snapshot.scheduleVersion}`,randomUUID(),1,undefined,
+      {regionCode:region,scheduleVersion:snapshot.scheduleVersion}),/ai_value_product_unavailable/);
+    assert.equal((await f.db.query('SELECT count(*) FROM minute_purchase_orders')).rows[0].count,'1');
+    assert.deepEqual(await active.createOrder(f.account,'play',f.row.sku,f.key,1,undefined,f.selection),f.order);
   } finally {await f.cleanup();}
 });

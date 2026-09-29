@@ -39,3 +39,18 @@ export function validateStoreMarketPrice(price: StoreMarketPrice): void {
       throw new ServiceError('invalid_store_market_price');
   } else if(price.taxRateBasisPoints!==undefined || price.hasLocationOverrides!==undefined) throw new ServiceError('invalid_store_market_price');
 }
+
+/** Every priced country needs an explicit availability decision before a catalog can be generated. */
+export function reviewedStoreRegionCodes(priced:readonly string[],allowed:readonly string[],excluded:readonly string[]):readonly string[] {
+  const set=(values:readonly string[])=>{
+    if(!Array.isArray(values) || values.length>300) throw new ServiceError('invalid_store_market_availability');
+    const result=new Set(values.map(storeRegionCode));
+    if(result.size!==values.length) throw new ServiceError('invalid_store_market_availability');
+    return result;
+  };
+  const prices=set(priced),service=set(allowed),blocked=set(excluded);
+  if(!prices.size || !service.size || [...service].some(region=>!prices.has(region)||blocked.has(region)) ||
+    [...blocked].some(region=>!prices.has(region)) || [...prices].some(region=>!service.has(region)&&!blocked.has(region)))
+    throw new ServiceError('invalid_store_market_availability');
+  return Object.freeze([...prices].filter(region=>service.has(region)).sort());
+}

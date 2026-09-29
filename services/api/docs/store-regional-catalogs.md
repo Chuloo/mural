@@ -2,6 +2,8 @@
 
 Google Play minute packs use a fixed USD AI allocation with a separate local checkout price. The shared `StoreMarketPrice` model can support Apple pricing later; this change leaves Apple's current storefront catalog and activation unchanged.
 
+The reviewed September 29 catalog enables 163 countries where both Play billing and Mural's AI provider are supported, including Ethiopia. It retains 174 price previews for review; 11 excluded countries receive no regional offers. The generator requires each priced country to appear in the explicit service allowlist or the documented exclusions, so adding a price cannot silently enable a market. Apple's availability is unchanged. [OpenAI API supported countries](https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories)
+
 ## Client contract
 
 A Play client reads its country from `BillingClient.getBillingConfigAsync()`, then requests `/v1/minutes/products?provider=play&regionCode=GB`. The server returns only that country's products. An enabled catalog with no products for the requested country returns `available: false` and `availabilityReason: "unsupported_country"`.
