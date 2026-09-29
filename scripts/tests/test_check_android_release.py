@@ -388,9 +388,10 @@ class AndroidReleaseTests(unittest.TestCase):
                 self.assertEqual(status, 1)
                 self.assertFalse(result["passed"])
 
-    def test_checked_in_specs_separate_current_default_direct_and_historical_versions(self):
+    def test_checked_in_specs_separate_current_play_direct_and_historical_versions(self):
         directory = release.ROOT / "release/android"
         current = json.loads((directory / "release-spec.json").read_text())
+        play = json.loads((directory / "specs/play-v11.json").read_text())
         direct = json.loads((directory / "specs/direct-v10.json").read_text())
         previous_direct = json.loads((directory / "specs/direct-v9.json").read_text())
         historical = json.loads((directory / "specs/play-v4.json").read_text())
@@ -401,9 +402,11 @@ class AndroidReleaseTests(unittest.TestCase):
         self.assertEqual(historical["scope"], "hosted-guest-preview")
         self.assertEqual(previous_direct["versionCode"], 9)
         self.assertEqual(direct["versionCode"], 10)
-        self.assertEqual(current["versionCode"], direct["versionCode"])
+        self.assertEqual(current["versionCode"], play["versionCode"])
+        self.assertGreater(current["versionCode"], direct["versionCode"])
         self.assertGreater(current["versionCode"], previous_direct["versionCode"])
         self.assertGreater(previous_direct["versionCode"], historical["versionCode"])
+        self.assertEqual(play["scope"], "hosted-minute-release")
         self.assertEqual(previous_direct["scope"], "hosted-minute-release")
         self.assertEqual(direct["scope"], "hosted-minute-release")
 
