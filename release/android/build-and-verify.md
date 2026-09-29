@@ -38,6 +38,8 @@ Before signing each bundle, confirm its version, API origin, Google server clien
 
 Inspect the signed bundle with `jarsigner -verify -verbose -certs`, confirm that every payload entry is signed, and compare the certificate SHA-256 fingerprint with the intended upload certificate. An Android upload certificate can be self-signed; distinguish that trust warning from a broken signature or unsigned payload. Save the certificate fingerprint and bundle SHA-256, not the private key, in release evidence. Play App Signing uses its own app-signing certificate for delivered installs; register that fingerprint with native OAuth and other certificate-bound services. [Android signing guidance](https://developer.android.com/studio/publish/app-signing)
 
+The structural release checker does not inspect purchase flags inside DEX. For a paid release, independently read `chat.mural.BuildConfig` from the signed AAB using Android SDK `dexdump`, and verify purchases enabled, Play channel, the intended environment and API origin. Record the bundle hash with this evidence; generated source alone is insufficient. The [v12](evidence/play-v12-signed-configuration-2026-09-29.json) and [v13](evidence/play-v13-signed-configuration-2026-09-29.json) records demonstrate this check for the signed September 29 candidates.
+
 ## 3. Validate the exact bundle and assets
 
 Obtain a pinned release of Google's [bundletool](https://github.com/google/bundletool/releases), verify its provenance/checksum and keep it outside the repository. From the repository root, substitute the actual signed bundle and tool paths:

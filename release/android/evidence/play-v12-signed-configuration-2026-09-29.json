@@ -1,0 +1,24 @@
+{
+  "bundleFile": "Mural-Android-Play-v12-sandbox.aab",
+  "bundleSHA256": "5e7e1570ea3f47aaaa8739bfc71e593369bd54a340ec39129f409ef0f660e9ce",
+  "candidateRecordMatches": true,
+  "classDescriptor": "Lchat/mural/BuildConfig;",
+  "dexEntry": "base/dex/classes2.dex",
+  "dexSHA256": "c2a553658e4b9cd4f9fa72916dcdf9f81ae427c596c4b8cfd7902a0932ddd9f7",
+  "googleServerClientIdPresentAndMatchesCandidate": true,
+  "method": "Read the static encoded values of Lchat/mural/BuildConfig; with Android SDK build-tools 36.0.0 dexdump -e -l plain from the signed AAB dex, independently of the generated BuildConfig source file.",
+  "observed": {
+    "APPLICATION_ID": "chat.mural.android",
+    "BUILD_TYPE": "release",
+    "DEBUG": false,
+    "MANAGED_API_ORIGIN": "https://sandbox-api.mural.chat",
+    "MINUTE_PURCHASES_ENABLED": true,
+    "MINUTE_PURCHASE_ENVIRONMENT": "test",
+    "PURCHASE_CHANNEL": "play",
+    "VERSION_CODE": 12,
+    "VERSION_NAME": "0.1"
+  },
+  "result": "passed",
+  "sourceCommit": "5772ec6503b6d7ed603b3c2623ed144257293fa2",
+  "checkedOn": "2026-09-29"
+}
