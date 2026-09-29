@@ -46,9 +46,10 @@ class MinutePurchaseControllerTest {
         var calls = 0
         var closed = false
         var currentOffers = listOf(offer())
+        var requestedProducts = emptyList<String>()
         var owned = emptyList<MinuteStorePurchase>()
         override suspend fun connect() { calls++ }
-        override suspend fun offers(productIDs: List<String>): List<MinuteStoreOffer> { calls++; return currentOffers }
+        override suspend fun offers(productIDs: List<String>): List<MinuteStoreOffer> { calls++; requestedProducts = productIDs; return currentOffers }
         override suspend fun purchases(): List<MinuteStorePurchase> { calls++; return owned }
         override fun close() { closed = true }
     }
@@ -86,6 +87,29 @@ class MinutePurchaseControllerTest {
             assertTrue(api.keys.isEmpty()); controller.close()
         }
     }
+    @Test fun localizedCatalogRowsQueryOnePlayProductAndShowOnlyMatchingStorePrice() = runTest {
+        val api = API(); val store = Store()
+        val norwegian = product.copy(sku = "test-30-nor", currency = "nok", totalMinor = 8900)
+        api.catalogValue = MinuteCatalog(true, listOf(product, norwegian))
+        api.orderValue = order(norwegian)
+        store.currentOffers = listOf(offer(norwegian).copy(formattedPrice = "kr 89,00"))
+        val controller = controller(api, store)
+        controller.refresh()
+        assertEquals(listOf(product.providerProduct), store.requestedProducts)
+        assertEquals(listOf(MinutePack(norwegian.sku, norwegian.minutes, "kr 89,00")), controller.state.value.packs)
+        controller.buy(norwegian.sku) { assertEquals(norwegian, it.product); MinuteStoreOutcome.OPENED }
+        assertEquals(1, api.keys.size)
+    }
+    @Test fun ambiguousLocalizedCatalogRowsCannotSilentlyChooseOne() = runTest {
+        val api = API(); val store = Store()
+        api.catalogValue = MinuteCatalog(true, listOf(product, product.copy(sku = "same-price-other-sku")))
+        val controller = controller(api, store)
+        controller.refresh()
+        assertFalse(controller.state.value.available)
+        assertTrue(controller.state.value.packs.isEmpty())
+        controller.buy(product.sku) { error("ambiguous offer") }
+        assertTrue(api.keys.isEmpty())
+    }
     @Test fun changedCatalogAfterDisplayRequiresAnotherTapAndNeverCreatesOldQuote() = runTest {
         val api = API(); val store = Store(); val controller = controller(api, store)
         controller.refresh(); val changed = product.copy(totalMinor = 699)
@@ -121,6 +145,28 @@ class MinutePurchaseControllerTest {
         store.events.emit(MinuteStoreEvent(MinuteStoreOutcome.PURCHASES_UPDATED,
             listOf(MinuteStorePurchase("synthetic-token", MinuteStorePurchaseState.PURCHASED))))
         runCurrent(); assertEquals(2_400_000, controller.state.value.balance!!.availableMilliseconds)
+    }
+    @Test fun unfinishedPlayCartPurchaseIsRecoveredBeforeAnotherOrderAndShowsVerifiedQuantity() = runTest {
+        val api = API(); val store = Store(); val controller = controller(api, store)
+        controller.refresh()
+        store.owned = listOf(MinuteStorePurchase("owned-ten-pack-token", MinuteStorePurchaseState.PURCHASED, 10))
+        api.balanceValue = balance(18_000_000)
+        controller.buy(product.sku) { error("an owned purchase must be recovered before another checkout") }
+        assertTrue(api.keys.isEmpty())
+        assertEquals(listOf("owned-ten-pack-token"), api.tokens)
+        assertEquals(10, controller.state.value.lastPurchasedQuantity)
+        assertEquals(MinutePurchaseNotice.ADDED, controller.state.value.notice)
+        assertEquals(18_000_000, controller.state.value.balance!!.availableMilliseconds)
+    }
+    @Test fun pendingPlayCartQuantityNeverCreditsOrClaimsPacksAreReady() = runTest {
+        val api = API(); val store = Store(); val controller = controller(api, store)
+        api.statusValue = status("pending")
+        store.owned = listOf(MinuteStorePurchase("pending-ten-pack-token", MinuteStorePurchaseState.PENDING, 10))
+        controller.onForeground()
+        assertNull(controller.state.value.lastPurchasedQuantity)
+        assertEquals(MinutePurchaseNotice.PENDING, controller.state.value.notice)
+        assertEquals(600_000, controller.state.value.balance!!.availableMilliseconds)
+        assertTrue(api.keys.isEmpty())
     }
     @Test fun pendingPurchaseCanRecoverAfterReinstallEvenWhenSalesArePaused() = runTest {
         val api = API(); val store = Store(); api.catalogValue = MinuteCatalog(false, emptyList())
@@ -181,6 +227,8 @@ class MinutePurchaseControllerTest {
         assertEquals(599_000L, product.copy(currency = "kwd").expectedMicros())
         assertNull(product.copy(currency = "xxx").expectedMicros())
         assertFalse(MinuteStorePurchase("do-not-show", MinuteStorePurchaseState.PURCHASED).toString().contains("do-not-show"))
+        assertEquals(10, MinuteStorePurchase("token", MinuteStorePurchaseState.PURCHASED, 10).quantity)
+        try { MinuteStorePurchase("token", MinuteStorePurchaseState.PURCHASED, 0); fail("invalid quantity") } catch (_: IllegalArgumentException) { }
         assertFalse(order().toString().contains("b".repeat(64)))
         for (token in listOf("", "a b", "a\n", "é", "a".repeat(4097))) {
             try { MinuteStorePurchase(token, MinuteStorePurchaseState.PURCHASED); fail("bad token") } catch (_: IllegalArgumentException) { }

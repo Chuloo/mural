@@ -128,14 +128,14 @@ class PlayBillingAdapter(context: Context, private val enabled: Boolean = false,
     private fun mapPurchases(purchases: List<Purchase>): List<MinuteStorePurchase> {
         if (purchases.size > 100) throw MinuteCommerceFailure.InvalidResponse
         return purchases.map { purchase ->
-            if (purchase.packageName != PACKAGE || purchase.products.size != 1 || purchase.quantity != 1 || !minuteIdentifier.matches(purchase.products.single()))
+            if (purchase.packageName != PACKAGE || purchase.products.size != 1 || purchase.quantity <= 0 || !minuteIdentifier.matches(purchase.products.single()))
                 throw MinuteCommerceFailure.InvalidResponse
             val state = when (purchase.purchaseState) {
                 Purchase.PurchaseState.PENDING -> MinuteStorePurchaseState.PENDING
                 Purchase.PurchaseState.PURCHASED -> MinuteStorePurchaseState.PURCHASED
                 else -> throw MinuteCommerceFailure.InvalidResponse
             }
-            MinuteStorePurchase(purchase.purchaseToken, state)
+            MinuteStorePurchase(purchase.purchaseToken, state, purchase.quantity)
         }
     }
     private suspend fun <T : Any> timed(block: suspend () -> T): T =

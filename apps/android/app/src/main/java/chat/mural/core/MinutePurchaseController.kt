@@ -14,7 +14,7 @@ enum class MinutePurchaseNotice { UNAVAILABLE, SIGN_IN_REQUIRED, PRICE_CHANGED, 
 data class MinutePack(val sku: String, val minutes: Int, val formattedPrice: String, val aiValue: AIValueEntitlement? = null)
 data class MinutePurchaseState(val busy: Boolean = false, val available: Boolean = false, val packs: List<MinutePack> = emptyList(),
     val balance: MinuteBalance? = null, val purchaseInProgress: Boolean = false, val notice: MinutePurchaseNotice? = null,
-    val channel: PurchaseChannel = PurchaseChannel.PLAY, val maximumQuantity: Int = 1)
+    val channel: PurchaseChannel = PurchaseChannel.PLAY, val maximumQuantity: Int = 1, val lastPurchasedQuantity: Int? = null)
 
 /** UI state never contains an account bearer, receipt, provider binding or purchase token. */
 class MinutePurchaseController(
@@ -54,6 +54,15 @@ class MinutePurchaseController(
         val member = memberOrNull() ?: throw MinuteCommerceFailure.SignInRequired
         updateIdentity(member)
         if (mutable.value.purchaseInProgress) return@operation
+        // An unfinished Play purchase is authoritative even if its callback was missed.
+        // Recover it before preparing another payable order.
+        store.connect()
+        val owned = store.purchases()
+        if (owned.isNotEmpty()) {
+            processPurchases(owned, member)
+            updateBalance(member)
+            return@operation
+        }
         val shown = products[sku]?.first ?: throw MinuteCommerceFailure.Unavailable
         // Re-fetch both sources before creating a payable order. A changed quote needs a new tap.
         loadCatalog()
@@ -72,7 +81,7 @@ class MinutePurchaseController(
         when (launch(PreparedMinutePurchase(product, order, offer))) {
             MinuteStoreOutcome.OPENED -> {
                 attempts.remove(attempt)
-                mutable.value = mutable.value.copy(purchaseInProgress = true, notice = null)
+                mutable.value = mutable.value.copy(purchaseInProgress = true, notice = null, lastPurchasedQuantity = null)
             }
             MinuteStoreOutcome.CANCELED -> mutable.value = mutable.value.copy(notice = MinutePurchaseNotice.CANCELED)
             MinuteStoreOutcome.ALREADY_OWNED -> processPurchases(store.purchases(), member)
@@ -88,18 +97,22 @@ class MinutePurchaseController(
     fun close() { stopped = true; observer.cancel(); store.close(); products = emptyMap(); attempts.clear(); mutable.value = MinutePurchaseState() }
 
     private suspend fun loadCatalog() {
-        products = emptyMap(); mutable.value = mutable.value.copy(available = false, packs = emptyList())
+        products = emptyMap(); mutable.value = mutable.value.copy(available = false, packs = emptyList(), maximumQuantity = 1)
         val catalog = api.catalog(); requireOpen()
         if (catalog.products.any { it.environment != expectedEnvironment }) throw MinuteCommerceFailure.InvalidResponse
         if (!catalog.available) return
         store.connect()
         val offers = store.offers(catalog.products.map { it.providerProduct }.distinct()); requireOpen()
-        products = catalog.products.mapNotNull { product ->
+        val eligible = catalog.products.mapNotNull { product ->
             val matches = offers.filter { it.matches(product) }
             // Ambiguous eligible offers cannot silently choose different purchase terms.
-            matches.singleOrNull()?.let { product.sku to (product to it) }
-        }.toMap()
-        mutable.value = mutable.value.copy(available = products.isNotEmpty(),
+            matches.singleOrNull()?.let { product to it }
+        }
+        // A provider product can have catalog rows for different countries. Only
+        // the single row matching Play's localized price may be displayed.
+        products = eligible.groupBy { it.first.providerProduct }.values
+            .filter { it.size == 1 }.map { it.single() }.associate { (product, offer) -> product.sku to (product to offer) }
+        mutable.value = mutable.value.copy(available = products.isNotEmpty(), maximumQuantity = catalog.maximumQuantity,
             packs = products.values.map { (product, offer) -> MinutePack(product.sku, product.minutes, offer.formattedPrice, product.aiValue) })
     }
     private suspend fun processEvent(event: MinuteStoreEvent) {
@@ -129,7 +142,7 @@ class MinutePurchaseController(
             // Pending tokens are uploaded too so the server can observe completion without this app.
             try {
                 val result = api.recover(member, purchase.token)
-                requireCurrent(member); applyStatus(result)
+                requireCurrent(member); applyStatus(result, purchase.quantity)
                 pending = pending || result.state in listOf("created", "pending")
             } catch (error: MinuteCommerceFailure.Http) {
                 // An unrelated account's old receipt must not block this account's valid purchases.
@@ -140,8 +153,9 @@ class MinutePurchaseController(
         mutable.value = mutable.value.copy(purchaseInProgress = pending,
             notice = if (pending) MinutePurchaseNotice.PENDING else if (verificationFailed) MinutePurchaseNotice.VERIFICATION_FAILED else mutable.value.notice)
     }
-    private fun applyStatus(result: MinutePurchaseStatus) {
-        mutable.value = mutable.value.copy(purchaseInProgress = result.state in listOf("created", "pending"), notice = when {
+    private fun applyStatus(result: MinutePurchaseStatus, purchasedQuantity: Int? = null) {
+        mutable.value = mutable.value.copy(purchaseInProgress = result.state in listOf("created", "pending"),
+            lastPurchasedQuantity = purchasedQuantity.takeIf { result.state == "purchased" && result.fulfillmentRecorded }, notice = when {
             result.state in listOf("created", "pending") -> MinutePurchaseNotice.PENDING
             result.state == "voided" || result.reversedMilliseconds > 0 || result.reversalOutstandingMilliseconds > 0 || result.aiValue?.reversed == true -> MinutePurchaseNotice.REVERSED
             result.fulfillmentRecorded -> MinutePurchaseNotice.ADDED
@@ -165,7 +179,7 @@ class MinutePurchaseController(
     private fun updateIdentity(member: AccountSession?) {
         if (identity != member?.accountID) {
             identity = member?.accountID; attempts.clear()
-            mutable.value = mutable.value.copy(balance = null, purchaseInProgress = false, notice = null)
+            mutable.value = mutable.value.copy(balance = null, purchaseInProgress = false, notice = null, lastPurchasedQuantity = null)
         }
     }
     private fun requireOpen() { if (stopped) throw CancellationException("Minute purchases closed") }
