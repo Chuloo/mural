@@ -2,7 +2,7 @@
 
 The default release specification tracks **version 13**, the planned paid Play production build. Version 12 is reserved for a separate Play-installed internal sandbox test and must never be promoted to production. Clean v13 builds keep paid purchases disabled; the paid build must explicitly enable Google Play purchases in the live environment. The signed v11 Play candidate was uploaded to internal testing before the latest fixes and remains a historical test artifact. The separately signed direct-distribution configuration uses Stripe.
 
-The **version 4 guest preview for adults 18+** was published on Play on 26 September 2026, with paid checkout disabled. Its [submission record](evidence/play-submission-2026-09-14.json) and v4 test results describe that preview. Version 11 is available only to internal testers; versions 12 and 13 have not yet been built or uploaded. See [candidate scopes](candidate-scopes.md) before validating or distributing a build.
+The **version 4 guest preview for adults 18+** was published on Play on 26 September 2026, with paid checkout disabled. Its [submission record](evidence/play-submission-2026-09-14.json) and v4 test results describe that preview. Signed versions 12 and 13 were built and validated on 29 September. Version 12 replaced version 11 in internal testing; the production release remains gated on the Play-installed license test and matching backend activation. See [candidate scopes](candidate-scopes.md) before validating or distributing a build.
 
 | File | Purpose |
 | --- | --- |
