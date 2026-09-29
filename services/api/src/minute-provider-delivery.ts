@@ -45,6 +45,9 @@ export class MinuteReceiptVault {
     cipher.setAAD(aad(order.id, scope, referenceHash));
     const encrypted = Buffer.concat([iv, cipher.update(reference, 'utf8'), cipher.final(), cipher.getAuthTag()]);
     await transaction(this.db, async sql => {
+      // Serialize first receipt capture with deletion's account lock. A late Play
+      // notification can still attach to the retained tombstone after deletion.
+      await sql.query('SELECT id FROM accounts WHERE id=$1 FOR UPDATE', [order.account_id]);
       await sql.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`minute-receipt:${scope.provider}:${scope.environment}:${scope.merchant}:${referenceHash}`]);
       const prior = (await sql.query(`SELECT order_id,reference_hash,provider,environment,merchant FROM minute_provider_receipts
         WHERE order_id=$1 OR (provider=$2 AND environment=$3 AND merchant=$4 AND reference_hash=$5)`,

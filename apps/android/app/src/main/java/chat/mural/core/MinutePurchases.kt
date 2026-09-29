@@ -79,8 +79,10 @@ data class PreparedMinutePurchase(val product: MinuteProduct, val order: MinuteO
 }
 enum class MinuteStoreOutcome { OPENED, PURCHASES_UPDATED, CANCELED, UNAVAILABLE, ALREADY_OWNED, FAILED }
 enum class MinuteStorePurchaseState { PENDING, PURCHASED }
-class MinuteStorePurchase(val token: String, val state: MinuteStorePurchaseState) {
-    init { require(validPurchaseToken(token)) }
+class MinuteStorePurchase(val token: String, val state: MinuteStorePurchaseState, val quantity: Int = 1) {
+    // The buyer can change quantity in Play's cart after our order is prepared.
+    // The server verifies the purchased quantity and is the only source of credit.
+    init { require(validPurchaseToken(token) && quantity > 0) }
     override fun toString() = "MinuteStorePurchase(redacted)"
 }
 data class MinuteStoreEvent(val outcome: MinuteStoreOutcome, val purchases: List<MinuteStorePurchase> = emptyList()) {

@@ -26,7 +26,7 @@ async function fixture(both = false) {
   await file('RECEIPT_KEYS_FILE', { activeKeyID: 'current', keys: { current: Buffer.alloc(32, 3).toString('base64') } });
   await file('STRIPE_CREDENTIALS_FILE', { secretKey: 'sk_test_' + 'syntheticfixture'.repeat(2), webhookSecret: 'whsec_' + 'syntheticfixture'.repeat(2) });
   if (both) {
-    await file('PLAY_SERVICE_ACCOUNT_FILE', { type: 'service_account', client_email: 'mural@synthetic-project.iam.gserviceaccount.com', private_key: privateKey,
+    await file('PLAY_SERVICE_ACCOUNT_FILE', { type: 'service_account', project_id: 'synthetic-project', client_email: 'mural@synthetic-project.iam.gserviceaccount.com', private_key: privateKey,
       token_uri: 'https://oauth2.googleapis.com/token', universe_domain: 'googleapis.com' });
     await file('PLAY_BINDING_KEY_FILE', { key: Buffer.alloc(32, 4).toString('base64') });
   }
@@ -151,6 +151,22 @@ test('Play fixes the permanent Android package and requires complete existing se
     await assert.rejects(configuredMinuteCommerce(f.db, f.env), configError);
     f.manifest.play.currencyExponents = { usd: 2 }; await f.file('COMMERCE_CONFIG_FILE', f.manifest);
     delete f.env.MURAL_MINUTE_PLAY_BINDING_KEY_FILE; await assert.rejects(configuredMinuteCommerce(f.db, f.env), configError);
+  } finally { await f.clean(); }
+});
+
+test('Play notification pull is opt-in, project-scoped and starts unready without network work', async () => {
+  const f = await fixture(true);
+  try {
+    const topic = 'projects/synthetic-project/topics/mural-play-purchases';
+    const subscription = 'projects/synthetic-project/subscriptions/mural-play-api';
+    f.manifest.play.notifications = { topic, subscription };
+    await f.file('COMMERCE_CONFIG_FILE', f.manifest);
+    const service = (await configuredMinuteCommerce(f.db, f.env, f.dependencies))!;
+    assert.ok(service.playNotifications); assert.equal(service.playNotifications.isOperational(), false);
+    assert.equal(f.network, 0); await service.runner.stop();
+    f.manifest.play.notifications = { topic, subscription: 'projects/another-project/subscriptions/mural-play-api' };
+    await f.file('COMMERCE_CONFIG_FILE', f.manifest);
+    await assert.rejects(configuredMinuteCommerce(f.db, f.env, f.dependencies), configError);
   } finally { await f.clean(); }
 });
 

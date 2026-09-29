@@ -1,12 +1,12 @@
 # Android release package
 
-The default release specification tracks **version 8**, matching the Android build. Clean builds keep paid purchases disabled. The separate direct-distribution configuration enables Stripe purchases; it requires its own configuration and release checks.
+The default release specification tracks **version 13**, the planned paid Play production build. Version 12 is reserved for a separate Play-installed internal sandbox test and must never be promoted to production. Clean v13 builds keep paid purchases disabled; the paid build must explicitly enable Google Play purchases in the live environment. The signed v11 Play candidate was uploaded to internal testing before the latest fixes and remains a historical test artifact. The separately signed direct-distribution configuration uses Stripe.
 
-The archived **version 4 guest preview for adults 18+** was submitted to Play production review on 14 September 2026, with paid checkout disabled. That [submission record](evidence/play-submission-2026-09-14.json) does not establish approval or publication. The retained Play listing copy, declarations and v4 test results describe that submitted preview. See [candidate scopes](candidate-scopes.md) before validating or distributing a build.
+The **version 4 guest preview for adults 18+** was published on Play on 26 September 2026, with paid checkout disabled. Its [submission record](evidence/play-submission-2026-09-14.json) and v4 test results describe that preview. Signed versions 12 and 13 were built and validated on 29 September. Version 12 replaced version 11 in internal testing; the production release remains gated on the Play-installed license test and matching backend activation. See [candidate scopes](candidate-scopes.md) before validating or distributing a build.
 
 | File | Purpose |
 | --- | --- |
-| [candidate-scopes.md](candidate-scopes.md) | Current v8 configurations, historical direct distribution and the v4 Play submission |
+| [candidate-scopes.md](candidate-scopes.md) | Internal v12 test and planned v13 Play production configurations, historical candidates and the v4 submission |
 | [signed-candidate-2026-09-14-v4.md](signed-candidate-2026-09-14-v4.md) | Historical version 4 free-trial/BYOK APK/AAB, full UI results and packaging checks |
 | [signed-candidate-2026-09-14-v3.md](signed-candidate-2026-09-14-v3.md) | Historical version 3 APK/AAB, certificate and packaging checks |
 | [signed-candidate-2026-09-14-v2.md](signed-candidate-2026-09-14-v2.md) | Historical version 2 APK/AAB and packaging evidence |
@@ -14,14 +14,18 @@ The archived **version 4 guest preview for adults 18+** was submitted to Play pr
 | [preview-readiness-2026-09-13.md](preview-readiness-2026-09-13.md) | Earlier debug APK and its verification scope |
 | [candidate-audit-8768c86-2026-09-13.md](candidate-audit-8768c86-2026-09-13.md) | Historical unsigned candidate after the account lifecycle fixes; rebuild after later native changes |
 | [candidate-audit-2026-09-13.md](candidate-audit-2026-09-13.md) | Historical candidate before the account lifecycle fixes |
-| [release-spec.json](release-spec.json) | Default current v8 identity and funded-preview scope; purchases disabled by default |
-| [specs/direct-v8.json](specs/direct-v8.json) | Current v8 scope for configured direct Stripe distribution |
+| [release-spec.json](release-spec.json) | Default planned v13 production identity and store assets |
+| [specs/play-v13.json](specs/play-v13.json) | Explicit v13 Play production candidate |
+| [specs/play-v12.json](specs/play-v12.json) | Internal-only Play sandbox test candidate; never promote |
+| [specs/play-v11.json](specs/play-v11.json) | Historical v11 Play candidate uploaded to internal testing |
+| [specs/direct-v10.json](specs/direct-v10.json) | Historical v10 direct Stripe candidate |
+| [specs/direct-v8.json](specs/direct-v8.json) | Historical v8 direct Stripe candidate |
 | [specs/direct-v7.json](specs/direct-v7.json) | Previous direct release, retained for upgrade checks |
 | [specs/direct-v6.json](specs/direct-v6.json) | Historical direct Stripe specification |
 | [direct-v6-preparation.md](direct-v6-preparation.md) | Version 6 recovery scope and checks required before building and distribution |
 | [specs/direct-v5.json](specs/direct-v5.json) | Historical v5 direct Stripe specification |
 | [specs/play-v4.json](specs/play-v4.json) | Explicit historical v4 identity for rechecking the submitted Play bundle |
-| [metadata/en-US](metadata/en-US) | Retained v4 Play listing text and preview release notes; revise before a paid Play submission |
+| [metadata/en-US](metadata/en-US) | Play listing copy and current paid-release notes |
 | [declarations.md](declarations.md) | Data flows, permissions, Console declarations and unresolved answers |
 | [build-and-verify.md](build-and-verify.md) | Build and evidence procedure for an approved candidate |
 | [release-gates.md](release-gates.md) | Minimum internal-preview and public-release acceptance checks |
@@ -31,9 +35,9 @@ The owner-approved permanent package is `chat.mural.android`. Play registration 
 
 ## Assets
 
-The 512-pixel Play icon, native feature graphic and six 1080 × 1920 screenshots are prepared. [Asset provenance and refresh instructions](assets/README.md) identify the inspected capture build and synthetic learning fixtures. The screenshots show English controls, Spanish from Spain and English meanings. Compare them with the final uploaded candidate after source changes. The icon's encoding was normalized to opaque RGBA without changing any RGB pixel, and its sRGB setting matches the canonical iOS source.
+The 512-pixel Play icon, native feature graphic and eight 1080 × 1920 screenshots are prepared. [Asset provenance and refresh instructions](assets/README.md) identify the inspected capture build and synthetic learning fixtures. The screenshots show English controls and learning in Spanish, Mandarin and Italian. Compare them with the final uploaded candidate after source changes. The icon's encoding was normalized to opaque RGBA without changing any RGB pixel, and its sRGB setting matches the canonical iOS source.
 
-The six screens cover greeting, a Spanish conversation with meanings, themes, vocabulary, language selection and settings. Payment offers and personal account details are absent. Use the isolated capture workflow to refresh them. The older [design captures](../../verification/android-design/README.md) remain review evidence; their 1080 × 2424 dimensions exceed Play's maximum screenshot ratio.
+The eight screens cover conversation, word meaning, Mandarin with pinyin, themes, vocabulary, conversation history, Italian and language selection. Payment offers and personal account details are absent. Use the isolated capture workflow to refresh them. The older [design captures](../../verification/android-design/README.md) remain review evidence; their 1080 × 2424 dimensions exceed Play's maximum screenshot ratio.
 
 The store icon must be a 512 × 512, 32-bit sRGB PNG, at most 1024 KB. [Google’s icon specification](https://developer.android.com/distribute/google-play/resources/icon-design-specifications) The feature graphic must be a 1024 × 500, 24-bit PNG without alpha. This repository's validator also requires opaque 24-bit PNG screenshots, between 320 and 3840 pixels on each side, with the longer side no more than twice the shorter. Play accepts JPEG screenshots too; this workflow uses PNG to make review consistent. Keep the Mural artwork intact, with no price, rating or award claims. [Google's asset specification](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en-GB)
 

@@ -22,7 +22,8 @@ export async function accountCloseoutReport(db: Database, accountID: string) {
       EXISTS(SELECT 1 FROM hosted_helper_requests h JOIN hosted_sessions s ON s.id=h.session_id
         WHERE s.account_id=$1 AND h.state<>'settled') AS unresolved_helper`, [accountID])).rows[0];
     const orders = (await sql.query(`SELECT o.id,o.provider,o.environment,
-      o.created_at<=now()-interval '24 hours' AND r.order_id IS NULL AND v.order_id IS NULL AND m.order_id IS NULL AS abandoned_quote,
+      (o.provider='play' OR o.created_at<=now()-interval '24 hours')
+        AND r.order_id IS NULL AND v.order_id IS NULL AND m.order_id IS NULL AS abandoned_quote,
       r.order_id IS NOT NULL AS has_receipt,
       j.order_id IS NOT NULL AND j.state<>'done' AS delivery_pending,
       CASE WHEN o.entitlement_kind='ai_value' THEN v.order_id IS NULL ELSE m.order_id IS NULL END AS unverified,

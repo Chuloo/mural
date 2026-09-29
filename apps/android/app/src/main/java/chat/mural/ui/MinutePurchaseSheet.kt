@@ -116,6 +116,10 @@ fun MinutePurchaseSheet(
                         style = MaterialTheme.typography.labelMedium, color = MuralColors.Secondary, textAlign = TextAlign.Center)
                     Text(stringResource(if (state.channel == PurchaseChannel.STRIPE) R.string.minute_purchases_stripe_terms else R.string.minute_purchases_play_terms), style = MaterialTheme.typography.bodySmall,
                         color = MuralColors.Secondary, textAlign = TextAlign.Center)
+                    if (state.channel == PurchaseChannel.PLAY && state.maximumQuantity > 1) {
+                        Text(stringResource(R.string.minute_purchases_play_quantity), style = MaterialTheme.typography.bodySmall,
+                            color = MuralColors.Secondary, textAlign = TextAlign.Center)
+                    }
                     MuralTextButton(onRefresh, enabled = !checking && !accountBusy,
                         modifier = Modifier.testTag("minute-purchase-refresh")) {
                         Text(stringResource(R.string.minute_purchases_check))
@@ -141,7 +145,8 @@ fun MinutePurchaseSheet(
                         Button(onClick = { onBuyQuantity?.invoke(pack.sku, quantity) ?: onBuy(pack.sku) }, enabled = canChoose,
                             shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("minute-purchase-continue"),
                             colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
-                            Text(stringResource(R.string.minute_continue_price, packPrice(pack, quantity)))
+                            Text(stringResource(R.string.minute_continue_price,
+                                if (state.channel == PurchaseChannel.PLAY) pack.formattedPrice else packPrice(pack, quantity)))
                         }
                     }
                 }

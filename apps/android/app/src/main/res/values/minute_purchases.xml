@@ -25,6 +25,7 @@
     <string name="minute_purchases_verification_failed">We couldn’t confirm a purchase. Check again, or sign in with the Mural account used to buy it.</string>
     <string name="minute_purchases_sign_in_again">Sign in to confirm your purchases and see your minutes.</string>
     <string name="minute_purchases_play_terms">Google Play shows the final total before you confirm.</string>
+    <string name="minute_purchases_play_quantity">You can choose the number of packs in Google Play.</string>
     <string name="minute_purchases_stripe_terms">Checkout opens securely in Stripe. After paying, return to Mural and check your purchases.</string>
     <string name="minute_quantity">Quantity · %1$d</string>
     <string name="minute_continue_price">Continue · %1$s</string>
