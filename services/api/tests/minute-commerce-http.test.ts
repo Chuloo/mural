@@ -397,6 +397,34 @@ integration('receiptless Play orders keep token delivery authenticated for minut
   }
 });
 
+integration('operational Play notifications let an old receiptless order close while late verified value stays on its tombstone', async () => {
+  for (const aiValue of [false, true]) {
+    const f = await fixture({ aiValue });
+    try {
+      const former = await f.account(), replacement = await f.account(), order = await f.order(former, 'play');
+      const deleted = await deleteAccount(f.db, former.id, undefined, undefined, undefined,
+        new Date(Date.now() + 25 * 60 * 60 * 1000), true);
+      assert.deepEqual(deleted, { retainedFinancialRecords: true });
+      const token = f.bindPlay(order);
+      const result = await (f.fulfillment ?? f.purchases).reconcile('play', { kind: 'notification', purchaseToken: token, sku: 'http_thirty' });
+      assert.equal(result.state, 'purchased');
+      const receipt = (await f.db.query('SELECT order_id FROM minute_provider_receipts WHERE order_id=$1', [order.orderID])).rows[0];
+      assert.equal(receipt.order_id, order.orderID);
+      const tombstone = (await f.db.query('SELECT deleted_at,email FROM accounts WHERE id=$1', [former.id])).rows[0];
+      assert.ok(tombstone.deleted_at); assert.equal(tombstone.email, null);
+      if (aiValue) {
+        assert.equal((await paidAIBalance(f.db, replacement.id)).balanceNanoUSD, '0');
+        assert.notEqual((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1', [former.id])).rows[0].balance_nano, '0');
+      } else {
+        assert.equal((await minuteBalance(f.db, replacement.id)).balanceMilliseconds, 0);
+        assert.ok(Number((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1', [former.id])).rows[0].balance_ms) > 0);
+      }
+      await assert.rejects((f.fulfillment ?? f.purchases).reconcile('play',
+        { kind: 'notification', purchaseToken: token, sku: 'wrong_product' }), { code: 'purchase_verification_failed' });
+    } finally { await f.cleanup(); }
+  }
+});
+
 for (const aiValue of [false, true]) {
   integration(`durable Stripe key recovery is owner-bound for ${aiValue ? 'AI value' : 'minute'} orders`, async () => {
     const f = await fixture({ aiValue });

@@ -3,6 +3,7 @@ import { ServiceError } from './errors.js';
 import type { MinuteDeliveryWorker, MinuteReceiptVault } from './minute-provider-delivery.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
 import type { AppleMinuteProvider } from './apple-minute-provider.js';
+import type { PlayRtdnSubscriber } from './google-play-rtdn.js';
 
 const day = 86_400_000;
 export interface CommerceRunnerOptions {
@@ -10,7 +11,7 @@ export interface CommerceRunnerOptions {
   deliveryLimit?: number;
   reconciliationLimit?: number;
   voidPagesPerRun?: number;
-  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed' | 'apple_history_reconciliation_failed') => void;
+  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed' | 'apple_history_reconciliation_failed' | 'play_notification_failed') => void;
 }
 
 /** Replay notification history without advancing beyond an unverified or unqueued page. */
@@ -88,7 +89,8 @@ export class MinuteCommerceRunner {
   #stopped = false;
   constructor(readonly vault: Pick<MinuteReceiptVault, 'scheduleReconciliation'>,
     readonly worker: Pick<MinuteDeliveryWorker, 'runBatch'>, readonly voids?: PlayVoidReconciler,
-    options: CommerceRunnerOptions = {}, readonly appleHistory?: AppleHistoryReconciler) {
+    options: CommerceRunnerOptions = {}, readonly appleHistory?: AppleHistoryReconciler,
+    readonly playNotifications?: Pick<PlayRtdnSubscriber, 'poll' | 'isOperational'>) {
     this.#interval = options.intervalMilliseconds ?? 60_000;
     this.#deliveryLimit = options.deliveryLimit ?? 5;
     this.#reconciliationLimit = options.reconciliationLimit ?? 100;
@@ -110,6 +112,10 @@ export class MinuteCommerceRunner {
     return this.#flight;
   }
   async #run(): Promise<void> {
+    if (this.playNotifications) {
+      try { await this.playNotifications.poll(); }
+      catch { this.#failure('play_notification_failed'); }
+    }
     try { await this.vault.scheduleReconciliation(this.#reconciliationLimit); }
     catch { this.#failure('minute_reconciliation_failed'); }
     for (let index = 0; index < this.#deliveryLimit && !this.#stopped; index++) {

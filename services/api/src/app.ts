@@ -19,6 +19,7 @@ import type { AIValuePurchases, PurchaseFulfillmentRouter } from './ai-value-pur
 import type { StripeMinuteProvider } from './stripe-minute-provider.js';
 import type { AppleMinuteProvider } from './apple-minute-provider.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
+import type { PlayRtdnSubscriber } from './google-play-rtdn.js';
 import { HOSTED_HELPER_BODY_LIMIT, type HostedHelpers } from './hosted-helpers.js';
 import { Diagnostics, errorReference } from './diagnostics.js';
 import { startupDiagnostic, type StartupDiagnostic } from './startup-diagnostics.js';
@@ -27,7 +28,7 @@ export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthC
   onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
   minuteCommerce?: { purchases: MinutePurchases; aiPurchases?: AIValuePurchases; fulfillment?: PurchaseFulfillmentRouter;
-    stripe?: StripeMinuteProvider; play?: PlayMinuteProvider; apple?:AppleMinuteProvider };
+    stripe?: StripeMinuteProvider; play?: PlayMinuteProvider; apple?:AppleMinuteProvider; playNotifications?: Pick<PlayRtdnSubscriber,'isOperational'> };
   accounts?: { admission: AuthAdmission; identityVerifier?: typeof verifyIdentity } }
 const accountPaths = new Set(['/v1/auth/challenge', '/v1/auth/exchange', '/v1/auth/sign-out', '/v1/account', '/v1/wallet', '/v1/minutes/welcome', '/v1/minutes/link-guest',
   '/v1/account/connect-google',
@@ -382,7 +383,8 @@ export function createApp(services: Services) {
     const body = objectBody(request);
     if (Object.keys(body).some(key => key !== 'appleAuthorizationCode')) throw new ServiceError('invalid_request');
     const code = body.appleAuthorizationCode === undefined ? undefined : stringField(body, 'appleAuthorizationCode', 4096);
-    const result = await deleteAccount(db, account, services.appleRevoker, code, request.headers.authorization);
+    const result = await deleteAccount(db, account, services.appleRevoker, code, request.headers.authorization,
+      new Date(), services.minuteCommerce?.playNotifications?.isOperational() === true);
     return { deleted: true, retained: result.retainedFinancialRecords ? 'Required financial records, linked to an opaque account ID.' : null };
   });
   app.post('/v1/checkout', async request => {

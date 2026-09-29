@@ -11,6 +11,7 @@ import { StripeMinuteProvider, type StripeMinuteTransport } from './stripe-minut
 import { AppleMinuteProvider, type AppleMinuteTransport } from './apple-minute-provider.js';
 import { PlayMinuteProvider } from './play-minute-provider.js';
 import { GooglePlayHTTPTransport, GoogleServiceAccountTokens, type PlayTransport } from './google-play-transport.js';
+import { PlayRtdnSubscriber } from './google-play-rtdn.js';
 import { MinuteCommerceRunner, PlayVoidReconciler, AppleHistoryReconciler, type CommerceRunnerOptions } from './minute-commerce-runner.js';
 
 export const permanentAndroidPackage = 'chat.mural.android';
@@ -67,6 +68,7 @@ export interface MinuteCommerceServices {
   vault: MinuteReceiptVault;
   worker: MinuteDeliveryWorker;
   runner: MinuteCommerceRunner;
+  playNotifications?: PlayRtdnSubscriber;
   environment: PurchaseEnvironment;
   salesEnabled: boolean;
   catalogSHA256: string;
@@ -120,6 +122,8 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
   const ring = new Map(Object.entries(object(receipt.keys)).map(([id, key]) => [id, base64Key(key)]));
   const vault = new MinuteReceiptVault(db, receipt.activeKeyID, ring);
   let stripe: StripeMinuteProvider | undefined, play: PlayMinuteProvider | undefined, apple:AppleMinuteProvider | undefined;
+  let playNotificationTokens: GoogleServiceAccountTokens | undefined;
+  let playNotificationConfig: { topic: string; subscription: string; packageName: string; projectID: string } | undefined;
   if (manifest.stripe) {
     const settings = keys(manifest.stripe, ['accountID','managedPayments']);
     const credentials = keys((await protectedJSON(env[prefix + 'STRIPE_CREDENTIALS_FILE'])).value, ['secretKey','webhookSecret']);
@@ -127,7 +131,7 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
       webhookSecret: credentials.webhookSecret, managedPayments: settings.managedPayments, environment, allowLive, checkoutEnabled: salesEnabled, webOrigin: manifest.webOrigin }, dependencies.stripeTransport);
   } else if (env[prefix + 'STRIPE_CREDENTIALS_FILE'] !== undefined || dependencies.stripeTransport) throw invalid();
   if (manifest.play) {
-    const settings = keys(manifest.play, ['packageName','currencyExponents']);
+    const settings = keys(manifest.play, ['packageName','currencyExponents','notifications']);
     if (settings.packageName !== permanentAndroidPackage) throw invalid();
     const credentials = keys((await protectedJSON(env[prefix + 'PLAY_SERVICE_ACCOUNT_FILE'])).value,
       ['type','project_id','private_key_id','private_key','client_email','client_id','auth_uri','token_uri','auth_provider_x509_cert_url','client_x509_cert_url','universe_domain']);
@@ -137,6 +141,13 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     const signingKey = createPrivateKey(credentials.private_key);
     if (signingKey.asymmetricKeyType !== 'rsa' || (signingKey.asymmetricKeyDetails?.modulusLength ?? 0) < 2048) throw invalid();
     const tokens = new GoogleServiceAccountTokens(credentials.client_email, credentials.private_key, dependencies.request);
+    if (settings.notifications !== undefined) {
+      const notifications = keys(settings.notifications, ['topic','subscription']);
+      playNotificationConfig = { topic: notifications.topic, subscription: notifications.subscription,
+        packageName: permanentAndroidPackage, projectID: credentials.project_id };
+      playNotificationTokens = new GoogleServiceAccountTokens(credentials.client_email, credentials.private_key,
+        dependencies.request, 'https://www.googleapis.com/auth/pubsub');
+    }
     const binding = keys((await protectedJSON(env[prefix + 'PLAY_BINDING_KEY_FILE'])).value, ['key']);
     play = new PlayMinuteProvider(db, vault, { packageName: permanentAndroidPackage, environment, allowLive,
       bindingKey: base64Key(binding.key), currencyExponents: object(settings.currencyExponents), purchasesEnabled: salesEnabled },
@@ -159,6 +170,9 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
   const purchases = new MinutePurchases(db, { catalog: products, verifiers: adapters, salesEnabled: false });
   const aiPurchases = new AIValuePurchases(db, { catalog: aiProducts, verifiers: adapters, salesEnabled, quantityEnabled: [...(flag(env,'STRIPE_QUANTITY_ENABLED')?['stripe' as const]:[]),...(flag(env,'APPLE_QUANTITY_ENABLED')?['apple' as const]:[])] });
   const fulfillment = new PurchaseFulfillmentRouter(db, purchases, aiPurchases, adapters);
+  const playNotifications = playNotificationConfig && playNotificationTokens
+    ? new PlayRtdnSubscriber(playNotificationConfig, playNotificationTokens, fulfillment, dependencies.request,
+      token => play!.isForeignEnvironmentPurchase(token)) : undefined;
   // Removing a historical decryption key or provider would strand settled purchases and refunds.
   const receipts = (await db.query(`SELECT DISTINCT encryption_key_id,provider,environment,merchant FROM minute_provider_receipts
     UNION SELECT NULL AS encryption_key_id,provider,environment,merchant FROM minute_purchase_orders`)).rows;
@@ -168,7 +182,7 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     ['intervalMilliseconds','deliveryLimit','reconciliationLimit','voidPagesPerRun']);
   const worker = new MinuteDeliveryWorker(db, fulfillment, adapters);
   const runner = new MinuteCommerceRunner(vault, worker, play ? new PlayVoidReconciler(db, play) : undefined,
-    { ...runnerSettings, onFailure: dependencies.onFailure },apple?new AppleHistoryReconciler(db,apple):undefined);
+    { ...runnerSettings, onFailure: dependencies.onFailure },apple?new AppleHistoryReconciler(db,apple):undefined,playNotifications);
   return { purchases, aiPurchases, fulfillment, ...(stripe ? { stripe } : {}), ...(play ? { play } : {}), ...(apple?{apple}:{}), vault, worker, runner,
-    environment, salesEnabled, catalogSHA256: catalogFile.hash };
+    ...(playNotifications ? { playNotifications } : {}), environment, salesEnabled, catalogSHA256: catalogFile.hash };
 }

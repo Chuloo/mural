@@ -124,6 +124,13 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
     }
     let token: string, orderID: string | undefined, accountID: string | undefined;
     if (request.kind === 'stored') { orderID = request.orderID; token = await this.vault.read(request.orderID, this); }
+    else if (request.kind === 'notification') {
+      if (Object.keys(request).some(key => !['kind','purchaseToken','sku'].includes(key)) ||
+        !validToken(request.purchaseToken) || (request.sku !== undefined &&
+          (typeof request.sku !== 'string' || !/^[A-Za-z0-9_.-]{1,200}$/.test(request.sku))))
+        throw new ServiceError('invalid_play_verification');
+      token = request.purchaseToken;
+    }
     else if (request.kind === 'client') {
       if (!orderIDPattern.test(request.orderID) || !orderIDPattern.test(request.accountID) || !validToken(request.purchaseToken))
         throw new ServiceError('invalid_play_verification');
@@ -131,6 +138,8 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
       await loadProviderOrder(this.db, orderID!, this, accountID);
     } else throw new ServiceError('invalid_play_verification');
     const { evidence } = await this.#facts(token, orderID, accountID);
+    if (request.kind === 'notification' && request.sku !== undefined && request.sku !== evidence.providerProduct)
+      throw new ServiceError('play_purchase_product_mismatch', 409);
     await this.vault.save(evidence.orderID, this, token, request.kind !== 'stored');
     return evidence;
   }
@@ -142,6 +151,15 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
     const { evidence } = await this.#facts(purchaseToken, undefined, accountID);
     await this.vault.save(evidence.orderID, this, purchaseToken);
     return evidence;
+  }
+  /** Both subscriptions may receive both environments from the same Play app topic. */
+  async isForeignEnvironmentPurchase(purchaseToken: string): Promise<boolean> {
+    if (!validToken(purchaseToken)) throw new ServiceError('invalid_play_verification');
+    const purchase = await this.transport.purchase(this.merchant, purchaseToken);
+    if (!purchase || !purchase.purchaseStateContext || !Array.isArray(purchase.productLineItem))
+      throw new ServiceError('play_purchase_state_invalid', 409);
+    return this.environment === 'live' ? purchase.testPurchaseContext?.fopType === 'TEST' :
+      purchase.testPurchaseContext === undefined;
   }
   async complete(orderID: string): Promise<void> {
     const token = await this.vault.read(orderID, this), facts = await this.#facts(token, orderID);

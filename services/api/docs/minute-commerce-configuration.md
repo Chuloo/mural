@@ -29,10 +29,23 @@ The manifest contains `version: 1`, `environment: "test" | "live"`, at least one
 | --- | --- |
 | `webOrigin` | HTTPS origin without credentials, port, query, fragment or non-root path. Required for Stripe. |
 | `stripe` | `{ "accountID": "acct_…", "managedPayments": false }`; mode defaults to `false` and accepts only a boolean. |
-| `play` | `{ "packageName": "chat.mural.android", "currencyExponents": { "usd": 2 } }` |
+| `play` | `{ "packageName": "chat.mural.android", "currencyExponents": { "usd": 2 } }`; optional `notifications` is described below. |
 | `runner` | Optional limits listed below. |
 
 `chat.mural.android` is the permanent Play package. Each configured Play currency has an explicit exponent from 0 to 3. Catalog currency names use lowercase ISO-style three-letter identifiers.
+
+Play notifications use a private Pub/Sub pull subscription. Add `play.notifications` to the protected manifest only after Cloud Pub/Sub and Play Console are ready:
+
+```json
+"notifications": {
+  "topic": "projects/<service-account-project_id>/topics/mural-play-purchases",
+  "subscription": "projects/<service-account-project_id>/subscriptions/mural-play-api"
+}
+```
+
+Both resources must belong to the project in `MURAL_MINUTE_PLAY_SERVICE_ACCOUNT_FILE`, and the subscription must point to that topic. The resource names above are examples; the configured names are pinned at startup. Grant `google-play-developer-notifications@system.gserviceaccount.com` Pub/Sub Publisher on the topic. Grant the Play service-account identity Pub/Sub Subscriber on the pull subscription. In Play Console, set that topic for Mural and enable one-time-product notifications. Configure an isolated test subscription and manifest first, send a Play Console test notification, and confirm that the subscriber acknowledges it before enabling the live subscription. A test and a live backend may have separate subscriptions on the same topic; each checks the purchase state with Google and ignores tokens that Google identifies as belonging to the other environment.
+
+The commerce runner validates the subscription's topic on each pull, reads at most five messages, extends their acknowledgment deadline, and acknowledges each only after provider verification, encrypted receipt capture and ledger reconciliation commit. An unknown token or provider failure remains unacknowledged for retry. A successful pull opens the account-deletion gate for three minutes; failure or stale health closes it. Receiptless Play orders then use the existing 24-hour abandonment window. Saved receipts, pending payments, paid value and refund debt continue to block deletion. No public webhook or additional environment variable is needed.
 
 The active catalog contains `{ "version": 2, "products": [...] }`. It has at most 100 canonical `AIValueProduct` objects and no default price. Generate each product with `makeAIValueProduct` from `src/ai-value-purchases.ts`; do not manually calculate or insert the derived fields. Each product has exactly these fields:
 
