@@ -144,6 +144,27 @@ class MinutePurchaseSheetTest {
         compose.runOnIdle { current.value = ready.copy(notice = MinutePurchaseNotice.CANCELED) }
         compose.onNodeWithTag("minute-purchase-pack-test-30").assertIsEnabled()
     }
+    @Test fun unsupportedPlayCountryUsesSpecificCopyAndCannotOpenCheckout() {
+        val current = mutableStateOf(MinutePurchaseState(regionUnavailable = true))
+        compose.setContent { MuralTheme { MinutePurchaseSheet(current.value, true, { error("unavailable checkout") }, {}, {}, {}) } }
+        compose.onNodeWithTag("minute-purchase-empty").assertTextEquals("Minute packs aren’t available in your Google Play country.")
+        compose.onNodeWithTag("minute-purchase-continue").assertDoesNotExist()
+        capture("minute-packs-country-unavailable.png")
+        compose.runOnIdle { current.value = MinutePurchaseState() }
+        compose.onNodeWithTag("minute-purchase-empty").assertTextEquals("Minute packs aren’t available right now. Please check again later.")
+    }
+    @Test fun regionalPlayPackShowsTheLocalStorePriceWithItsUsdBackedMinuteEstimate() {
+        val quote = AIValueQuote("usd", 2, 369, 1500, 56, 0, 0, 425, 1, "usd-v1", "estimate-v1",
+            play = PlayPriceSnapshot("gbp", 2, 599, "play-global-v1", "GB", "fixed-usd-allocation"))
+        val value = AIValueEntitlement("3690000000", 2_214_000, quote)
+        compose.setContent { MuralTheme {
+            MinutePurchaseSheet(ready.copy(packs = listOf(MinutePack("small-gb", 36, "£5.99", value))), true, {}, {}, {}, {})
+        } }
+        compose.onNodeWithTag("minute-purchase-total").assertTextEquals("About 36 minutes")
+        compose.onNodeWithTag("minute-purchase-continue").assertIsDisplayed().assertTextContains("£5.99", substring = true)
+        compose.onNodeWithText("$4.25", useUnmergedTree = true).assertDoesNotExist()
+        capture("minute-packs-global-gbp.png")
+    }
     @Test fun spanishAndLargeTextKeepControlsReachableAndSmallBalanceHonest() {
         var refreshed = 0
         compose.setContent { CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) { MuralTheme {

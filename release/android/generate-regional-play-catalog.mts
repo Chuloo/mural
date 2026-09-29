@@ -1,0 +1,38 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { makeRegionalPlayCatalog } from '../../services/api/src/play-regional-catalog.js';
+
+// Run with services/api/node_modules/.bin/tsx. Output is a deployment candidate, never store activation.
+const [outputPath, environment = 'live'] = process.argv.slice(2);
+assert(outputPath, 'Output path required');
+assert(environment === 'live' || environment === 'test', 'Environment must be live or test');
+const snapshot = JSON.parse(readFileSync(new URL('./play-regional-prices.json', import.meta.url), 'utf8'));
+const legacy = JSON.parse(readFileSync(new URL('./play-catalog-draft.json', import.meta.url), 'utf8'));
+assert.equal(snapshot.version, 1);
+assert.equal(snapshot.taxBasis, 'console-rate-estimate');
+const excluded = new Set(snapshot.excludedRegions.map((r: {regionCode: string}) => r.regionCode));
+const regions = snapshot.regions.filter((r: {regionCode: string}) => !excluded.has(r.regionCode));
+assert.equal(new Set(snapshot.regions.map((r: {regionCode: string}) => r.regionCode)).size, snapshot.regions.length);
+const regional = makeRegionalPlayCatalog({
+  environment, merchant: 'chat.mural.android', scheduleVersion: snapshot.scheduleVersion,
+  policyVersion: 1, serviceFeeBasisPoints: 1500, commissionBasisPoints: 3000,
+  estimate: {nanoUSDPerMinute: '100000000', rateVersion: 'play-20260929-estimate-v1'},
+  currencyExponents: snapshot.currencyExponents,
+  regionCodes: regions.map((r: {regionCode: string}) => r.regionCode),
+  packs: (['small', 'medium', 'large'] as const).map(pack => ({
+    pack, providerProduct: `chat.mural.android.minutes.${pack}.v1`,
+    convertedRegionPrices: Object.fromEntries(regions.map((r: any) => [r.regionCode, {
+      regionCode: r.regionCode, price: r.prices[pack],
+      consoleTax: {rateBasisPoints: r.taxRateBasisPoints, hasLocationOverrides: r.hasLocationOverrides},
+    }])),
+  })),
+});
+assert.equal(legacy.products.length, 6);
+assert(legacy.products.every((p: any) => p.provider === 'play' && !p.quote.play.regionCode));
+const products = [...legacy.products.map((p: any) => ({...p, environment})), ...regional];
+const output = JSON.stringify({version: 2, products}, null, 2) + '\n';
+writeFileSync(outputPath, output, {mode: 0o600});
+console.log(JSON.stringify({environment, regions: regions.length, products: products.length,
+  currencyExponents: snapshot.currencyExponents,
+  bytes: Buffer.byteLength(output), sha256: createHash('sha256').update(output).digest('hex')}));

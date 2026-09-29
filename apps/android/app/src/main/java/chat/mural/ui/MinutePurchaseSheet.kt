@@ -81,7 +81,11 @@ fun MinutePurchaseSheet(
                             MinutePackCard(pack, enabled = canChoose, selected = pack.sku == selectedPack?.sku, onSelect = { selectedSKU = pack.sku })
                         }
                         if (state.packs.isEmpty()) Surface(color = Color.White.copy(alpha = .72f), shape = RoundedCornerShape(26.dp)) {
-                            Text(stringResource(if (checking) R.string.minute_purchases_loading else R.string.minute_purchases_unavailable),
+                            Text(stringResource(when {
+                                checking -> R.string.minute_purchases_loading
+                                state.regionUnavailable -> R.string.minute_purchases_region_unavailable
+                                else -> R.string.minute_purchases_unavailable
+                            }),
                                 Modifier.fillMaxWidth().padding(24.dp).testTag("minute-purchase-empty"),
                                 style = MaterialTheme.typography.bodyMedium, color = MuralColors.Secondary, textAlign = TextAlign.Center)
                         }

@@ -108,9 +108,9 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     if (typeof manifest.webOrigin !== 'string' || origin.protocol !== 'https:' || origin.username || origin.password ||
       origin.port || origin.pathname !== '/' || origin.search || origin.hash) throw invalid();
   }
-  const catalogFile = await protectedJSON(env[prefix + 'CATALOG_FILE'], 262_144);
+  const catalogFile = await protectedJSON(env[prefix + 'CATALOG_FILE'], 8_388_608);
   const catalog = keys(catalogFile.value, ['version','products']);
-  if (![1,2].includes(catalog.version) || (catalog.version===1 && salesEnabled) || !Array.isArray(catalog.products) || catalog.products.length > 100 || (salesEnabled && !catalog.products.length)) throw invalid();
+  if (![1,2].includes(catalog.version) || (catalog.version===1 && salesEnabled) || !Array.isArray(catalog.products) || catalog.products.length > 4096 || (salesEnabled && !catalog.products.length)) throw invalid();
   const approved = env[prefix + 'CATALOG_APPROVED_SHA256'];
   if (approved !== undefined && (!/^[a-f0-9]{64}$/.test(approved) || approved !== catalogFile.hash)) throw invalid();
   if (salesEnabled && approved !== catalogFile.hash) throw invalid();
@@ -154,7 +154,7 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
       bindingKey: base64Key(binding.key), currencyExponents: object(settings.currencyExponents), purchasesEnabled: salesEnabled },
     dependencies.playTransport ?? new GooglePlayHTTPTransport(tokens, dependencies.request));
     for (const product of [...products,...aiProducts]) if (product.provider === 'play' && (settings.currencyExponents[product.currency] === undefined ||
-      ('quote' in product && product.quote.currencyExponent!==settings.currencyExponents[product.currency]))) throw invalid();
+      ('quote' in product && (product.quote.play?.currencyExponent??product.quote.currencyExponent)!==settings.currencyExponents[product.currency]))) throw invalid();
   } else if (env[prefix + 'PLAY_SERVICE_ACCOUNT_FILE'] !== undefined || env[prefix + 'PLAY_BINDING_KEY_FILE'] !== undefined || dependencies.playTransport) throw invalid();
   if(manifest.apple) {
     const settings=keys(manifest.apple,['bundleID','appAppleID']);

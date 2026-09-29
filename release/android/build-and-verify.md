@@ -10,11 +10,11 @@ Use this procedure after the release scope, package and upload-key custody are a
 
 ## 2. Build the bundle
 
-From `apps/android`, supply the Google server client ID through the ignored `local.properties` or a protected Gradle property. Version 12 is for an internal Play-installed license test against the isolated sandbox service. Set all of its build properties explicitly:
+From `apps/android`, supply the Google server client ID through the ignored `local.properties` or a protected Gradle property. Version 14 is for an internal Play-installed license test against the isolated sandbox service. Set all of its build properties explicitly:
 
 ```sh
 ./gradlew --no-daemon \
-  -Pmural.versionCode=12 \
+  -Pmural.versionCode=14 \
   -Pmural.apiOrigin=https://sandbox-api.mural.chat \
   -Pmural.minutePurchasesEnabled=true \
   -Pmural.purchaseChannel=play \
@@ -22,11 +22,11 @@ From `apps/android`, supply the Google server client ID through the ignored `loc
   :app:testDebugUnitTest :app:lintRelease :app:bundleRelease
 ```
 
-After the Play-installed license test passes, build the separate v13 paid production candidate with the live service:
+After the Play-installed license test passes, build the separate v15 paid production candidate with the live service:
 
 ```sh
 ./gradlew --no-daemon \
-  -Pmural.versionCode=13 \
+  -Pmural.versionCode=15 \
   -Pmural.apiOrigin=https://api.mural.chat \
   -Pmural.minutePurchasesEnabled=true \
   -Pmural.purchaseChannel=play \
@@ -34,11 +34,11 @@ After the Play-installed license test passes, build the separate v13 paid produc
   :app:testDebugUnitTest :app:lintRelease :app:bundleRelease
 ```
 
-Before signing each bundle, confirm its version, API origin, Google server client ID, purchase channel and environment. A missing client ID can produce a bundle that builds successfully but cannot complete account or hosted-purchase flows. The output is `apps/android/app/build/outputs/bundle/release/app-release.aab`. Sign that exact configured bundle with the approved upload key, for example using `jarsigner` with an interactive password prompt, and save the signed artifact under a versioned name. A separate Android Studio **Generate Signed App Bundle / APK** run rebuilds the app: the command-line `-P` properties above do not carry into it. If you use that flow, supply the same candidate properties to its Gradle build and recheck the generated `BuildConfig` before accepting the signed result. Copy and hash the signed v12 test artifact before building v13 so the latter cannot overwrite it. The checked-in build does not include a release signing identity. Supply passwords through the IDE, protected environment or permission-restricted password files; never place them in command arguments, workflow YAML or `local.properties` committed to Git. Never promote the v12 sandbox bundle to production.
+Before signing each bundle, confirm its version, API origin, Google server client ID, purchase channel and environment. A missing client ID can produce a bundle that builds successfully but cannot complete account or hosted-purchase flows. The output is `apps/android/app/build/outputs/bundle/release/app-release.aab`. Sign that exact configured bundle with the approved upload key, for example using `jarsigner` with an interactive password prompt, and save the signed artifact under a versioned name. A separate Android Studio **Generate Signed App Bundle / APK** run rebuilds the app: the command-line `-P` properties above do not carry into it. If you use that flow, supply the same candidate properties to its Gradle build and recheck the generated `BuildConfig` before accepting the signed result. Copy and hash the signed v14 test artifact before building v15 so the latter cannot overwrite it. The checked-in build does not include a release signing identity. Supply passwords through the IDE, protected environment or permission-restricted password files; never place them in command arguments, workflow YAML or `local.properties` committed to Git. Never promote the v14 sandbox bundle to production.
 
 Inspect the signed bundle with `jarsigner -verify -verbose -certs`, confirm that every payload entry is signed, and compare the certificate SHA-256 fingerprint with the intended upload certificate. An Android upload certificate can be self-signed; distinguish that trust warning from a broken signature or unsigned payload. Save the certificate fingerprint and bundle SHA-256, not the private key, in release evidence. Play App Signing uses its own app-signing certificate for delivered installs; register that fingerprint with native OAuth and other certificate-bound services. [Android signing guidance](https://developer.android.com/studio/publish/app-signing)
 
-The structural release checker does not inspect purchase flags inside DEX. For a paid release, independently read `chat.mural.BuildConfig` from the signed AAB using Android SDK `dexdump`, and verify purchases enabled, Play channel, the intended environment and API origin. Record the bundle hash with this evidence; generated source alone is insufficient. The [v12](evidence/play-v12-signed-configuration-2026-09-29.json) and [v13](evidence/play-v13-signed-configuration-2026-09-29.json) records demonstrate this check for the signed September 29 candidates.
+The structural release checker does not inspect purchase flags inside DEX. For a paid release, independently read `chat.mural.BuildConfig` from the signed AAB using Android SDK `dexdump`, and verify purchases enabled, Play channel, the intended environment and API origin. Record the bundle hash with this evidence; generated source alone is insufficient. The historical [v12](evidence/play-v12-signed-configuration-2026-09-29.json) and [v13](evidence/play-v13-signed-configuration-2026-09-29.json) records demonstrate this check. Record new evidence for v14 and v15 rather than reusing those results.
 
 ## 3. Validate the exact bundle and assets
 
@@ -54,7 +54,7 @@ python3 scripts/check_android_release.py \
 
 For a local unsigned inspection candidate, add `--require-unsigned`. If only Gradle’s cached bundletool library is available, use `--bundletool-classpath-file /absolute/path/classpath.json` instead of `--bundletool-jar`. This file must contain a JSON array of trusted local JAR paths for bundletool and its dependencies. The evidence records each dependency hash; no download or Gradle change is required.
 
-The default specification is the planned v13 production candidate. Validate v12 with `--spec release/android/specs/play-v12.json`; its identity cannot match the v13 default. To recheck the archived v4 Play bundle, select its historical spec explicitly:
+The default specification is the planned v15 production candidate. Validate v14 with `--spec release/android/specs/play-v14.json`; its identity cannot match the v15 default. To recheck the archived v4 Play bundle, select its historical spec explicitly:
 
 ```sh
 python3 scripts/check_android_release.py \
@@ -65,7 +65,7 @@ python3 scripts/check_android_release.py \
   --output /absolute/path/candidate-evidence/v4-recheck.json
 ```
 
-For the v13 Play production candidate, use `--spec release/android/specs/play-v13.json` or the matching default spec. The v12 internal sandbox, v11 internal candidate and direct v10 and earlier specs remain available for their own checks. `--spec` paths are relative to the working directory. `--release-dir` still sets the root for metadata and assets; selecting a spec does not move that root. With no `--spec`, the checker reads `release-spec.json` in that root. A missing or invalid explicit spec fails, and a bundle whose version differs from the selected spec fails. Keep the default version aligned with the current build rather than changing it to make an older bundle pass.
+For the v15 Play production candidate, use `--spec release/android/specs/play-v15.json` or the matching default spec. The v14 internal sandbox, v11 internal candidate and direct v10 and earlier specs remain available for their own checks. `--spec` paths are relative to the working directory. `--release-dir` still sets the root for metadata and assets; selecting a spec does not move that root. With no `--spec`, the checker reads `release-spec.json` in that root. A missing or invalid explicit spec fails, and a bundle whose version differs from the selected spec fails. Keep the default version aligned with the current build rather than changing it to make an older bundle pass.
 
 The report records the selected spec filename, hash and candidate identity. Historical rechecks use the currently available shared listing/assets and branding source; compare their hashes with the original [v4 evidence](evidence/signed-release-files-2026-09-14-v4.json) and preserve that original report. A spec's scope labels the intended release; it does not verify purchase flags, payment behavior or Play approval. [Candidate scopes](candidate-scopes.md) identifies which copy and evidence belong to each version.
 

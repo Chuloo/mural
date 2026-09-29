@@ -137,6 +137,47 @@ class MinuteCommerceClientTest {
             assertEquals("no-store", request.getHeader("Cache-Control")); assertNull(request.getHeader("Cookie"))
         }
     }
+    @Test fun regionalPlayCatalogAndOrderEchoOnlyTheReviewedPriceSelection() = runBlocking {
+        val value = """"entitlementKind":"ai_value","billingBasis":"actual-ai-usage","estimate":true,"aiValueNanoUSD":"2000000000","estimatedMilliseconds":1200000,"quote":{"currency":"usd","currencyExponent":2,"aiValueMinor":200,"serviceFeeBasisPoints":1500,"serviceFeeMinor":30,"processingEstimateMinor":0,"processingBufferMinor":0,"totalMinor":230,"policyVersion":1,"exchangeRateVersion":"synthetic-usd","estimateRateVersion":"synthetic-estimate","play":{"pricingBasis":"fixed-usd-allocation","regionCode":"GB","scheduleVersion":"play-global-v1","currency":"gbp","currencyExponent":2,"unitTotalMinor":271}}"""
+        val product = """{"sku":"small-gb","providerProduct":"small","currency":"gbp","totalMinor":271,"environment":"test",$value}"""
+        server.enqueue(MockResponse().setBody("""{"available":true,"billingBasis":"actual-ai-usage","products":[$product]}"""))
+        val selected = api.catalog("GB").products.single()
+        assertEquals(PlayPriceSnapshot("gbp", 2, 271, "play-global-v1", "GB", "fixed-usd-allocation"), selected.aiValue!!.quote.play)
+        val catalogRequest = server.takeRequest()
+        assertEquals("/v1/minutes/products?provider=play&regionCode=GB", catalogRequest.path)
+        assertNull(catalogRequest.getHeader("Authorization"))
+        assertEquals("no-store", catalogRequest.getHeader("Cache-Control"))
+        server.enqueue(MockResponse().setBody("""{"orderID":"$id","currency":"gbp","totalMinor":271,"payment":{"orderID":"$id","obfuscatedAccountID":"${"b".repeat(64)}","obfuscatedProfileID":"${"c".repeat(64)}"},$value}"""))
+        assertTrue(api.create(session, selected.sku, "regional-order-1", selected.aiValue!!.quote.play).matches(selected))
+        assertEquals("""{"provider":"play","sku":"small-gb","regionCode":"GB","scheduleVersion":"play-global-v1"}""", server.takeRequest().body.readUtf8())
+    }
+    @Test fun regionalRequestsRejectMalformedCountriesAndUntrustworthyAvailabilityReasons() = runBlocking {
+        for (region in listOf("", "gb", "GB&provider=stripe", "USA", " G", "éé")) {
+            try { api.catalog(region); fail("bad region accepted") } catch (_: MinuteCommerceFailure.InvalidResponse) { }
+        }
+        val stripe = MinuteCommerceClient(server.url("/"), OkHttpClient(), channel = PurchaseChannel.STRIPE)
+        try { stripe.catalog("GB"); fail("Play country sent to Stripe") } catch (_: MinuteCommerceFailure.InvalidResponse) { }
+        assertEquals(0, server.requestCount)
+        val unavailable = """{"available":false,"billingBasis":"actual-ai-usage","products":[],"availabilityReason":"unsupported_country"}"""
+        server.enqueue(MockResponse().setBody(unavailable))
+        assertTrue(api.catalog("GB").regionUnavailable)
+        server.enqueue(MockResponse().setBody(unavailable.replace("unsupported_country", "temporary")))
+        try { api.catalog("GB"); fail("unknown reason") } catch (_: MinuteCommerceFailure.InvalidResponse) { }
+        server.enqueue(MockResponse().setBody(unavailable))
+        try { api.catalog(); fail("country claim without country lookup") } catch (_: MinuteCommerceFailure.InvalidResponse) { }
+        server.enqueue(MockResponse().setBody(catalog.dropLast(1) + """, "availabilityReason":"unsupported_country"}"""))
+        try { api.catalog("GB"); fail("available catalog marked unsupported") } catch (_: MinuteCommerceFailure.InvalidResponse) { }
+    }
+    @Test fun serverGeneratedRegionalFixtureKeepsStoreMoneySeparateFromWalletCredit() = runBlocking {
+        server.enqueue(MockResponse().setBody(java.io.File("../../../shared/fixtures/cross-platform/play-regional-catalog.json").readText()))
+        val pack = api.catalog("GB").products.single()
+        assertEquals("gbp", pack.currency); assertEquals(649L, pack.totalMinor)
+        assertEquals(6_490_000L, pack.expectedMicros()); assertEquals(36, pack.minutes)
+        assertEquals("3690000000", pack.aiValue!!.aiValueNanoUSD)
+        assertEquals("usd", pack.aiValue!!.quote.currency); assertEquals(425L, pack.aiValue!!.quote.totalMinor)
+        assertEquals("GB", pack.aiValue!!.quote.play!!.regionCode)
+        assertEquals("synthetic-regional-v1", pack.aiValue!!.quote.play!!.scheduleVersion)
+    }
     @Test fun expiredSessionsAndMalformedInputsNeverReachTransport() = runBlocking {
         try { api.balance(session.copy(expiresAtMilliseconds = 900)); fail("expired session") } catch (_: MinuteCommerceFailure.SignInRequired) { }
         for (token in listOf("", "line\nbreak", "white space", "é", "a".repeat(4097))) {

@@ -17,17 +17,17 @@ require(muralPurchaseChannel in listOf("play", "stripe")) { "mural.purchaseChann
 val muralMinuteEnvironment = muralConfiguration("mural.minutePurchaseEnvironment").ifBlank { "test" }
 require(muralMinutePurchases in listOf("false", "true")) { "mural.minutePurchasesEnabled must be false or true" }
 require(muralMinuteEnvironment in listOf("test", "live")) { "mural.minutePurchaseEnvironment must be test or live" }
-val muralVersionCode = muralConfiguration("mural.versionCode").ifBlank { "13" }.toIntOrNull()
+val muralVersionCode = muralConfiguration("mural.versionCode").ifBlank { "15" }.toIntOrNull()
 require(muralVersionCode != null && muralVersionCode in 12..2_100_000_000) { "mural.versionCode must be a supported positive Android version code" }
 val muralApiOrigin = muralConfiguration("mural.apiOrigin")
-if (muralVersionCode == 12) {
+if (muralVersionCode in listOf(12, 14)) {
     require(muralMinutePurchases == "true" && muralPurchaseChannel == "play" && muralMinuteEnvironment == "test" &&
-        muralApiOrigin == "https://sandbox-api.mural.chat") { "version 12 is reserved for the internal Play sandbox build" }
+        muralApiOrigin == "https://sandbox-api.mural.chat") { "version $muralVersionCode is reserved for an internal Play sandbox build" }
 }
-if (muralVersionCode == 13 && muralMinutePurchases == "true") {
+if (muralVersionCode in listOf(13, 15) && muralMinutePurchases == "true") {
     require(muralPurchaseChannel == "play" && muralMinuteEnvironment == "live" &&
         muralApiOrigin == "https://api.mural.chat") {
-        "version 13 paid Play builds require the Play channel and live service"
+        "version $muralVersionCode paid Play builds require the Play channel and live service"
     }
 }
 android {
