@@ -258,12 +258,13 @@ class CaptionParityTest {
         compose.onNodeWithTag("word-lookup-close").performClick(); pause()
     }
 
-    @Test fun allEightLanguagesSendTheTappedWordWithItsOriginalSentence() {
+    @Test fun allLanguagesSendTheTappedWordWithItsOriginalSentence() {
         val samples = listOf(
             Triple("nb", "Jeg vil ha kaffe.", "kaffe"), Triple("es", "Quiero un café.", "café"),
             Triple("en", "I would like coffee.", "coffee"), Triple("fr", "Je voudrais du café.", "café"),
             Triple("de", "Ich möchte Kaffee.", "Kaffee"), Triple("it", "Vorrei un caffè.", "caffè"),
-            Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"))
+            Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"),
+            Triple("sr", "Hoću jednu kafu.", "kafu"))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
@@ -282,7 +283,8 @@ class CaptionParityTest {
             "de" to listOf("Das ist eine Sprach", "lern", "anwendung."),
             "it" to listOf("È una conver", "sazione interes", "sante."),
             "pt" to listOf("Estou apren", "dendo portu", "guês."),
-            "zh" to listOf("我", "喜欢", "学习", "中文。"))
+            "zh" to listOf("我", "喜欢", "学习", "中文。"),
+            "sr" to listOf("Volim da uči", "m srp", "ski."))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.keys)
         for ((language, parts) in samples) {
             show(language, "", "")
