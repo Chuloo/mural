@@ -17,6 +17,6 @@ Private configuration and migrations were unchanged. Public `/healthz` and `/rea
 
 ## Activation gates
 
-The Google Play Developer API is enabled for the Mural Cloud project. A dedicated service account exists with no Cloud IAM role or key, and its Play Console access is restricted to Mural with app-level financial-data and order-management permissions. Play Console also assigns its baseline read-only app permissions. The production environment still has no Play service-account file or purchase-binding key.
+The Google Play Developer API is enabled for the Mural Cloud project. A dedicated service account has no Cloud IAM role, and its Play Console access is restricted to Mural with app-level financial-data and order-management permissions. Play Console also assigns its baseline read-only app permissions. A private key is held in the protected local workspace; the production environment still has no Play service-account file or purchase-binding key.
 
 Before enabling sales, securely provision the service-account credential and protected binding key, verify the merchant payout and service-fee setup, and approve the six-row catalog against actual Play prices and tax treatment. Then use a Play-installed build and license tester to verify purchase, server credit, consumption, restart recovery, refund and account deletion. Only after those checks should the products and v11 production track be activated and the public listing copy updated.
