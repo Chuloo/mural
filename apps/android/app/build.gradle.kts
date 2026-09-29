@@ -24,9 +24,10 @@ if (muralVersionCode == 12) {
     require(muralMinutePurchases == "true" && muralPurchaseChannel == "play" && muralMinuteEnvironment == "test" &&
         muralApiOrigin == "https://sandbox-api.mural.chat") { "version 12 is reserved for the internal Play sandbox build" }
 }
-if (muralVersionCode == 13 && muralMinutePurchases == "true" && muralPurchaseChannel == "play") {
-    require(muralMinuteEnvironment == "live" && muralApiOrigin == "https://api.mural.chat") {
-        "version 13 paid Play builds require the live service"
+if (muralVersionCode == 13 && muralMinutePurchases == "true") {
+    require(muralPurchaseChannel == "play" && muralMinuteEnvironment == "live" &&
+        muralApiOrigin == "https://api.mural.chat") {
+        "version 13 paid Play builds require the Play channel and live service"
     }
 }
 android {
