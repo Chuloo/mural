@@ -77,6 +77,31 @@ test('subscriber leaves failed purchases unacknowledged and closes deletion gate
   assert.equal(acknowledgements, 1);
 });
 
+test('subscriber handles later purchases after an unverified message without opening deletion gate', async () => {
+  const acknowledgements: string[] = [], reconciled: string[] = [];
+  const second = { ...purchase, oneTimeProductNotification: {
+    ...purchase.oneTimeProductNotification, purchaseToken: 'token-2' } };
+  const request = (async (url: string, options: RequestInit) => {
+    if (url.endsWith(subscription)) return json({ name: subscription, topic, pushConfig: {} });
+    if (url.endsWith(':pull')) return json({ receivedMessages: [
+      { ackId: 'ack-failed', message: { data: message(purchase) } },
+      { ackId: 'ack-success', message: { data: message(second) } },
+    ] });
+    if (url.endsWith(':acknowledge')) acknowledgements.push(...JSON.parse(String(options.body)).ackIds);
+    return json({});
+  }) as typeof fetch;
+  const subscriber = new PlayRtdnSubscriber({ topic, subscription, packageName, projectID: 'mural-prod' },
+    { accessToken: async () => 'test-access-token-1234567890' },
+    { reconcile: async (_, input) => {
+      reconciled.push(input.purchaseToken);
+      if (input.purchaseToken === 'token-1') throw new Error('purchase cannot be verified');
+    } }, request);
+  await assert.rejects(subscriber.poll(), /purchase cannot be verified/);
+  assert.deepEqual(reconciled, ['token-1', 'token-2']);
+  assert.deepEqual(acknowledgements, ['ack-success']);
+  assert.equal(subscriber.isOperational(), false);
+});
+
 test('subscriber refuses a mismatched subscription topic before pulling', async () => {
   let calls = 0;
   const subscriber = new PlayRtdnSubscriber({ topic, subscription, packageName, projectID: 'mural-prod' },

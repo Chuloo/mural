@@ -87,18 +87,26 @@ export class PlayRtdnSubscriber {
       const ackIds = messages.map(message => message?.ackId);
       if (ackIds.some(ack => typeof ack !== 'string' || !ackPattern.test(ack))) throw invalid();
       if (ackIds.length) await this.#call(`${this.#base}:modifyAckDeadline`, { ackIds, ackDeadlineSeconds: 120 });
-      let handled = 0;
+      let handled = 0, failed = false;
+      let firstFailure: unknown;
       for (const message of messages) {
-        if (!message || typeof message !== 'object' || typeof message.ackId !== 'string' || !ackPattern.test(message.ackId) ||
-          !message.message || typeof message.message !== 'object') throw invalid();
-        const notification = parsePlayNotification(message.message.data, this.config.packageName);
-        if (notification.kind === 'purchase' && !(await this.isForeignEnvironmentPurchase?.(notification.purchaseToken)))
-          await this.fulfillment.reconcile('play', { kind: 'notification', purchaseToken: notification.purchaseToken,
-            ...(notification.sku ? { sku: notification.sku } : {}) });
-        // The existing verifier saves the encrypted receipt and the fulfillment transaction commits before ack.
-        await this.#call(`${this.#base}:acknowledge`, { ackIds: [message.ackId] });
-        handled++;
+        try {
+          if (!message || typeof message !== 'object' || typeof message.ackId !== 'string' || !ackPattern.test(message.ackId) ||
+            !message.message || typeof message.message !== 'object') throw invalid();
+          const notification = parsePlayNotification(message.message.data, this.config.packageName);
+          if (notification.kind === 'purchase' && !(await this.isForeignEnvironmentPurchase?.(notification.purchaseToken)))
+            await this.fulfillment.reconcile('play', { kind: 'notification', purchaseToken: notification.purchaseToken,
+              ...(notification.sku ? { sku: notification.sku } : {}) });
+          // The verifier saves the encrypted receipt and commits fulfillment before this message is acknowledged.
+          await this.#call(`${this.#base}:acknowledge`, { ackIds: [message.ackId] });
+          handled++;
+        } catch (error) {
+          // One unverified purchase must not starve later messages or open the account-deletion gate.
+          if (!failed) firstFailure = error;
+          failed = true;
+        }
       }
+      if (failed) throw firstFailure;
       this.#operationalUntil = Date.now() + 180_000;
       return { received: messages.length, handled };
     } catch (error) { this.#operationalUntil = 0; throw error; }
