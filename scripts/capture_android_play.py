@@ -45,9 +45,10 @@ evidence = {'recordedAtUTC': datetime.datetime.now(datetime.timezone.utc).isofor
             'serial': args.serial, 'originalDeviceSettings': original,
             'uiTestAPK': {'sha256': digest(app_apk)},
             'testAPK': {'sha256': digest(test_apk)},
-            'fixture': {'path': 'apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt',
-                        'sha256': digest(root/'apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt'),
-                        'syntheticConversationAndVocabulary': True, 'providerCalls': False, 'purchaseCalls': False},
+            'fixtures': [{'path': str(p), 'sha256': digest(root/p)} for p in [
+                Path('apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt'),
+                Path('apps/android/app/src/androidTest/java/chat/mural/CaptionParityTest.kt')]],
+            'syntheticConversationAndVocabulary': True, 'providerCalls': False, 'purchaseCalls': False,
             'sourceBaseline': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().strip(),
             'cleanSourceBuildClaimed': False,
             'sourceSnapshotAfterBuild': [{'path': str(p.relative_to(root)), 'sha256': digest(p)}
@@ -62,20 +63,52 @@ try:
     shell('am','broadcast','-a','com.android.systemui.demo','--es','command','clock','--es','hhmm','0900')
     shell('am','broadcast','-a','com.android.systemui.demo','--es','command','battery','--es','level','100','--es','plugged','false')
     shell('am','broadcast','-a','com.android.systemui.demo','--es','command','notifications','--es','visible','false')
+    # API 36 can show an emulator satellite icon even in SystemUI demo mode.
+    shell('cmd', 'statusbar', 'send-disable-flag', 'system-icons', 'notification-icons')
     result = device('shell','am','instrument','-w','-e','class',
-        'chat.mural.PlayStoreCaptureTest,chat.mural.PlayFeatureGraphicTest,chat.mural.LargeTypeOnboardingTest',
-        'chat.mural.android.uitest.test/androidx.test.runner.AndroidJUnitRunner', check=False, timeout=120)
+        'chat.mural.PlayStoreCaptureTest,chat.mural.PlayFeatureGraphicTest,chat.mural.LargeTypeOnboardingTest,'
+        'chat.mural.CaptionParityTest#mandarinCaptionToggleAndContextualLookupMatchIOS,'
+        'chat.mural.CaptionParityTest#spanishCaptionAndContextualLookupMatchIOS',
+        'chat.mural.android.uitest.test/androidx.test.runner.AndroidJUnitRunner', check=False, timeout=180)
     (work/'capture-test.log').write_bytes(result.stdout + result.stderr)
     print(result.stdout.decode(), flush=True)
-    assert b'OK (5 tests)' in result.stdout, 'Capture and layout tests did not all pass.'
-    for name in ['01-greeting.png','02-conversation.png','03-themes.png','04-words.png','05-languages.png','06-settings.png','feature-graphic.png']:
-        output = output_root/'assets'/('' if name=='feature-graphic.png' else 'en-US')/name
-        output.parent.mkdir(parents=True,exist_ok=True)
-        png = device('exec-out','run-as','chat.mural.android.uitest','cat','files/play-store/'+name).stdout
+    assert b'OK (9 tests)' in result.stdout, 'Capture and layout tests did not all pass.'
+    captures = [
+        ('play-store', '02-conversation.png', '01-conversation.png'),
+        ('caption-parity', 'spanish-lookup.png', '02-word-meaning.png'),
+        ('play-store', 'listing-03-mandarin.png', '03-mandarin.png'),
+        ('play-store', '03-themes.png', '04-themes.png'),
+        ('play-store', '04-words.png', '05-words.png'),
+        ('play-store', 'listing-07-history-detail.png', '06-conversation-history.png'),
+        ('play-store', 'listing-08-italian.png', '07-italian.png'),
+        ('play-store', '05-languages.png', '08-languages.png'),
+    ]
+    raw_dir = output_root/'assets'/'raw'/'en-US'
+    final_dir = output_root/'assets'/'en-US'
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    final_dir.mkdir(parents=True, exist_ok=True)
+    for source, name, final_name in captures:
+        png = device('exec-out','run-as','chat.mural.android.uitest','cat',f'files/{source}/{name}').stdout
         assert png.startswith(b'\x89PNG\r\n\x1a\n')
+        assert (int.from_bytes(png[16:20], 'big'), int.from_bytes(png[20:24], 'big')) == (1080, 1920)
+        assert png[25] == 2, 'Play phone screenshots must be opaque RGB PNGs.'
+        raw = raw_dir/name
+        output = final_dir/final_name
+        raw.write_bytes(png)
         output.write_bytes(png)
-        evidence['assets'].append({'path':str(output.relative_to(output_root)),'sha256':digest(output),'bytes':len(png)})
+        evidence['assets'].append({'path':str(output.relative_to(output_root)),
+                                   'source':str(raw.relative_to(output_root)),
+                                   'sha256':digest(output),'bytes':len(png)})
+    feature = device('exec-out','run-as','chat.mural.android.uitest','cat','files/play-store/feature-graphic.png').stdout
+    assert feature.startswith(b'\x89PNG\r\n\x1a\n')
+    assert (int.from_bytes(feature[16:20], 'big'), int.from_bytes(feature[20:24], 'big')) == (1024, 500)
+    assert feature[25] == 2
+    feature_path = output_root/'assets'/'feature-graphic.png'
+    feature_path.write_bytes(feature)
+    evidence['assets'].append({'path':str(feature_path.relative_to(output_root)),
+                               'sha256':digest(feature_path),'bytes':len(feature)})
 finally:
+    device('shell','cmd','statusbar','send-disable-flag','none',check=False)
     device('shell','am','broadcast','-a','com.android.systemui.demo','--es','command','exit',check=False)
     if original['demoAllowed']=='null':
         device('shell','settings','delete','global','sysui_demo_allowed',check=False)
@@ -88,5 +121,7 @@ finally:
         'user':shell('am','get-current-user'),'fontScale':shell('settings','get','system','font_scale'),
         'demoAllowed':shell('settings','get','global','sysui_demo_allowed')}
     evidence['testLogSHA256'] = digest(work/'capture-test.log') if (work/'capture-test.log').exists() else None
-    (work/'capture-evidence.json').write_text(json.dumps(evidence,indent=2)+'\n')
-    print('Capture evidence: ' + str(work/'capture-evidence.json'), flush=True)
+    evidence_path = output_root/'assets'/'capture-evidence.json'
+    evidence_path.parent.mkdir(parents=True, exist_ok=True)
+    evidence_path.write_text(json.dumps(evidence,indent=2)+'\n')
+    print('Capture evidence: ' + str(evidence_path), flush=True)
