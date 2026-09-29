@@ -61,29 +61,67 @@ struct MuralOrb: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || !active || scenePhase != .active)) { timeline in
-            let t: Double = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-            let phase: Double = t * 0.72
-            let e: Double = reduceMotion ? 0 : min(1, max(0, energy))
+        let paused: Bool = reduceMotion || !active || scenePhase != .active
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: paused)) { timeline in
+            let time: Double = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            let level: Double = reduceMotion ? 0 : min(1, max(0, energy))
             GeometryReader { geometry in
                 let side: CGFloat = min(geometry.size.width, geometry.size.height)
-                ZStack {
-                    Ellipse().fill(MuralColor.orange.opacity(0.14)).frame(width: side * 0.57, height: side * 0.075)
-                        .blur(radius: 10).offset(y: side * 0.47)
-                    Circle().stroke(MuralColor.orange.opacity(listening ? 0.18 : 0), lineWidth: 1).padding(-6)
-                    Circle().stroke(MuralColor.orange.opacity(listening ? 0.10 : 0), lineWidth: 1).padding(-16)
-                    OrbFill(phase: phase, side: side)
-                    .mask(OrbShape(phase: phase, energy: e))
-                    .shadow(color: MuralColor.orange.opacity(0.12), radius: 16, y: 10)
-                    .rotationEffect(.degrees(sin(phase * 0.5) * 3))
-                    .scaleEffect(1 + e * 0.045)
-                    .offset(y: reduceMotion ? 0 : CGFloat(sin(t * 0.9) * 4 - 5))
-                    Circle().fill(RadialGradient(colors: [.white, MuralColor.peach, MuralColor.orange.opacity(0.5)], center: .topLeading, startRadius: 0, endRadius: 12))
-                        .frame(width: 12, height: 12).offset(x: side * 0.55, y: -side * 0.24)
-                    Circle().fill(MuralColor.peach).frame(width: 7, height: 7).offset(x: -side * 0.54, y: side * 0.26)
-                }.frame(width: side, height: side).frame(maxWidth: .infinity, maxHeight: .infinity)
+                OrbLayers(time: time, energy: level, side: side, listening: listening, reduceMotion: reduceMotion)
+                    .frame(width: side, height: side)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }.accessibilityHidden(true)
+    }
+}
+
+/// One animation frame of the orb. Kept separate from MuralOrb so each piece type-checks quickly.
+private struct OrbLayers: View {
+    var time: Double
+    var energy: Double
+    var side: CGFloat
+    var listening: Bool
+    var reduceMotion: Bool
+
+    private var phase: Double { time * 0.72 }
+    private var tilt: Double { sin(phase * 0.5) * 3 }
+    private var scale: CGFloat { CGFloat(1 + energy * 0.045) }
+    private var bob: CGFloat { reduceMotion ? 0 : CGFloat(sin(time * 0.9) * 4 - 5) }
+    private var ringOpacity: (inner: Double, outer: Double) { listening ? (0.18, 0.10) : (0, 0) }
+
+    var body: some View {
+        ZStack {
+            shadow
+            Circle().stroke(MuralColor.orange.opacity(ringOpacity.inner), lineWidth: 1).padding(-6)
+            Circle().stroke(MuralColor.orange.opacity(ringOpacity.outer), lineWidth: 1).padding(-16)
+            orb
+            sparkles
+        }
+    }
+
+    private var shadow: some View {
+        Ellipse().fill(MuralColor.orange.opacity(0.14))
+            .frame(width: side * 0.57, height: side * 0.075)
+            .blur(radius: 10)
+            .offset(y: side * 0.47)
+    }
+
+    private var orb: some View {
+        OrbFill(phase: phase, side: side)
+            .mask(OrbShape(phase: phase, energy: energy))
+            .shadow(color: MuralColor.orange.opacity(0.12), radius: 16, y: 10)
+            .rotationEffect(.degrees(tilt))
+            .scaleEffect(scale)
+            .offset(y: bob)
+    }
+
+    private var sparkles: some View {
+        let gradient = RadialGradient(colors: [.white, MuralColor.peach, MuralColor.orange.opacity(0.5)],
+                                      center: .topLeading, startRadius: 0, endRadius: 12)
+        return ZStack {
+            Circle().fill(gradient).frame(width: 12, height: 12).offset(x: side * 0.55, y: -side * 0.24)
+            Circle().fill(MuralColor.peach).frame(width: 7, height: 7).offset(x: -side * 0.54, y: side * 0.26)
+        }
     }
 }
 
@@ -108,11 +146,23 @@ private struct OrbFill: View {
     var body: some View {
         ZStack {
             MeshGradient(width: 3, height: 3, points: points, colors: Self.colors)
-            Ellipse().fill(.white.opacity(0.65)).frame(width: side * 0.48, height: side * 0.15).blur(radius: 13)
-                .rotationEffect(.degrees(-28)).offset(x: -side * 0.17, y: -side * 0.28)
-            Ellipse().stroke(MuralColor.butter.opacity(0.48), lineWidth: 16).frame(width: side * 1.2, height: side * 0.5)
-                .blur(radius: 12).rotationEffect(.degrees(-15)).offset(y: side * 0.54)
+            highlight
+            glow
         }
+    }
+    private var highlight: some View {
+        Ellipse().fill(Color.white.opacity(0.65))
+            .frame(width: side * 0.48, height: side * 0.15)
+            .blur(radius: 13)
+            .rotationEffect(.degrees(-28))
+            .offset(x: side * -0.17, y: side * -0.28)
+    }
+    private var glow: some View {
+        Ellipse().stroke(MuralColor.butter.opacity(0.48), lineWidth: 16)
+            .frame(width: side * 1.2, height: side * 0.5)
+            .blur(radius: 12)
+            .rotationEffect(.degrees(-15))
+            .offset(y: side * 0.54)
     }
 }
 
