@@ -9,7 +9,7 @@ enum MuralColor {
     static let lilac = Color(red: 0.932, green: 0.902, blue: 0.98)
     static let sage = Color(red: 0.917, green: 0.937, blue: 0.84)
     static let butter = Color(red: 1, green: 0.944, blue: 0.78)
-    static let panels = [peach, lilac, sage, butter]
+    static let panels: [Color] = [peach, lilac, sage, butter]
 }
 
 struct Brand: View {
@@ -33,24 +33,40 @@ struct SoftGlass: ViewModifier {
 struct OrbShape: Shape {
     var phase: Double
     var energy: Double
+
+    /// Radius factor for one of the twelve control points, computed in Double only.
+    private func wave(at angle: Double) -> Double {
+        let ripple: Double = sin(angle * 3 + phase) * 0.021
+        let amplitude: Double = 0.012 + energy * 0.025
+        let swell: Double = cos(angle * 2 - phase * 0.7) * amplitude
+        return 0.47 + ripple + swell
+    }
+
+    private func point(_ index: Int, in rect: CGRect) -> CGPoint {
+        let angle: Double = Double(index) / 12 * Double.pi * 2
+        let size: Double = Double(min(rect.width, rect.height))
+        let radius: Double = size * wave(at: angle)
+        let x: Double = Double(rect.midX) + cos(angle) * radius
+        let y: Double = Double(rect.midY) + sin(angle) * radius
+        return CGPoint(x: x, y: y)
+    }
+
+    private static func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+        CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+    }
+
     func path(in rect: CGRect) -> Path {
-        let points = (0..<12).map { index -> CGPoint in
-            let a = Double(index) / 12 * .pi * 2
-            let wave = sin(a * 3 + phase) * 0.021 + cos(a * 2 - phase * 0.7) * (0.012 + energy * 0.025)
-            let radius = min(rect.width, rect.height) * (0.47 + wave)
-            return CGPoint(x: rect.midX + cos(a) * radius, y: rect.midY + sin(a) * radius)
-        }
+        var points: [CGPoint] = []
+        for index in 0..<12 { points.append(point(index, in: rect)) }
         var p = Path()
+        p.move(to: Self.midpoint(points[11], points[0]))
         for i in 0..<12 {
-            let current = points[i], next = points[(i + 1) % 12]
-            let midpoint = CGPoint(x: (current.x + next.x) / 2, y: (current.y + next.y) / 2)
-            if i == 0 {
-                let previous = points[11]
-                p.move(to: CGPoint(x: (previous.x + current.x) / 2, y: (previous.y + current.y) / 2))
-            }
-            p.addQuadCurve(to: midpoint, control: current)
+            let current: CGPoint = points[i]
+            let next: CGPoint = points[(i + 1) % 12]
+            p.addQuadCurve(to: Self.midpoint(current, next), control: current)
         }
-        p.closeSubpath(); return p
+        p.closeSubpath()
+        return p
     }
 }
 
