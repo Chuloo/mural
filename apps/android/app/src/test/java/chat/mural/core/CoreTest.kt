@@ -73,6 +73,8 @@ class CoreTest {
         }
         assertTrue(MeaningLanguages.all.contains("Chinese (Simplified)"))
         assertEquals("你好！",MeaningLanguages.greeting("Chinese (Simplified)"))
+        assertTrue(MeaningLanguages.all.contains("Serbian (Latin)"))
+        assertEquals("Zdravo!",MeaningLanguages.greeting("Serbian (Latin)"))
         assertEquals("Norwegian",LanguageRegistry.get("nb")!!.name)
         assertEquals("Hei!",MeaningLanguages.greeting("Norwegian"))
     }

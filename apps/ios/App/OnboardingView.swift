@@ -173,6 +173,7 @@ struct OnboardingView: View {
                 let preferredNames = Locale.preferredLanguages.map { identifier in
                     let code = Locale(identifier: identifier).language.languageCode?.identifier ?? identifier
                     if code == "zh" { return "Chinese (Simplified)" }
+                    if code == "sr" { return "Serbian (Latin)" }
                     return LanguageRegistry.module(for: code)?.name ?? Locale(identifier: "en").localizedString(forLanguageCode: code)?.capitalized ?? ""
                 }
                 meaningLanguage = preferredNames.first { MeaningLanguages.all.contains($0) && $0 != target.name }
