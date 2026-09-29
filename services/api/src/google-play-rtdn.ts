@@ -6,9 +6,14 @@ const tokenPattern = /^[\x21-\x7e]{1,4096}$/;
 const ackPattern = /^[\x21-\x7e]{1,4096}$/;
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const invalid = () => new ServiceError('play_notification_invalid', 502);
+export class PlayNotificationTransportError extends ServiceError {
+  constructor(override readonly code: 'play_notification_unavailable' | 'play_notification_timeout', readonly providerStatus?: number) {
+    super(code, 503);
+  }
+}
 
 async function boundedJSON(response: Response, limit: number): Promise<any> {
-  if (!response.ok || !response.body) { await response.body?.cancel(); throw new ServiceError('play_notification_unavailable', 503); }
+  if (!response.ok || !response.body) { await response.body?.cancel(); throw new PlayNotificationTransportError('play_notification_unavailable', response.ok ? undefined : response.status); }
   const reader = response.body.getReader(), chunks: Uint8Array[] = [];
   let size = 0;
   try {
@@ -71,10 +76,19 @@ export class PlayRtdnSubscriber {
   async #call(url: string, body?: object): Promise<any> {
     const token = await this.tokens.accessToken();
     if (typeof token !== 'string' || !tokenPattern.test(token)) throw invalid();
-    const response = await this.request(url, { method: body ? 'POST' : 'GET', redirect: 'error',
-      headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(20_000) });
-    return boundedJSON(response, 131_072);
+    // Pub/Sub's empty pull is a long poll. GET, ack and deadline calls stay short.
+    const signal = AbortSignal.timeout(url.endsWith(':pull') ? 90_000 : 20_000);
+    try {
+      const response = await this.request(url, { method: body ? 'POST' : 'GET', redirect: 'error',
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}), signal });
+      return await boundedJSON(response, 131_072);
+    } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError'))
+        throw new PlayNotificationTransportError('play_notification_timeout');
+      if (error instanceof ServiceError) throw error;
+      throw new PlayNotificationTransportError('play_notification_unavailable');
+    }
   }
   async poll(): Promise<{ received: number; handled: number }> {
     try {

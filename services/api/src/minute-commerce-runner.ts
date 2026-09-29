@@ -3,7 +3,7 @@ import { ServiceError } from './errors.js';
 import type { MinuteDeliveryWorker, MinuteReceiptVault } from './minute-provider-delivery.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
 import type { AppleMinuteProvider } from './apple-minute-provider.js';
-import type { PlayRtdnSubscriber } from './google-play-rtdn.js';
+import { PlayNotificationTransportError, type PlayRtdnSubscriber } from './google-play-rtdn.js';
 
 const day = 86_400_000;
 export interface CommerceRunnerOptions {
@@ -11,7 +11,8 @@ export interface CommerceRunnerOptions {
   deliveryLimit?: number;
   reconciliationLimit?: number;
   voidPagesPerRun?: number;
-  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed' | 'apple_history_reconciliation_failed' | 'play_notification_failed') => void;
+  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed' | 'apple_history_reconciliation_failed' |
+    'play_notification_failed' | 'play_notification_unavailable' | 'play_notification_timeout', providerStatus?: number) => void;
 }
 
 /** Replay notification history without advancing beyond an unverified or unqueued page. */
@@ -102,8 +103,8 @@ export class MinuteCommerceRunner {
       throw new ServiceError('minute_runner_configuration_invalid', 503);
     this.#onFailure = options.onFailure ?? (() => {});
   }
-  #failure(code: Parameters<NonNullable<CommerceRunnerOptions['onFailure']>>[0]) {
-    try { this.#onFailure(code); } catch { /* An observer cannot stop durable delivery. */ }
+  #failure(code: Parameters<NonNullable<CommerceRunnerOptions['onFailure']>>[0], providerStatus?: number) {
+    try { this.#onFailure(code, providerStatus); } catch { /* An observer cannot stop durable delivery. */ }
   }
   runOnce(): Promise<void> {
     if (this.#stopped) return Promise.resolve();
@@ -114,7 +115,10 @@ export class MinuteCommerceRunner {
   async #run(): Promise<void> {
     if (this.playNotifications) {
       try { await this.playNotifications.poll(); }
-      catch { this.#failure('play_notification_failed'); }
+      catch (error) {
+        if (error instanceof PlayNotificationTransportError) this.#failure(error.code, error.providerStatus);
+        else this.#failure('play_notification_failed');
+      }
     }
     try { await this.vault.scheduleReconciliation(this.#reconciliationLimit); }
     catch { this.#failure('minute_reconciliation_failed'); }

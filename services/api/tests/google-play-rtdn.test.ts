@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePlayNotification, PlayRtdnSubscriber } from '../src/google-play-rtdn.js';
+import { parsePlayNotification, PlayNotificationTransportError, PlayRtdnSubscriber } from '../src/google-play-rtdn.js';
 import { PlayMinuteProvider } from '../src/play-minute-provider.js';
 
 const packageName = 'chat.mural.android';
@@ -109,6 +109,25 @@ test('subscriber refuses a mismatched subscription topic before pulling', async 
     (async () => { calls++; return json({ name: subscription, topic: 'projects/mural-prod/topics/other' }); }) as typeof fetch);
   await assert.rejects(subscriber.poll(), { code: 'play_notification_invalid' });
   assert.equal(calls, 1); assert.equal(subscriber.isOperational(), false);
+});
+
+test('subscriber classifies provider HTTP status and timeouts without response details', async () => {
+  const configuration = { topic, subscription, packageName, projectID: 'mural-prod' };
+  const tokens = { accessToken: async () => 'test-access-token-1234567890' };
+  const fulfillment = { reconcile: async () => {} };
+  const forbidden = new PlayRtdnSubscriber(configuration, tokens, fulfillment,
+    (async () => new Response('{"error":"private"}', { status: 403 })) as typeof fetch);
+  await assert.rejects(forbidden.poll(), error => error instanceof PlayNotificationTransportError &&
+    error.code === 'play_notification_unavailable' && error.providerStatus === 403 &&
+    !JSON.stringify(error).includes('private'));
+  assert.equal(forbidden.isOperational(), false);
+  const timedOut = new PlayRtdnSubscriber(configuration, tokens, fulfillment,
+    (async (url: string) => {
+      if (url.endsWith(subscription)) return json({ name: subscription, topic, pushConfig: {} });
+      throw new DOMException('private network detail', 'TimeoutError');
+    }) as typeof fetch);
+  await assert.rejects(timedOut.poll(), { code: 'play_notification_timeout' });
+  assert.equal(timedOut.isOperational(), false);
 });
 
 test('verified foreign-environment tokens are acknowledged without a ledger grant', async () => {

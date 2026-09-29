@@ -157,6 +157,7 @@ export const diagnosticErrorCodes = new Set([
   'play_notification_configuration_invalid',
   'play_notification_failed',
   'play_notification_invalid',
+  'play_notification_timeout',
   'play_notification_unavailable',
   'play_order_not_reconciled',
   'play_price_not_reconciled',
