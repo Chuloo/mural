@@ -37,7 +37,33 @@ export interface AIValueProduct extends PurchaseScope {
     processingBufferBasisPoints: number; exchangeRateNumerator: string; exchangeRateDenominator: string;
     exchangeRateVersion: string; estimatedNanoUSDPerMinute: string; estimateRateVersion: string;
     apple?: ApplePriceSnapshot;
+    play?: PlayPriceSnapshot;
   };
+}
+export interface PlayPriceSnapshot {
+  currency:string; currencyExponent:number; unitTotalMinor:number; scheduleVersion:string;
+  /** Conservative reviewed fee and tax assumptions, not a claim about a settled payout. */
+  commissionBasisPoints:number; taxMinor:number; commissionMinor:number; residualMinor:number;
+}
+/** Fixed Play prices keep the same AI allocation as iOS without inventing a percentage-based checkout price. */
+export function makePlayAIValueProduct(input:Omit<AIValueProductInput,'processing'|'currency'|'currencyExponent'> &
+  {play:PlayPriceSnapshot}):Readonly<AIValueProduct> {
+  const p=input.play;
+  if(input.provider!=='play' || !p || !/^[a-z]{3}$/.test(p.currency) || !identifier.test(p.scheduleVersion) ||
+    !Number.isInteger(p.currencyExponent) || p.currencyExponent<0 || p.currencyExponent>3 ||
+    ![p.unitTotalMinor,p.taxMinor,p.commissionMinor,p.residualMinor].every(v=>money(v)) || p.unitTotalMinor<=0 ||
+    !Number.isInteger(p.commissionBasisPoints) || p.commissionBasisPoints<0 || p.commissionBasisPoints>10000 ||
+    p.taxMinor>=p.unitTotalMinor ||
+    p.commissionMinor!==Number((BigInt(p.unitTotalMinor-p.taxMinor)*BigInt(p.commissionBasisPoints)+9999n)/10000n))
+    throw new ServiceError('invalid_ai_value_product');
+  const base=makeAIValueProduct({...input,currency:p.currency,currencyExponent:p.currencyExponent,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0}});
+  const fee=p.taxMinor+p.commissionMinor;
+  if(p.unitTotalMinor!==base.quote.aiValueMinor+base.quote.serviceFeeMinor+fee+p.residualMinor)
+    throw new ServiceError('invalid_ai_value_product');
+  return Object.freeze({...base,totalMinor:p.unitTotalMinor,quote:Object.freeze({...base.quote,
+    processingEstimateMinor:fee,processingBufferMinor:p.residualMinor,paymentFeeMinor:fee+p.residualMinor,
+    totalMinor:p.unitTotalMinor,play:Object.freeze({...p})})});
 }
 export interface ApplePriceSnapshot {
   storefront:'USA'|'NOR'; currency:string; currencyExponent:number; unitTotalMinor:number;
@@ -110,7 +136,10 @@ export function makeAIValueProduct(input: AIValueProductInput): Readonly<AIValue
 function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
   try {
     const q=product.quote;
-    const canonical=product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+    const canonical=product.provider==='play' && q.play?makePlayAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      serviceFeeBasisPoints:q.serviceFeeBasisPoints,exchangeRate:{numerator:q.exchangeRateNumerator,denominator:q.exchangeRateDenominator,
+        version:q.exchangeRateVersion},estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},
+      play:q.play}):product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
       serviceFeeBasisPoints:q.serviceFeeBasisPoints,estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},apple:q.apple!}):makeAIValueProduct({...product,currencyExponent:q.currencyExponent,aiValueMinor:q.aiValueMinor,
       policyVersion:q.policyVersion,serviceFeeBasisPoints:q.serviceFeeBasisPoints,
       processing:{rateBasisPoints:q.processingRateBasisPoints,fixedMinor:q.processingFixedMinor,bufferBasisPoints:q.processingBufferBasisPoints},
@@ -118,7 +147,8 @@ function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
       estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion}});
     for (const key of Object.keys(canonical) as (keyof AIValueProduct)[]) {
       if (key==='quote') {
-        if (Object.keys(q).length!==Object.keys(canonical.quote).length || Object.entries(canonical.quote).some(([k,v])=>k==='apple'?JSON.stringify(q.apple)!==JSON.stringify(v):q[k as keyof typeof q]!==v)) throw new Error();
+        if (Object.keys(q).length!==Object.keys(canonical.quote).length || Object.entries(canonical.quote).some(([k,v])=>
+          k==='apple'||k==='play'?JSON.stringify(q[k as 'apple'|'play'])!==JSON.stringify(v):q[k as keyof typeof q]!==v)) throw new Error();
       } else if (canonical[key]!==product[key]) throw new Error();
     }
     if (Object.keys(canonical).length!==Object.keys(product).length) throw new Error();

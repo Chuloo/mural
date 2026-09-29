@@ -381,12 +381,10 @@ integration('account deletion blocks pending AI orders and paid balances, but re
   }finally{await f.cleanup();}
 });
 
-integration('abandoned receiptless quotes permit deletion while late payments remain bound and refundable', async () => {
+integration('receiptless Play quotes permit immediate deletion while late payments remain bound and refundable', async () => {
   const f=await fixture({aiValue:true});try {
     const member=await f.account(), order=await f.order(member,'play');
-    await assert.rejects(deleteAccount(f.db,member.id),{code:'unresolved_billing'});
-    const later=new Date(Date.now()+25*60*60*1000);
-    assert.deepEqual(await deleteAccount(f.db,member.id,undefined,undefined,undefined,later),{retainedFinancialRecords:true});
+    assert.deepEqual(await deleteAccount(f.db,member.id),{retainedFinancialRecords:true});
     const tombstone=(await f.db.query('SELECT email,deleted_at FROM accounts WHERE id=$1',[member.id])).rows[0];
     assert.equal(tombstone.email,null);assert.ok(tombstone.deleted_at);
     await assert.rejects(authenticate(f.db,member.headers.authorization),{code:'sign_in_required'});
@@ -404,7 +402,7 @@ integration('abandoned receiptless quotes permit deletion while late payments re
     assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[member.id])).rows[0].balance_nano,'0');
     const uncertain=await f.account(), uncertainOrder=await f.order(uncertain,'play');
     await f.vault.save(uncertainOrder.orderID,f.play,f.bindPlay(uncertainOrder));
-    await assert.rejects(deleteAccount(f.db,uncertain.id,undefined,undefined,undefined,later),{code:'unresolved_billing'});
+    await assert.rejects(deleteAccount(f.db,uncertain.id),{code:'unresolved_billing'});
   }finally{await f.cleanup();}
 });
 

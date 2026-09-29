@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { AIValuePurchases, makeAIValueProduct, PurchaseFulfillmentRouter, refundedAIValue, type AIValueProduct,
+import { AIValuePurchases, makeAIValueProduct, makePlayAIValueProduct, PurchaseFulfillmentRouter, refundedAIValue, type AIValueProduct,
   type AIValueProductInput } from '../src/ai-value-purchases.js';
 import { MinutePurchases, type MinutePurchaseVerifier, type VerifiedMinutePurchase, type PurchaseEnvironment } from '../src/minute-purchases.js';
 import { connectDatabase, transaction } from '../src/db.js';
@@ -53,6 +53,26 @@ test('AI quote computes only the reviewed allocation, separate fees and a conser
   assert.ok(p.quote.processingEstimateMinor>0);assert.ok(p.quote.processingBufferMinor>0);assert.ok(Object.isFrozen(p.quote));
   const euro=makeAIValueProduct(input('test',{currency:'eur',exchangeRate:{numerator:'11',denominator:'10',version:'synthetic-fx'}}));
   assert.equal(euro.aiValueNanoUSD,'11000000000');
+});
+test('fixed Play prices match the iOS AI allocation in USD and NOK and reject a changed fee snapshot',()=>{
+  const common={provider:'play' as const,environment:'test' as const,merchant:'chat.mural.android',
+    providerProduct:'chat.mural.android.minutes.small.v1',policyVersion:1,serviceFeeBasisPoints:1500,
+    estimate:{nanoUSDPerMinute:'100000000',rateVersion:'reviewed-estimate'}};
+  const usd=makePlayAIValueProduct({...common,sku:'play-us-small-v1',aiValueMinor:369,
+    exchangeRate:{numerator:'1',denominator:'1',version:'reviewed-usd'},
+    play:{currency:'usd',currencyExponent:2,unitTotalMinor:700,scheduleVersion:'play-review-v1',
+      commissionBasisPoints:3000,taxMinor:0,commissionMinor:210,residualMinor:65}});
+  const nok=makePlayAIValueProduct({...common,sku:'play-no-small-v1',aiValueMinor:3690,
+    exchangeRate:{numerator:'1',denominator:'10',version:'reviewed-nok'},
+    play:{currency:'nok',currencyExponent:2,unitTotalMinor:8900,scheduleVersion:'play-review-v1',
+      commissionBasisPoints:3000,taxMinor:1780,commissionMinor:2136,residualMinor:740}});
+  assert.equal(usd.aiValueNanoUSD,'3690000000'); assert.equal(nok.aiValueNanoUSD,usd.aiValueNanoUSD);
+  for(const product of [usd,nok]) assert.equal(product.totalMinor,product.quote.totalMinor);
+  const verifier={provider:'play' as const,environment:'test' as const,merchant:common.merchant,verify:async()=>{throw new Error();}};
+  assert.deepEqual(new AIValuePurchases({} as any,{catalog:[usd,nok],verifiers:[verifier],salesEnabled:true}).products('play'),[usd,nok]);
+  for(const tampered of [{...nok,quote:{...nok.quote,play:{...nok.quote.play!,taxMinor:0}}},
+    {...nok,quote:{...nok.quote,processingBufferMinor:739}}])
+    assert.throws(()=>new AIValuePurchases({} as any,{catalog:[tampered],verifiers:[verifier]}),/invalid_ai_value_product/);
 });
 test('catalog rejects claimed nano, minute estimate or fee totals that differ from reviewed quote arithmetic',()=>{
   const p=makeAIValueProduct(input());const verifier={...p,verify:async()=>{throw new Error();}};

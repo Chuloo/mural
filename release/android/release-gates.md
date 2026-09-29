@@ -50,4 +50,4 @@ On 14 September, the release operator verified the owner's requested Documents b
 
 ## Paid account deletion follow-up
 
-Before enabling sales, resolve deletion after an abandoned Play checkout. Creating an order before opening or cancelling the billing sheet can leave no purchase token for reconciliation. The current account-deletion check treats this as unresolved billing and blocks deletion. A production fix must allow account deletion while retaining only the billing records needed to handle a late provider result; it must not infer that missing client confirmation means no charge occurred.
+The Play account-deletion fix is implemented in the release branch and passed the local integration suite. A receiptless Play quote no longer delays deletion; its opaque order and wallet remain so a late verified charge stays bound to the deleted account for support/refund. A retained provider receipt or pending purchase still blocks deletion. Verify this behavior on the deployed server before enabling sales.
