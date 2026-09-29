@@ -138,8 +138,9 @@ class CaptionParityTest {
         }
         // Wait for this fixture's captions, not just an idle frame of the previous language.
         // The Mandarin reading is produced off the Compose test clock.
+        val displayedCaption = text.ifBlank { LanguageRegistry.get(language)!!.greeting }
         compose.waitUntil(10_000) {
-            compose.onAllNodes(hasTestTag("target-caption") and hasText(text)).fetchSemanticsNodes().size == 1 &&
+            compose.onAllNodes(hasTestTag("target-caption") and hasText(displayedCaption)).fetchSemanticsNodes().size == 1 &&
                 compose.onAllNodes(hasTestTag("meaning-caption") and hasText(meaning)).fetchSemanticsNodes().size == 1
         }
         if (language == "zh") compose.waitUntil(10_000) {
