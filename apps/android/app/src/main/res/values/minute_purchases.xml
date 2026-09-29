@@ -21,10 +21,6 @@
     <string name="minute_purchases_canceled">Purchase canceled. You can choose a pack whenever you’re ready.</string>
     <string name="minute_purchases_price_changed">This pack’s price has changed. Review the updated price before choosing it again.</string>
     <string name="minute_purchases_added">Your minutes are ready. Let’s keep talking.</string>
-    <plurals name="minute_purchases_packs_added">
-        <item quantity="one">Your %1$d pack is ready. Let’s keep talking.</item>
-        <item quantity="other">Your %1$d packs are ready. Let’s keep talking.</item>
-    </plurals>
     <string name="minute_purchases_reversed">A purchase was refunded or reversed. Your balance has been updated.</string>
     <string name="minute_purchases_verification_failed">We couldn’t confirm a purchase. Check again, or sign in with the Mural account used to buy it.</string>
     <string name="minute_purchases_sign_in_again">Sign in to confirm your purchases and see your minutes.</string>

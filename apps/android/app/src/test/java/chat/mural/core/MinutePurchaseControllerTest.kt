@@ -146,7 +146,7 @@ class MinutePurchaseControllerTest {
             listOf(MinuteStorePurchase("synthetic-token", MinuteStorePurchaseState.PURCHASED))))
         runCurrent(); assertEquals(2_400_000, controller.state.value.balance!!.availableMilliseconds)
     }
-    @Test fun unfinishedPlayCartPurchaseIsRecoveredBeforeAnotherOrderAndShowsVerifiedQuantity() = runTest {
+    @Test fun unfinishedPlayCartPurchaseIsRecoveredBeforeAnotherOrder() = runTest {
         val api = API(); val store = Store(); val controller = controller(api, store)
         controller.refresh()
         store.owned = listOf(MinuteStorePurchase("owned-ten-pack-token", MinuteStorePurchaseState.PURCHASED, 10))
@@ -154,7 +154,6 @@ class MinutePurchaseControllerTest {
         controller.buy(product.sku) { error("an owned purchase must be recovered before another checkout") }
         assertTrue(api.keys.isEmpty())
         assertEquals(listOf("owned-ten-pack-token"), api.tokens)
-        assertEquals(10, controller.state.value.lastPurchasedQuantity)
         assertEquals(MinutePurchaseNotice.ADDED, controller.state.value.notice)
         assertEquals(18_000_000, controller.state.value.balance!!.availableMilliseconds)
     }
@@ -163,7 +162,6 @@ class MinutePurchaseControllerTest {
         api.statusValue = status("pending")
         store.owned = listOf(MinuteStorePurchase("pending-ten-pack-token", MinuteStorePurchaseState.PENDING, 10))
         controller.onForeground()
-        assertNull(controller.state.value.lastPurchasedQuantity)
         assertEquals(MinutePurchaseNotice.PENDING, controller.state.value.notice)
         assertEquals(600_000, controller.state.value.balance!!.availableMilliseconds)
         assertTrue(api.keys.isEmpty())

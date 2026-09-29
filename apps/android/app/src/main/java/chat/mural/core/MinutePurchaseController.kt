@@ -14,7 +14,7 @@ enum class MinutePurchaseNotice { UNAVAILABLE, SIGN_IN_REQUIRED, PRICE_CHANGED, 
 data class MinutePack(val sku: String, val minutes: Int, val formattedPrice: String, val aiValue: AIValueEntitlement? = null)
 data class MinutePurchaseState(val busy: Boolean = false, val available: Boolean = false, val packs: List<MinutePack> = emptyList(),
     val balance: MinuteBalance? = null, val purchaseInProgress: Boolean = false, val notice: MinutePurchaseNotice? = null,
-    val channel: PurchaseChannel = PurchaseChannel.PLAY, val maximumQuantity: Int = 1, val lastPurchasedQuantity: Int? = null)
+    val channel: PurchaseChannel = PurchaseChannel.PLAY, val maximumQuantity: Int = 1)
 
 /** UI state never contains an account bearer, receipt, provider binding or purchase token. */
 class MinutePurchaseController(
@@ -81,7 +81,7 @@ class MinutePurchaseController(
         when (launch(PreparedMinutePurchase(product, order, offer))) {
             MinuteStoreOutcome.OPENED -> {
                 attempts.remove(attempt)
-                mutable.value = mutable.value.copy(purchaseInProgress = true, notice = null, lastPurchasedQuantity = null)
+                mutable.value = mutable.value.copy(purchaseInProgress = true, notice = null)
             }
             MinuteStoreOutcome.CANCELED -> mutable.value = mutable.value.copy(notice = MinutePurchaseNotice.CANCELED)
             MinuteStoreOutcome.ALREADY_OWNED -> processPurchases(store.purchases(), member)
@@ -142,7 +142,7 @@ class MinutePurchaseController(
             // Pending tokens are uploaded too so the server can observe completion without this app.
             try {
                 val result = api.recover(member, purchase.token)
-                requireCurrent(member); applyStatus(result, purchase.quantity)
+                requireCurrent(member); applyStatus(result)
                 pending = pending || result.state in listOf("created", "pending")
             } catch (error: MinuteCommerceFailure.Http) {
                 // An unrelated account's old receipt must not block this account's valid purchases.
@@ -153,9 +153,8 @@ class MinutePurchaseController(
         mutable.value = mutable.value.copy(purchaseInProgress = pending,
             notice = if (pending) MinutePurchaseNotice.PENDING else if (verificationFailed) MinutePurchaseNotice.VERIFICATION_FAILED else mutable.value.notice)
     }
-    private fun applyStatus(result: MinutePurchaseStatus, purchasedQuantity: Int? = null) {
-        mutable.value = mutable.value.copy(purchaseInProgress = result.state in listOf("created", "pending"),
-            lastPurchasedQuantity = purchasedQuantity.takeIf { result.state == "purchased" && result.fulfillmentRecorded }, notice = when {
+    private fun applyStatus(result: MinutePurchaseStatus) {
+        mutable.value = mutable.value.copy(purchaseInProgress = result.state in listOf("created", "pending"), notice = when {
             result.state in listOf("created", "pending") -> MinutePurchaseNotice.PENDING
             result.state == "voided" || result.reversedMilliseconds > 0 || result.reversalOutstandingMilliseconds > 0 || result.aiValue?.reversed == true -> MinutePurchaseNotice.REVERSED
             result.fulfillmentRecorded -> MinutePurchaseNotice.ADDED
@@ -179,7 +178,7 @@ class MinutePurchaseController(
     private fun updateIdentity(member: AccountSession?) {
         if (identity != member?.accountID) {
             identity = member?.accountID; attempts.clear()
-            mutable.value = mutable.value.copy(balance = null, purchaseInProgress = false, notice = null, lastPurchasedQuantity = null)
+            mutable.value = mutable.value.copy(balance = null, purchaseInProgress = false, notice = null)
         }
     }
     private fun requireOpen() { if (stopped) throw CancellationException("Minute purchases closed") }

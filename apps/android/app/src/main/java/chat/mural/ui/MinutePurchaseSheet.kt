@@ -99,8 +99,6 @@ fun MinutePurchaseSheet(
                         }
                     }
                     val statusText = when {
-                        state.notice == MinutePurchaseNotice.ADDED && (state.lastPurchasedQuantity ?: 1) > 1 ->
-                            pluralStringResource(R.plurals.minute_purchases_packs_added, state.lastPurchasedQuantity!!, state.lastPurchasedQuantity)
                         state.notice != null -> stringResource(state.notice.textResource())
                         checking -> stringResource(R.string.minute_purchases_loading)
                         state.purchaseInProgress -> stringResource(R.string.minute_purchases_opened)
