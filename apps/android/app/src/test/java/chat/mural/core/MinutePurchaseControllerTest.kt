@@ -32,6 +32,7 @@ class MinutePurchaseControllerTest {
         var onCreate: suspend () -> Unit = {}
         var onCatalog: suspend () -> Unit = {}
         var onRecover: suspend (String) -> Unit = {}
+        var onBalance: suspend () -> Unit = {}
         override suspend fun catalog(regionCode: String?): MinuteCatalog { calls++; regions += regionCode; onCatalog(); return catalogValue }
         override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String, selection: PlayPriceSnapshot?): MinuteOrder {
             calls++; keys += idempotencyKey; selections += selection; onCreate(); return orderValue
@@ -41,7 +42,7 @@ class MinutePurchaseControllerTest {
         override suspend fun recover(session: AccountSession, token: String): MinutePurchaseStatus {
             calls++; tokens += token; onRecover(token); return statusValue
         }
-        override suspend fun balance(session: AccountSession): MinuteBalance { calls++; return balanceValue }
+        override suspend fun balance(session: AccountSession): MinuteBalance { calls++; onBalance(); return balanceValue }
     }
     private inner class Store : MinuteStoreGateway {
         override val events = MutableSharedFlow<MinuteStoreEvent>(extraBufferCapacity = 10)
@@ -182,6 +183,70 @@ class MinutePurchaseControllerTest {
         assertEquals(listOf("paid-token", "paid-token"), api.tokens)
         assertNotNull(controller.state.value.balance)
         assertEquals(MinutePurchaseNotice.UNAVAILABLE, controller.state.value.notice)
+    }
+    @Test fun recoveryOrBalanceFailureStillLoadsRegionalPacksButCannotBypassOwnedPurchaseChecks() = runTest {
+        for (failRecovery in listOf(true, false)) {
+            val product = regionalProduct("DE")
+            val api = API().apply { catalogValue = MinuteCatalog(true, listOf(product)); orderValue = order(product) }
+            val store = Store().apply { region = "DE"; currentOffers = listOf(offer(product)) }
+            val controller = controller(api, store); controller.refresh()
+            val previousBalance = controller.state.value.balance
+            api.regions.clear()
+            store.owned = listOf(MinuteStorePurchase("owned-token", MinuteStorePurchaseState.PURCHASED))
+            if (failRecovery) api.onRecover = { throw MinuteCommerceFailure.Unavailable }
+            else api.onBalance = { throw MinuteCommerceFailure.Unavailable }
+
+            controller.onForeground()
+
+            assertEquals(listOf("DE"), api.regions)
+            assertTrue(controller.state.value.available)
+            assertEquals(product.sku, controller.state.value.packs.single().sku)
+            assertEquals(previousBalance, controller.state.value.balance)
+            assertEquals(MinutePurchaseNotice.UNAVAILABLE, controller.state.value.notice)
+            assertFalse(controller.state.value.busy)
+            controller.buy(product.sku) { error("recovery or balance failure must still block another checkout") }
+            assertTrue(api.keys.isEmpty())
+            assertEquals(listOf("owned-token", "owned-token"), api.tokens)
+            controller.close()
+        }
+    }
+    @Test fun balanceFailureKeepsPendingPurchaseBlockedWhileRegionalPacksLoad() = runTest {
+        val api = API().apply {
+            statusValue = status("pending")
+            onBalance = { throw MinuteCommerceFailure.Unavailable }
+        }
+        val store = Store().apply { owned = listOf(MinuteStorePurchase("pending-token", MinuteStorePurchaseState.PENDING)) }
+        val controller = controller(api, store)
+
+        controller.onForeground()
+
+        assertTrue(controller.state.value.available)
+        assertTrue(controller.state.value.purchaseInProgress)
+        assertNull(controller.state.value.balance)
+        controller.buy(product.sku) { error("pending purchase must not open another checkout") }
+        assertTrue(api.keys.isEmpty())
+        assertEquals(listOf("pending-token"), api.tokens)
+    }
+    @Test fun cancellationDuringRecoveryOrBalanceStopsCatalogAndReleasesRefreshLock() = runTest {
+        for (cancelRecovery in listOf(true, false)) {
+            val cancelled = CancellationException("fixture cancellation")
+            val api = API()
+            val store = Store().apply { owned = listOf(MinuteStorePurchase("owned-token", MinuteStorePurchaseState.PURCHASED)) }
+            if (cancelRecovery) api.onRecover = { throw cancelled }
+            else api.onBalance = { throw cancelled }
+            val controller = controller(api, store)
+
+            try { controller.onForeground(); fail("cancellation must propagate") }
+            catch (error: CancellationException) { assertSame(cancelled, error) }
+
+            assertTrue(api.regions.isEmpty())
+            assertEquals(0, store.regionReads)
+            assertFalse(controller.state.value.busy)
+            api.onRecover = {}; api.onBalance = {}
+            controller.refresh()
+            assertTrue(controller.state.value.available)
+            controller.close()
+        }
     }
     @Test fun orderQuoteMismatchDoesNotLaunchBillingAndRetryReusesIdempotencyKey() = runTest {
         val api = API(); val store = Store(); val controller = controller(api, store)

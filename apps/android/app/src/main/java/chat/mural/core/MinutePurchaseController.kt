@@ -43,11 +43,14 @@ class MinutePurchaseController(
     suspend fun onForeground() = operation {
         val member = memberOrNull(); updateIdentity(member)
         if (member != null) {
-            store.connect()
-            processPurchases(store.purchases(), member)
-            updateBalance(member)
+            try {
+                store.connect()
+                processPurchases(store.purchases(), member)
+                updateBalance(member)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { failure(error) }
         }
-        // Recovery is independent of catalog availability and the current Play country.
+        // Recovery and browsing are independent; buy() still requires recovery before checkout.
         loadCatalog()
     }
     suspend fun refresh() = onForeground()
