@@ -381,29 +381,20 @@ integration('account deletion blocks pending AI orders and paid balances, but re
   }finally{await f.cleanup();}
 });
 
-integration('receiptless Play quotes permit immediate deletion while late payments remain bound and refundable', async () => {
-  const f=await fixture({aiValue:true});try {
-    const member=await f.account(), order=await f.order(member,'play');
-    assert.deepEqual(await deleteAccount(f.db,member.id),{retainedFinancialRecords:true});
-    const tombstone=(await f.db.query('SELECT email,deleted_at FROM accounts WHERE id=$1',[member.id])).rows[0];
-    assert.equal(tombstone.email,null);assert.ok(tombstone.deleted_at);
-    await assert.rejects(authenticate(f.db,member.headers.authorization),{code:'sign_in_required'});
-    // The order survives deletion. Verified late delivery goes to its original, inaccessible
-    // financial account, never a newly signed-in account or a replacement signup.
-    const token=f.bindPlay(order);
-    await f.vault.save(order.orderID,f.play,token);
-    await f.fulfillment!.reconcile('play',{kind:'stored',orderID:order.orderID});
-    await f.fulfillment!.reconcile('play',{kind:'stored',orderID:order.orderID});
-    assert.equal((await f.db.query('SELECT count(*) FROM ledger WHERE account_id=$1 AND kind=\'purchase\'',[member.id])).rows[0].count,'1');
-    const replacement=await f.account();
-    assert.equal((await paidAIBalance(f.db,replacement.id)).balanceNanoUSD,'0');
-    await f.vault.rememberVoid(order.orderID);
-    await f.fulfillment!.reconcile('play',{kind:'stored',orderID:order.orderID});
-    assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[member.id])).rows[0].balance_nano,'0');
-    const uncertain=await f.account(), uncertainOrder=await f.order(uncertain,'play');
-    await f.vault.save(uncertainOrder.orderID,f.play,f.bindPlay(uncertainOrder));
-    await assert.rejects(deleteAccount(f.db,uncertain.id),{code:'unresolved_billing'});
-  }finally{await f.cleanup();}
+integration('receiptless Play orders keep token delivery authenticated for minutes and AI value', async () => {
+  for (const aiValue of [false,true]) {
+    const f=await fixture({aiValue});try {
+      const member=await f.account(), order=await f.order(member,'play');
+      await assert.rejects(deleteAccount(f.db,member.id,undefined,undefined,undefined,
+        new Date(Date.now()+25*60*60*1000)),{code:'unresolved_billing',status:409});
+      const row=(await f.db.query('SELECT email,deleted_at FROM accounts WHERE id=$1',[member.id])).rows[0];
+      assert.equal(row.deleted_at,null);assert.equal(row.email,'synthetic@example.test');
+      assert.equal(await authenticate(f.db,member.headers.authorization),member.id);
+      const token=f.bindPlay(order);
+      const recovered=await f.app.inject({method:'POST',url:'/v1/minutes/play/recover',headers:member.headers,payload:{purchaseToken:token}});
+      assert.equal(recovered.statusCode,200,recovered.body);
+    }finally{await f.cleanup();}
+  }
 });
 
 for (const aiValue of [false, true]) {

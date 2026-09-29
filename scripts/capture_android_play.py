@@ -2,6 +2,7 @@
 """Capture actual offline Play screens from prebuilt isolated test APKs; never build or upload."""
 from pathlib import Path
 import argparse, subprocess, json, hashlib, datetime, os, re, tempfile
+from play_capture_publish import publish_capture_assets
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
@@ -54,6 +55,7 @@ evidence = {'recordedAtUTC': datetime.datetime.now(datetime.timezone.utc).isofor
             'sourceSnapshotAfterBuild': [{'path': str(p.relative_to(root)), 'sha256': digest(p)}
                 for p in sorted((root/'apps/android/app/src/main').rglob('*')) if p.is_file()],
             'assets': []}
+asset_payloads = []
 try:
     device('install', '-r', str(app_apk))
     device('install', '-r', str(test_apk))
@@ -83,30 +85,24 @@ try:
         ('play-store', 'listing-08-italian.png', '07-italian.png'),
         ('play-store', '05-languages.png', '08-languages.png'),
     ]
-    raw_dir = output_root/'assets'/'raw'/'en-US'
-    final_dir = output_root/'assets'/'en-US'
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    final_dir.mkdir(parents=True, exist_ok=True)
     for source, name, final_name in captures:
         png = device('exec-out','run-as','chat.mural.android.uitest','cat',f'files/{source}/{name}').stdout
         assert png.startswith(b'\x89PNG\r\n\x1a\n')
         assert (int.from_bytes(png[16:20], 'big'), int.from_bytes(png[20:24], 'big')) == (1080, 1920)
         assert png[25] == 2, 'Play phone screenshots must be opaque RGB PNGs.'
-        raw = raw_dir/name
-        output = final_dir/final_name
-        raw.write_bytes(png)
-        output.write_bytes(png)
-        evidence['assets'].append({'path':str(output.relative_to(output_root)),
-                                   'source':str(raw.relative_to(output_root)),
-                                   'sha256':digest(output),'bytes':len(png)})
+        raw = Path('assets/raw/en-US')/name
+        output = Path('assets/en-US')/final_name
+        asset_payloads.extend([(raw, png), (output, png)])
+        evidence['assets'].append({'path':str(output), 'source':str(raw),
+                                   'sha256':hashlib.sha256(png).hexdigest(),'bytes':len(png)})
     feature = device('exec-out','run-as','chat.mural.android.uitest','cat','files/play-store/feature-graphic.png').stdout
     assert feature.startswith(b'\x89PNG\r\n\x1a\n')
     assert (int.from_bytes(feature[16:20], 'big'), int.from_bytes(feature[20:24], 'big')) == (1024, 500)
     assert feature[25] == 2
-    feature_path = output_root/'assets'/'feature-graphic.png'
-    feature_path.write_bytes(feature)
-    evidence['assets'].append({'path':str(feature_path.relative_to(output_root)),
-                               'sha256':digest(feature_path),'bytes':len(feature)})
+    feature_path = Path('assets/feature-graphic.png')
+    asset_payloads.append((feature_path, feature))
+    evidence['assets'].append({'path':str(feature_path),
+                               'sha256':hashlib.sha256(feature).hexdigest(),'bytes':len(feature)})
 finally:
     device('shell','cmd','statusbar','send-disable-flag','none',check=False)
     device('shell','am','broadcast','-a','com.android.systemui.demo','--es','command','exit',check=False)
@@ -122,20 +118,12 @@ finally:
         'demoAllowed':shell('settings','get','global','sysui_demo_allowed')}
     evidence['testLogSHA256'] = digest(work/'capture-test.log') if (work/'capture-test.log').exists() else None
 
-# Publish evidence only after every capture passed and the emulator was restored.
-# A failed run must leave the last successful capture record intact.
+# Publish the images and evidence together after every capture passed and the
+# emulator was restored. A failed run leaves the last successful set intact.
 assert len(evidence['assets']) == 9, 'Incomplete Play capture.'
 assert evidence['restoredDeviceSettings'] == {key: original[key] for key in
     ('size', 'density', 'user', 'fontScale', 'demoAllowed')}, 'Emulator settings were not restored.'
 evidence_path = output_root/'assets'/'capture-evidence.json'
-evidence_path.parent.mkdir(parents=True, exist_ok=True)
-with tempfile.NamedTemporaryFile('w', dir=evidence_path.parent, prefix='.capture-evidence-',
-                                 suffix='.json', delete=False) as staged:
-    json.dump(evidence, staged, indent=2)
-    staged.write('\n')
-try:
-    os.replace(staged.name, evidence_path)
-except BaseException:
-    Path(staged.name).unlink(missing_ok=True)
-    raise
+asset_payloads.append((Path('assets/capture-evidence.json'), (json.dumps(evidence,indent=2)+'\n').encode()))
+publish_capture_assets(output_root, asset_payloads)
 print('Capture evidence: ' + str(evidence_path), flush=True)

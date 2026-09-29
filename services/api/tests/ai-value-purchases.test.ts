@@ -67,6 +67,9 @@ test('fixed Play prices match the iOS AI allocation in USD and NOK and reject a 
     play:{currency:'nok',currencyExponent:2,unitTotalMinor:8900,scheduleVersion:'play-review-v1',
       commissionBasisPoints:3000,taxMinor:1780,commissionMinor:2136,residualMinor:740}});
   assert.equal(usd.aiValueNanoUSD,'3690000000'); assert.equal(nok.aiValueNanoUSD,usd.aiValueNanoUSD);
+  assert.throws(()=>makePlayAIValueProduct({...common,sku:'play-no-wrong-exponent-v1',aiValueMinor:3690,
+    exchangeRate:{numerator:'1',denominator:'10',version:'reviewed-nok'},
+    play:{...nok.quote.play!,currencyExponent:0}}),/invalid_ai_value_product/);
   for(const product of [usd,nok]) assert.equal(product.totalMinor,product.quote.totalMinor);
   const verifier={provider:'play' as const,environment:'test' as const,merchant:common.merchant,verify:async()=>{throw new Error();}};
   assert.deepEqual(new AIValuePurchases({} as any,{catalog:[usd,nok],verifiers:[verifier],salesEnabled:true}).products('play'),[usd,nok]);

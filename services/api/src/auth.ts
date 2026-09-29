@@ -166,18 +166,18 @@ export async function deleteAccount(db: Database, account: string, appleRevoker?
     const minutes = (await sql.query('SELECT balance_ms,reserved_ms FROM minute_wallets WHERE account_id=$1', [account])).rows[0];
     const minutePurchase = (await sql.query("SELECT 1 FROM minute_entries WHERE account_id=$1 AND kind='purchase' LIMIT 1", [account])).rowCount;
     // The account lock serializes deletion with order creation, fulfillment and refund recovery.
-    // Play can create an order before its native billing sheet opens. A receiptless Play
-    // quote must not delay account deletion: retain the opaque order and wallet so a late
-    // verified purchase still reconciles to the deleted account for support/refund.
+    // Play can create an order before its native billing sheet opens. Keep the
+    // authenticated token-delivery path until the provider receipt is captured;
+    // an opaque retained order cannot discover a late Play purchase by itself.
     // Other providers keep the existing 24-hour abandonment window.
     const unresolvedMinuteOrder = (await sql.query(`SELECT 1 FROM minute_purchase_orders o
       LEFT JOIN minute_purchase_transactions p ON p.order_id=o.id WHERE o.account_id=$1 AND o.entitlement_kind='minutes'
-      AND ((p.order_id IS NULL AND ((o.provider<>'play' AND o.created_at>$2::timestamptz-interval '24 hours') OR
+      AND ((p.order_id IS NULL AND ((o.provider='play' OR o.created_at>$2::timestamptz-interval '24 hours') OR
         EXISTS(SELECT 1 FROM minute_provider_receipts r WHERE r.order_id=o.id))) OR p.state='pending'
         OR p.recovered_ms<LEAST(p.reversal_target_ms,p.granted_ms)) LIMIT 1`, [account, now])).rowCount;
     const unresolvedValueOrder = (await sql.query(`SELECT 1 FROM minute_purchase_orders o
       LEFT JOIN ai_value_purchase_transactions p ON p.order_id=o.id WHERE o.account_id=$1 AND o.entitlement_kind='ai_value'
-      AND ((p.order_id IS NULL AND ((o.provider<>'play' AND o.created_at>$2::timestamptz-interval '24 hours') OR
+      AND ((p.order_id IS NULL AND ((o.provider='play' OR o.created_at>$2::timestamptz-interval '24 hours') OR
         EXISTS(SELECT 1 FROM minute_provider_receipts r WHERE r.order_id=o.id))) OR p.state='pending') LIMIT 1`, [account, now])).rowCount;
     if (unresolvedMinuteOrder || unresolvedValueOrder || Number(minutes?.reserved_ms ?? 0) > 0 || (minutePurchase && Number(minutes?.balance_ms ?? 0) > 0))
       throw new ServiceError('unresolved_billing', 409);

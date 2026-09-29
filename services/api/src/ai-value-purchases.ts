@@ -51,6 +51,7 @@ export function makePlayAIValueProduct(input:Omit<AIValueProductInput,'processin
   const p=input.play;
   if(input.provider!=='play' || !p || !/^[a-z]{3}$/.test(p.currency) || !identifier.test(p.scheduleVersion) ||
     !Number.isInteger(p.currencyExponent) || p.currencyExponent<0 || p.currencyExponent>3 ||
+    (p.currency==='nok' && p.currencyExponent!==2) ||
     ![p.unitTotalMinor,p.taxMinor,p.commissionMinor,p.residualMinor].every(v=>money(v)) || p.unitTotalMinor<=0 ||
     !Number.isInteger(p.commissionBasisPoints) || p.commissionBasisPoints<0 || p.commissionBasisPoints>10000 ||
     p.taxMinor>=p.unitTotalMinor ||
