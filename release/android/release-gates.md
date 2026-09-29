@@ -27,9 +27,9 @@ An internal preview is an early test milestone. It does not complete the approve
 - [ ] Account management covers expired/revoked sessions, local-data behavior, account recovery and deletion with a remaining balance or unresolved payment. Apple-only account access has an explicit supported path or a disclosed owner-approved limitation.
 - [ ] In-app AI-output reporting works; users review an excerpt and consent before sending. Capability and retry states, trusted-proxy admission, restricted runtime grants, 30-day expiry/cleanup, backup handling and reviewer access pass in the deployed environment. Privacy and Data safety declarations include this optional content. A support owner reviews reports and acts on relevant findings.
 - [ ] Encrypted off-server backups and a timed restore drill pass. Alerts cover API failures, payment reconciliation, budget exhaustion and capacity without logging conversation content.
-- [ ] Final store copy, six screenshots, icon and feature graphic match the candidate. Data safety, audience/rating, ads, permissions, reviewer access, privacy, deletion URL and region declarations are complete.
+- [ ] Final store copy, eight screenshots, icon and feature graphic match the candidate. Data safety, audience/rating, ads, permissions, reviewer access, privacy, deletion URL and region declarations are complete.
 - [ ] Closed beta and Play pre-launch report issues are resolved. First production rollout scope is explicitly selected and public install, login, trial and purchases are rechecked after publication.
-- [ ] Website receives the real Google Play link only after that listing and install are public. iOS access remains accurately labeled.
+- [ ] Website links to the live Google Play preview listing. After the paid update is public, check that the listing, install and iOS waitlist remain accurate.
 
 ## Decisions and private setup still needed
 
