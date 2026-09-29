@@ -31,8 +31,8 @@ checkout. A shopper can make another purchase after the first is consumed. Enabl
 multi-quantity only after server verification, partial refunds, void handling, and
 Play-installed recovery all pass for quantities up to ten.
 
-The Play Console currently blocks one-time product setup until its merchant payments
-profile is created. Do not submit or activate a payable build against a missing
-catalog. Once the profile and products exist, test the Play-signed build with a license
-tester, then a separately authorized live purchase and refund. Verify one credit,
-consumption, balance use, restore, and the support path before enabling sales.
+The merchant profile is linked and the three products are saved as drafts in Play
+Console. Production still lacks a Play service account, a purchase-binding key and
+an approved catalog. Keep the purchase options inactive until those are configured
+and a Play-installed build passes a license-tester purchase. Verify one credit,
+consumption, balance use, restore and the support path before enabling sales.
