@@ -32,6 +32,8 @@ final class AdditionalLanguageTests: XCTestCase {
         }
         XCTAssertTrue(MeaningLanguages.all.contains("Chinese (Simplified)"))
         XCTAssertEqual(MeaningLanguages.greeting(in: "Chinese (Simplified)"), "你好！")
+        XCTAssertTrue(MeaningLanguages.all.contains("Serbian (Latin)"))
+        XCTAssertEqual(MeaningLanguages.greeting(in: "Serbian (Latin)"), "Zdravo!")
     }
 
     func testAllPromptPathsUseEachNewTargetAndItsRegionalGuidance() throws {
