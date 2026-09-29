@@ -1,12 +1,14 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { makeRegionalPlayCatalog } from '../../services/api/src/play-regional-catalog.js';
 
 // Run with services/api/node_modules/.bin/tsx. Output is a deployment candidate, never store activation.
-const [outputPath, environment = 'live'] = process.argv.slice(2);
-assert(outputPath, 'Output path required');
+const [environment = 'live'] = process.argv.slice(2);
 assert(environment === 'live' || environment === 'test', 'Environment must be live or test');
+const outputPath = environment === 'test'
+  ? new URL('../private/play-global-catalog-test.json', import.meta.url)
+  : new URL('../private/play-global-catalog-live.json', import.meta.url);
 const snapshot = JSON.parse(readFileSync(new URL('./play-regional-prices.json', import.meta.url), 'utf8'));
 const legacy = JSON.parse(readFileSync(new URL('./play-catalog-draft.json', import.meta.url), 'utf8'));
 assert.equal(snapshot.version, 1);
@@ -32,6 +34,7 @@ assert.equal(legacy.products.length, 6);
 assert(legacy.products.every((p: any) => p.provider === 'play' && !p.quote.play.regionCode));
 const products = [...legacy.products.map((p: any) => ({...p, environment})), ...regional];
 const output = JSON.stringify({version: 2, products}, null, 2) + '\n';
+mkdirSync(new URL('../private/', import.meta.url), {recursive: true, mode: 0o700});
 writeFileSync(outputPath, output, {mode: 0o600});
 console.log(JSON.stringify({environment, regions: regions.length, products: products.length,
   currencyExponents: snapshot.currencyExponents,
