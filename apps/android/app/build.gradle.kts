@@ -17,6 +17,18 @@ require(muralPurchaseChannel in listOf("play", "stripe")) { "mural.purchaseChann
 val muralMinuteEnvironment = muralConfiguration("mural.minutePurchaseEnvironment").ifBlank { "test" }
 require(muralMinutePurchases in listOf("false", "true")) { "mural.minutePurchasesEnabled must be false or true" }
 require(muralMinuteEnvironment in listOf("test", "live")) { "mural.minutePurchaseEnvironment must be test or live" }
+val muralVersionCode = muralConfiguration("mural.versionCode").ifBlank { "13" }.toIntOrNull()
+require(muralVersionCode != null && muralVersionCode in 12..2_100_000_000) { "mural.versionCode must be a supported positive Android version code" }
+val muralApiOrigin = muralConfiguration("mural.apiOrigin")
+if (muralVersionCode == 12) {
+    require(muralMinutePurchases == "true" && muralPurchaseChannel == "play" && muralMinuteEnvironment == "test" &&
+        muralApiOrigin == "https://sandbox-api.mural.chat") { "version 12 is reserved for the internal Play sandbox build" }
+}
+if (muralVersionCode == 13 && muralMinutePurchases == "true" && muralPurchaseChannel == "play") {
+    require(muralMinuteEnvironment == "live" && muralApiOrigin == "https://api.mural.chat") {
+        "version 13 paid Play builds require the live service"
+    }
+}
 android {
     namespace = "chat.mural"
     compileSdk = 36
@@ -24,10 +36,10 @@ android {
         applicationId = "chat.mural.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
+        versionCode = muralVersionCode
         versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "MANAGED_API_ORIGIN", buildString(muralConfiguration("mural.apiOrigin")))
+        buildConfigField("String", "MANAGED_API_ORIGIN", buildString(muralApiOrigin))
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", buildString(muralConfiguration("mural.googleServerClientID")))
         buildConfigField("boolean", "MINUTE_PURCHASES_ENABLED", muralMinutePurchases)
         buildConfigField("String", "PURCHASE_CHANNEL", buildString(muralPurchaseChannel))

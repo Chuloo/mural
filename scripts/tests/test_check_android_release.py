@@ -388,25 +388,40 @@ class AndroidReleaseTests(unittest.TestCase):
                 self.assertEqual(status, 1)
                 self.assertFalse(result["passed"])
 
-    def test_checked_in_specs_separate_current_play_direct_and_historical_versions(self):
+    def test_checked_in_specs_separate_sandbox_production_direct_and_historical_versions(self):
         directory = release.ROOT / "release/android"
         current = json.loads((directory / "release-spec.json").read_text())
-        play = json.loads((directory / "specs/play-v11.json").read_text())
+        production = json.loads((directory / "specs/play-v13.json").read_text())
+        sandbox = json.loads((directory / "specs/play-v12.json").read_text())
+        previous_play = json.loads((directory / "specs/play-v11.json").read_text())
         direct = json.loads((directory / "specs/direct-v10.json").read_text())
         previous_direct = json.loads((directory / "specs/direct-v9.json").read_text())
         historical = json.loads((directory / "specs/play-v4.json").read_text())
         submitted = json.loads((directory / "evidence/play-submission-2026-09-14.json").read_text())
         build = (release.ROOT / "apps/android/app/build.gradle.kts").read_text()
-        self.assertRegex(build, rf"versionCode\s*=\s*{current['versionCode']}\b")
+        self.assertRegex(build, rf'mural\.versionCode"\)\.ifBlank\s*\{{\s*"{current["versionCode"]}"\s*\}}')
+        self.assertRegex(build, r"versionCode\s*=\s*muralVersionCode\b")
         self.assertEqual(historical["versionCode"], submitted["versionCode"])
         self.assertEqual(historical["scope"], "hosted-guest-preview")
         self.assertEqual(previous_direct["versionCode"], 9)
         self.assertEqual(direct["versionCode"], 10)
-        self.assertEqual(current["versionCode"], play["versionCode"])
+        self.assertEqual(current, production)
+        self.assertEqual(production["versionCode"], 13)
+        self.assertEqual(sandbox["versionCode"], 12)
+        self.assertEqual(previous_play["versionCode"], 11)
+        self.assertEqual(sandbox["candidate"], {
+            "track": "internal-testing", "purchaseChannel": "play", "purchaseEnvironment": "test",
+            "apiOrigin": "https://sandbox-api.mural.chat", "productionEligible": False,
+        })
+        self.assertEqual(production["candidate"], {
+            "track": "production", "purchaseChannel": "play", "purchaseEnvironment": "live",
+            "apiOrigin": "https://api.mural.chat", "productionEligible": True,
+        })
         self.assertGreater(current["versionCode"], direct["versionCode"])
         self.assertGreater(current["versionCode"], previous_direct["versionCode"])
         self.assertGreater(previous_direct["versionCode"], historical["versionCode"])
-        self.assertEqual(play["scope"], "hosted-minute-release")
+        self.assertEqual(production["scope"], "hosted-minute-release")
+        self.assertEqual(sandbox["scope"], "hosted-minute-release")
         self.assertEqual(previous_direct["scope"], "hosted-minute-release")
         self.assertEqual(direct["scope"], "hosted-minute-release")
 
