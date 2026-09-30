@@ -201,11 +201,31 @@ object LanguageRegistry {
             "cabin" to ConversationTheme("cabin", "周末出游", "A change of scene", "mountain.2", "Local life", "一起设想一个周末旅行，选择城市、海边或乡村，讨论实际安排和喜欢做的事情。", 2),
             "traditions" to ConversationTheme("traditions", "日常习俗", "Small customs, big stories", "flag", "Local life", "用普通话聊日常习俗和节日。比较学习者熟悉的地方，避免把任何一种习惯说成所有人的共同体验。", 2))
     )
-    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin)
+    private val turkish = LanguageModule(
+        id = "tr",
+        name = "Turkish",
+        nativeName = "Türkçe",
+        variety = "Turkey",
+        locale = "tr-TR",
+        greeting = "Merhaba!",
+        greetingWord = "merhaba",
+        speechGuidance = "Use clear, natural Standard Turkish pronunciation. Use 'sen' for friendly conversation and 'siz' when the situation calls for formality. Accept valid regional accents and vocabulary without treating a regional difference or a non-native accent alone as an error. Do not imitate a regional caricature.",
+        writingGuidance = "Use standard Turkish spelling with proper I/ı, İ/i, Ş/ş, Ç/ç, Ğ/ğ, Ö/ö, Ü/ü characters. Match the register to the situation and accept valid regional usage from the learner.",
+        lemmaGuidance = "Give nouns in their singular form and verbs in the dictionary (mastar) form, for example ev and gelmek. Preserve vowel harmony patterns and meaningful suffixes. Keep compound verbs distinct.",
+        topicPlaceholder = "Yemek, seyahat, müzik, Türkiye'de hayat…",
+        lookupUnavailableReply = "Şu anda bunu kontrol edemedim. İsterseniz konu hakkında genel olarak konuşabiliriz.",
+        teachingFocus = listOf("Greetings, introductions and useful everyday chunks such as benim adım and istiyorum.", "Everyday questions, vowel harmony, present tense and common sentence structures.", "Connected stories, past tense (miş/mış and di/di), future tense and familiar situations.", "Reasons and opinions, conditional clauses, reported speech and natural connectors.", "Nuance, hypothetical situations, passive and causal constructions, idiomatic phrasing.", "Flexible advanced discussion with precise, natural Turkish and appropriate tone."),
+        themeOverrides = mapOf("coffee" to ConversationTheme("coffee", "Bir kahve?", "Sıcak bir şey lütfen", "cup.and.saucer", "Everyday", "Bir kahvehane veya kafede buluşun. İçecek sipariş edin ve sohbet edin. Öğrencinin ilgi alanlarını sorun.", 0),
+            "groceries" to ConversationTheme("groceries", "Pazarda", "Biraz her şeyden", "basket", "Everyday", "Yerel bir pazarda veya markette alışveriş yapın. Miktar, fiyat ve nazik sorular pratik yapın.", 2),
+            "travel" to ConversationTheme("travel", "Durak", "Bir yerlere bilet", "tram", "Everyday", "Türkiye'de bir gezi planlayın. Ulaşım ve biletler hakkında konuşun.", 1),
+            "cabin" to ConversationTheme("cabin", "Bir hafta sonu kaçamağı", "Biraz huzur", "mountain.2", "Local life", "Hayali bir hafta sonu tatili planlayın: seyahat, yemek, yürüyüş ve birlikte dinlenme.", 2),
+            "traditions" to ConversationTheme("traditions", "Gelenekler", "Küçük gelenekler, büyük hikayeler", "flag", "Local life", "Türkiye'deki günlük gelenekler ve bayramlar hakkında konuşun. Farklı bölgeleri karşılaştırın.", 2))
+    )
+    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin, turkish)
     fun get(id: String) = all.firstOrNull { it.id == id }
 }
 
 object MeaningLanguages {
-    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian")
-    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!")[language] ?: "Hi!"
+    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian", "Turkish")
+    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!", "Turkish" to "Merhaba!")[language] ?: "Hi!"
 }

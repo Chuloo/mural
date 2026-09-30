@@ -11,6 +11,7 @@ final class LanguageTests: XCTestCase {
         archive.preferences.aiConsentVersion = 1
         XCTAssertEqual(try Archive.decode(archive.encoded()).preferences.aiConsentVersion, 1)
     }
+    /// Creates a test session record with sample evidence for the specified language.
     private func evidence(languageID: String, day: Int = 0, supported: Bool = false) -> SessionRecord {
         let date = Date(timeIntervalSince1970: 1_780_000_000 + Double(day) * 86400)
         var session = SessionRecord(languageID: languageID, themeID: "coffee")
@@ -222,5 +223,107 @@ final class LanguageTests: XCTestCase {
             XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: "und", confidence: 0.99))
             XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: "", confidence: 0.99))
         }
+    }
+
+    func testTurkishModuleIsRegistered() {
+        let turkish = LanguageModule.turkish
+        XCTAssertEqual(turkish.id, "tr")
+        XCTAssertEqual(turkish.name, "Turkish")
+        XCTAssertEqual(turkish.nativeName, "Türkçe")
+        XCTAssertEqual(turkish.locale, "tr-TR")
+        XCTAssertEqual(turkish.greeting, "Merhaba!")
+        XCTAssertEqual(turkish.greetingWord, "merhaba")
+        XCTAssertNotNil(LanguageRegistry.module(for: "tr"))
+    }
+
+    func testTurkishModuleHasCompleteCurriculum() {
+        let turkish = LanguageModule.turkish
+        XCTAssertEqual(turkish.teachingFocus.count, 6)
+        XCTAssertTrue(turkish.teachingFocus.allSatisfy { !$0.isEmpty })
+        XCTAssertFalse(turkish.speechGuidance.isEmpty)
+        XCTAssertFalse(turkish.writingGuidance.isEmpty)
+        XCTAssertFalse(turkish.lemmaGuidance.isEmpty)
+        XCTAssertFalse(turkish.lookupUnavailableReply.isEmpty)
+    }
+
+    func testTurkishThemeOverridesMatchSharedThemeIDs() {
+        let turkish = LanguageModule.turkish
+        let sharedIDs = Set(ConversationTheme.shared.map(\.id))
+        for (key, override) in turkish.themeOverrides {
+            XCTAssertTrue(sharedIDs.contains(key), "Override key '\(key)' must match a shared theme ID")
+            XCTAssertEqual(key, override.id)
+            XCTAssertFalse(override.situation.isEmpty)
+        }
+    }
+
+    func testTurkishProgressIsolation() {
+        let turkishSessions = [evidence(languageID: "tr"), evidence(languageID: "tr", day: 2)]
+        let norwegianSessions = [evidence(languageID: "nb")]
+        let allSessions = turkishSessions + norwegianSessions
+
+        let turkish = LearningEngine.project(allSessions, languageID: "tr", now: turkishSessions[1].startedAt)
+        let norwegian = LearningEngine.project(allSessions, languageID: "nb", now: turkishSessions[1].startedAt)
+
+        XCTAssertEqual(turkish.challenge, 1)
+        XCTAssertEqual(turkish.words.first?.bars, 2)
+        XCTAssertEqual(norwegian.challenge, 0)
+        XCTAssertEqual(norwegian.observationCount, 1)
+        XCTAssertNotEqual(norwegian.nextGoal, "A goal for tr")
+    }
+
+    func testTurkishArchiveRoundTrip() throws {
+        var archive = Archive()
+        archive.preferences.learningLanguageID = "tr"
+        archive.sessions = [evidence(languageID: "tr"), evidence(languageID: "tr", day: 2)]
+        let restored = try Archive.decode(archive.encoded())
+        XCTAssertEqual(restored.preferences.learningLanguageID, "tr")
+        XCTAssertEqual(restored.sessions.map(\.languageID), ["tr", "tr"])
+        XCTAssertEqual(LearningEngine.project(restored.sessions, languageID: "tr").words.count, 1)
+    }
+
+    func testTurkishHiddenWordsIsolation() {
+        let turkishSession = evidence(languageID: "tr")
+        let norwegianSession = evidence(languageID: "nb")
+        let turkishID = turkishSession.assessments[0].words[0].key
+
+        let turkish = LearningEngine.project([turkishSession, norwegianSession], languageID: "tr", hiddenWords: [turkishID])
+        let norwegian = LearningEngine.project([turkishSession, norwegianSession], languageID: "nb", hiddenWords: [turkishID])
+
+        XCTAssertTrue(turkish.words.isEmpty)
+        XCTAssertEqual(norwegian.words.count, 1)
+    }
+
+    func testTurkishTeachingPolicyPrompts() {
+        let language = LanguageModule.turkish
+        let learner = LearningEngine.project([], languageID: language.id)
+        let prompts = [
+            TeachingPolicy.voice(language: language, learner: learner, theme: nil, interests: "", meaningLanguage: "English"),
+            TeachingPolicy.assessment(language: language),
+            TeachingPolicy.greeting(language: language),
+            TeachingPolicy.help(language: language),
+            TeachingPolicy.redirect(language: language),
+            TeachingPolicy.translation(language: language, meaningLanguage: "English"),
+            TeachingPolicy.delegation(language: language),
+            TeachingPolicy.typedReply(language: language),
+            TeachingPolicy.lookup(language: language, meaningLanguage: "English"),
+            TeachingPolicy.currentTopic(language: language)
+        ]
+        for prompt in prompts {
+            XCTAssertTrue(prompt.contains("Turkish"))
+            XCTAssertFalse(prompt.contains("Norwegian"))
+            XCTAssertFalse(prompt.contains("Bokmål"))
+        }
+        XCTAssertEqual(language.locale, "tr-TR")
+    }
+
+    func testTurkishMeaningLanguageGreeting() {
+        XCTAssertEqual(MeaningLanguages.greeting(in: "Turkish"), "Merhaba!")
+        XCTAssertTrue(MeaningLanguages.all.contains("Turkish"))
+    }
+
+    func testTurkishWithMeaningSupportIsAssisted() {
+        let session = evidence(languageID: "tr", supported: true)
+        XCTAssertEqual(LearningEngine.validate(session.assessments[0], session: session)?.words.first?.kind, .assisted)
+        XCTAssertEqual(LearningEngine.project([session], languageID: "tr").words.first?.independentCount, 0)
     }
 }
