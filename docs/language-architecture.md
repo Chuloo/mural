@@ -15,8 +15,12 @@ Language-specific content lives in `apps/ios/Core/Languages/`. Each module defin
 | `pt` | Brazilian Portuguese | `pt-BR` |
 | `zh` | Standard Mandarin, Simplified Chinese | `zh-CN` |
 | `sr` | Standard Serbian, ekavian, Latin script | `sr-Latn-RS` |
+| `el` | Modern Standard Greek from Greece | `el-GR` |
+| `tl` | Tagalog/Filipino from the Philippines | `tl-PH` |
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
+
+Serbian accepts Latin and Cyrillic input while teaching Latin Ekavian output. Greek preserves tonos, diaeresis and final sigma, and uses the first-person present as its verb citation form. Tagalog keeps aspect and voice distinctions separate and accepts natural code-switching as support. Text-only language detection is disabled for Tagalog because the system detector can misidentify it as Indonesian; target-language prompts still apply. [Language details and limits](serbian-greek-tagalog.md) describe these choices.
 
 `TeachingPolicy` combines a module with the shared teaching rules. Voice, assessment, typed replies, help, word lookup, subtitles and current-topic search all use that policy. The audio transport and provider connection remain shared. A module can override selected theme IDs while inheriting the common conversation catalog.
 
@@ -28,7 +32,7 @@ Mandarin builds on [richardguerre's contribution in #4](https://github.com/Chulo
 
 Pinyin appears separately below selectable Chinese text, with a Show/Hide control. Word links use Chinese word boundaries. Lemmas stay in characters, observed forms and quotations stay unchanged, and generated pinyin never becomes learning evidence. Script identifiers such as `zh-Hans` and `zh-Hant` are accepted by the spoken-language check, so Chinese text does not trigger a false language redirect. Simplified Chinese is also available for meaning subtitles.
 
-These are compiled modules. Adding one ships with an app update; there is no remote module download or extra service. Every new language needs a proficient-speaker teaching and pronunciation review. The Android contribution is not integrated in this checkout, so there is no Android generated catalog to update here.
+These are compiled modules. Adding one ships with an app update and matching hosted locale support; there is no remote module download. Every new language needs a proficient-speaker teaching and pronunciation review. Regenerate Android's catalog after changing a Swift module.
 
 See [how to add a language](add-language.md) for the implementation steps.
 

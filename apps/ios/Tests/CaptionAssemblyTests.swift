@@ -12,7 +12,9 @@ final class CaptionAssemblyTests: XCTestCase {
             ("it", ["È una conver", "sazione interes", "sante."], "È una conversazione interessante."),
             ("pt", ["Estou apren", "dendo portu", "guês."], "Estou aprendendo português."),
             ("zh", ["我", "喜欢", "学习", "中文。", "你呢？"], "我喜欢学习中文。你呢？"),
-            ("sr", ["Volim da uči", "m srp", "ski."], "Volim da učim srpski.")
+            ("sr", ["Volim da uči", "m srp", "ski."], "Volim da učim srpski."),
+            ("el", ["Πώς εί", "σαι; Μα", "ΐου."], "Πώς είσαι; Μαΐου."),
+            ("tl", ["Mag-", "aaral ako araw-", "araw."], "Mag-aaral ako araw-araw.")
         ]
         for (id, parts, expected) in examples {
             XCTAssertNotNil(LanguageRegistry.module(for: id))

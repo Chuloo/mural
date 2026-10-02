@@ -65,7 +65,7 @@ class CoreTest {
         assertEquals(2,merged.sessions.size)
     }
     @Test fun languageRegistryAndThemesStayStable() {
-        assertEquals(listOf("nb","es","en","fr","de","it","pt","zh","sr"),LanguageRegistry.all.map { it.id })
+        assertEquals(listOf("nb","es","en","fr","de","it","pt","zh","sr","el","tl"),LanguageRegistry.all.map { it.id })
         assertEquals(24,Themes.shared.map { it.id }.toSet().size)
         assertEquals("Salut !",LanguageRegistry.get("fr")!!.greeting)
         for ((id, locale, greeting) in listOf(Triple("de","de-DE","Hallo!"),Triple("it","it-IT","Ciao!"),Triple("pt","pt-BR","Olá!"),Triple("zh","zh-CN","你好！"),Triple("sr","sr-Latn-RS","Zdravo!"))) {
@@ -78,4 +78,23 @@ class CoreTest {
         assertEquals("Norwegian",LanguageRegistry.get("nb")!!.name)
         assertEquals("Hei!",MeaningLanguages.greeting("Norwegian"))
     }
+    @Test fun tagalogContentAndArchiveUseOneNamespaceWithEnglishSupport() {
+        val language = LanguageRegistry.get("tl")!!
+        assertEquals("Tagalog (Filipino) · Philippines", language.settingsTitle)
+        assertEquals("tl-PH", language.locale)
+        assertEquals("Kumusta!", language.greeting)
+        assertEquals(6, language.teachingFocus.size)
+        assertEquals("Kape tayo?", language.themes.first { it.id == "coffee" }.title)
+        assertNull(LanguageRegistry.get("fil"))
+        assertTrue(TeachingPolicy.translation(language, "English").contains("into English"))
+        assertTrue(TeachingPolicy.assessment(language).contains("Use language tl for target-language evidence"))
+        val archive = Archive(sessions = mutableListOf(evidence(language = "tl"), evidence(language = "es")),
+            preferences = Preferences(learningLanguageID = "tl", meaningLanguage = "English"))
+        val restored = ArchiveCodec.decode(ArchiveCodec.encode(archive))
+        assertEquals("tl", restored.preferences.learningLanguageID)
+        assertEquals("English", restored.preferences.meaningLanguage)
+        assertEquals("tl|radio|radio", LearningEngine.project(restored.sessions, languageID = "tl").words.single().id)
+        assertEquals("es|radio|radio", LearningEngine.project(restored.sessions, languageID = "es").words.single().id)
+    }
+
 }

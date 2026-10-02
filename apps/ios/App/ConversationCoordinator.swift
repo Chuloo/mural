@@ -158,7 +158,8 @@ import MuralCore
         }
     }
     func start() {
-        guard !isRunning else { return }
+        guard !isRunning, UIApplication.shared.applicationState == .active,
+              UIApplication.shared.isProtectedDataAvailable else { return }
         if hasContinuation && !continuationReady {
             notice = "Updating your minutes. You can continue this conversation shortly."
             Task { await refreshContinuation() }; return
@@ -184,6 +185,7 @@ import MuralCore
         let instructions = TeachingPolicy.voice(language: language, learner: learner, theme: selectedTheme, interests: store.preferences.interests, meaningLanguage: store.preferences.meaningLanguage)
         api.conversationProvider = conversationProvider
         api.hostedLease = nil
+        if conversationProvider == .personalKey { api.beginVoiceCredential() }
         connectionTask = Task { [weak self] in
             guard let self else { return }
             var checkingHostedAccess = self.conversationProvider == .hosted
@@ -355,6 +357,9 @@ import MuralCore
     }
     func background() {
         guard isRunning else { return }
+        // A live audio session owns its microphone until deliberately ended, interrupted,
+        // or closed by the existing silence/duration policy. Locking is not inactivity.
+        if transport.started && (state == .active || state == .closing) { save(); return }
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Close Mural conversation") { [weak self] in
             Task { @MainActor in self?.finish(final: false) }
         }
@@ -375,6 +380,7 @@ import MuralCore
         save(); state = .ended
         if let session { finalAssessments.submit(session) }
         scheduleTranslation()
+        api.endVoiceCredential()
         if let boundary, let session {
             continuationSession = session; continuationOwner = boundary.accountID; continuationReady = false
             if let data = try? JSONEncoder().encode(ConversationContinuationCheckpoint(sessionID: session.id, accountID: boundary.accountID)) {
@@ -557,14 +563,14 @@ import MuralCore
         }
     }
     #if DEBUG
-    func prepareEndedPreview() {
+    func prepareConversationPreview(active: Bool) {
         guard ProcessInfo.processInfo.arguments.contains("--preview") else { return }
         if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--preview-language=") }) {
             selectLanguage(String(argument.dropFirst("--preview-language=".count)))
         }
         selectedTheme = language.themes.first { $0.id == "coffee" }
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
-        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "sr": "Volim kafu."]
+        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "sr": "Volim kafu.", "el": "Μου αρέσει ο καφές.", "tl": "Gusto ko ng kape."]
         record.append(Fragment(speaker: .assistant, text: sample[language.id] ?? language.greeting, startMS: 0, endMS: 1000))
         record.translations[MeaningRequest.cacheKey(revisionKey: record.passages[0].revisionKey, language: "English")] = "I like coffee."
         let arguments = ProcessInfo.processInfo.arguments
@@ -573,7 +579,9 @@ import MuralCore
             record.providerID = "fixture-only"
             notice = arguments.contains("--test-inactivity") ? "Mural ended this quiet session to avoid running up usage." : "Mural will make that a little simpler."
         }
-        session = record; state = .closing; finish(final: !checkNotice)
+        session = record
+        if active { state = .active; scheduleTranslation() }
+        else { state = .closing; finish(final: !checkNotice) }
         if arguments.contains("--preview-free-boundary") {
             cancelReset(); continuationSession = record; continuationOwner = UUID()
             continuationNeedsMinutes = arguments.contains("--preview-continuation-insufficient")
@@ -680,7 +688,8 @@ import MuralCore
         }
     }
     private func checkLanguage() {
-        guard let p = assistantPassage, p.text.count > 70, p.id != lastLanguageCheck else { return }
+        guard TeachingPolicy.supportsSpeechLanguageDetection(language: language),
+              let p = assistantPassage, p.text.count > 70, p.id != lastLanguageCheck else { return }
         let recognizer = NLLanguageRecognizer(); recognizer.processString(p.text)
         if let detected = recognizer.languageHypotheses(withMaximum: 2).max(by: { $0.value < $1.value }),
            TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: detected.key.rawValue, confidence: detected.value) {

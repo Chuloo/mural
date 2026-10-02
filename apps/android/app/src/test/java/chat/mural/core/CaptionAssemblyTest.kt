@@ -14,7 +14,9 @@ class CaptionAssemblyTest {
             Triple("it", listOf("È una conver", "sazione interes", "sante."), "È una conversazione interessante."),
             Triple("pt", listOf("Estou apren", "dendo portu", "guês."), "Estou aprendendo português."),
             Triple("zh", listOf("我", "喜欢", "学习", "中文。", "你呢？"), "我喜欢学习中文。你呢？"),
-            Triple("sr", listOf("Volim da uči", "m srp", "ski."), "Volim da učim srpski.")
+            Triple("sr", listOf("Volim da uči", "m srp", "ski."), "Volim da učim srpski."),
+            Triple("el", listOf("Πώς εί", "σαι; Μα", "ΐου."), "Πώς είσαι; Μαΐου."),
+            Triple("tl", listOf("Mag-", "aaral ako araw-", "araw."), "Mag-aaral ako araw-araw.")
         )
         examples.forEach { (id, parts, expected) ->
             assertNotNull(LanguageRegistry.get(id))
