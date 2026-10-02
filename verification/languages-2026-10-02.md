@@ -39,12 +39,25 @@ The matching API was deployed on October 2 at 18:08 UTC, before live phone testi
 
 The deployed module matches the locally tested compiled module. Public health and readiness returned 200; database readiness, hosted voice, guest minutes and live payments remained enabled. The deployed provider accepted all 11 canonical native locales and rejected six invalid aliases. Private configuration and mounted feature files retained their hashes. No sanitized application errors were found in the deployment verification window. Later native-app and test changes do not alter the deployed API source.
 
-## Connected phones and remaining checks
+## Connected phones: October 3 retry
 
-The signed test build is installed on the connected iPhone 16 Pro running iOS 27.0. Its saved configuration and learning data were preserved. On the later device attempt, Mural launched through iPhone Mirroring, but Apple displayed “iPhone microphone is not available from Mac.” [Apple documents this restriction](https://support.apple.com/en-us/120421). Mirroring was closed for physical voice testing; iOS then rejected a direct launch because the phone was locked. The verification harness now waits for an active app with protected storage available and records those conditions with its connection state. The updated signed build and installation pass, but no completed live voice result is claimed.
+Both phones reconnected. The iPhone 16 Pro runs iOS 27.0; the Samsung Galaxy S9 runs Android 10. Existing learning data and the Android Play installation were preserved. iPhone Mirroring remained closed for live checks because [Apple disables microphone access while mirroring](https://support.apple.com/en-us/120421).
 
-The Samsung Galaxy S9 runs Android 10. An earlier interface-test attempt could not find the app hierarchy while the phone was asleep. The later USB connection appeared briefly and disconnected; the requested order is to complete iPhone testing first. Neither Android attempt counts as a successful physical-device check.
+| Physical check | Observed result |
+| --- | --- |
+| iPhone Serbian | Live flow passed: speaker audio, two typed replies, meanings, lookup, supported learning evidence, archive/language switching and audio release |
+| iPhone Tagalog | Same live flow passed; Apple's detector returned Indonesian, so the separate detector-dependent `passed` flag was false as expected |
+| iPhone Greek | Live flow passed on retry after fixing the harness to wait for the latest reply's assessment; its earlier condition could stop at an English-support assessment with no target words |
+| iPhone locked-screen Greek | Passed: protected storage locked, two new spoken replies and a lookup during 30 seconds in the background, same session retained, then closed and released audio in the background |
+| iPhone spoken reply while locked | The user confirmed locking the phone and speaking. The report recorded non-typed speech and a new assistant reply, 35 seconds in the background, the same session and audio release. Its strict combined result was false because protected storage was still available at the instant speech arrived; it became locked later |
+| Samsung interface suite | 83 passed, no failures, one expected skip: per-app Spanish locale setup requires Android 13; this phone runs Android 10 |
+| Samsung hosted live setup | Stopped before connecting: the API was reachable, but the remaining daily welcome-minute funding capacity could not cover a new allowance. The spending limit was left unchanged |
+| Samsung personal-key live checks | Setup reached the key-entry timeout for all three cases; no voice call began. Awaiting the user's existing key in the separate Mural Verify app |
 
-The PR remains a draft pending the authorized live checks after device access is restored. The device flows described in [build and test](../docs/build-and-test.md) use temporary or separate learning storage. They must verify received voice, meanings, lookup, the same session on return and release of audio and service resources on End. Actual screen dim/lock and interruption checks remain required; synthetic typed turns do not verify recognition of human speech. A competent speaker must still assess accent, stress, pronunciation and correction quality. Tagalog text detection is recorded as unreliable and does not redirect valid Tagalog output.
+The iPhone spoken-check diagnostics now distinguish background state at speech input and response from protected-storage timing. Its audio sample is limited to the spoken-response window, before further scripted replies. The revised harness compiles; the earlier observation is not relabelled as a passing result under the revised fields. A missed 15-second lock window also led to a longer human-action window with bounded scripted turns. These changes affect explicit verification builds only.
+
+The Android runner supports the owner-entered personal key without reading credentials from the Play app or accepting keys in test arguments. Its waiting loop advances the Compose test clock so Settings remains usable. Opt-in screen-off and controlled audio-focus interruption checks are prepared; completed results remain required.
+
+The PR remains a draft. Android live voice, screen-off microphone/playback, return after unlocking and interruption checks remain outstanding, as do iPhone interruption and a longer auto-lock/return check. The iPhone observation verifies a brief spoken reply while the user confirmed the screen was locked; it does not establish native-speaker pronunciation quality in all three languages. A competent speaker must still assess accent, stress, pronunciation and correction quality. The existing silence timeout remains unchanged pending the user's choice.
 
 The next Android store publication also needs the foreground-service declaration and demonstration in Play Console. This PR has not been merged and no phone store release has been published.

@@ -31,6 +31,9 @@ extension AudioVerification {
             var lookupReturned = false
             var pinyinAvailable = false
             var supportedEvidenceOnly = false
+            var assessedLastReply = false
+            var assessmentCount = 0
+            var acceptedWordCount = 0
             var archiveRoundTrip = false
             var switchedAwayAndBack = false
             var cachedMeaningAfterEnd = false
@@ -40,6 +43,16 @@ extension AudioVerification {
             var backgroundObserved = false
             var protectedStorageLocked = false
             var backgroundHelperReturned = false
+            var backgroundReplies = 0
+            var backgroundAudioPeak = 0.0
+            var backgroundSeconds = 0.0
+            var spokenCheckRequested = false
+            var spokenInputReceived = false
+            var spokenInputInBackground = false
+            var protectedStorageLockedAtSpeech = false
+            var spokenReplyReceived = false
+            var spokenReplyInBackground = false
+            var spokenReplyAudioPeak = 0.0
             var sameSessionInBackground = false
             var endedInBackground = false
             var peakAudioLevel = 0.0
@@ -47,17 +60,21 @@ extension AudioVerification {
             var failure: String?
             var flowPassed: Bool {
                 connected && receivedGreeting && typedReplies == 2 && translated &&
-                lookupReturned && (languageID != "zh" || pinyinAvailable) && supportedEvidenceOnly &&
+                lookupReturned && (languageID != "zh" || pinyinAvailable) && assessedLastReply && supportedEvidenceOnly &&
                 archiveRoundTrip && switchedAwayAndBack && cachedMeaningAfterEnd && closed && audioReleased &&
                 peakAudioLevel > 0.001 && outputPorts.contains(AVAudioSession.Port.builtInSpeaker.rawValue) && failure == nil &&
-                (!backgroundRequested || (backgroundObserved && backgroundHelperReturned && sameSessionInBackground && endedInBackground))
+                (!spokenCheckRequested || (spokenInputReceived && spokenInputInBackground && spokenReplyReceived && spokenReplyInBackground && spokenReplyAudioPeak > 0.001)) &&
+                (!backgroundRequested || (backgroundObserved && backgroundHelperReturned && sameSessionInBackground && endedInBackground &&
+                    backgroundReplies == 2 && backgroundAudioPeak > 0.001 && backgroundSeconds >= 30))
             }
             var passed: Bool { flowPassed && languageDetectionReliable && targetLanguageDetected }
         }
         let id = coordinator.language.id
         var report = Report(languageID: id, languageDetectionReliable: TeachingPolicy.supportsSpeechLanguageDetection(language: coordinator.language))
         report.backgroundRequested = ProcessInfo.processInfo.arguments.contains("--verify-background")
+        report.spokenCheckRequested = report.backgroundRequested && ProcessInfo.processInfo.arguments.contains("--verify-spoken-background")
         let destination = URL.documentsDirectory.appendingPathComponent("language-verification-\(id).json")
+        var samplingSpokenReply = false
         func write() {
             // Encode computed pass status explicitly alongside the report.
             struct Output: Encodable { let passed: Bool; let flowPassed: Bool; let report: Report }
@@ -67,6 +84,11 @@ extension AudioVerification {
         }
         func sampleAudio() {
             report.peakAudioLevel = max(report.peakAudioLevel, coordinator.outputLevel)
+            if report.backgroundObserved && UIApplication.shared.applicationState == .background {
+                report.backgroundAudioPeak = max(report.backgroundAudioPeak, coordinator.outputLevel)
+                report.protectedStorageLocked = report.protectedStorageLocked || !UIApplication.shared.isProtectedDataAvailable
+                if samplingSpokenReply { report.spokenReplyAudioPeak = max(report.spokenReplyAudioPeak, coordinator.outputLevel) }
+            }
             if coordinator.outputLevel > 0.001 {
                 report.outputPorts.formUnion(AVAudioSession.sharedInstance().currentRoute.outputs.map { $0.portType.rawValue })
             }
@@ -145,9 +167,57 @@ extension AudioVerification {
             if report.backgroundRequested {
                 let sessionID = coordinator.session?.id
                 report.status = "ready-for-background"; write()
-                report.backgroundObserved = await waitFor(15) { UIApplication.shared.applicationState == .background }
+                // Give a person time to react to the cue. Short scripted turns keep
+                // this test active without changing the product's silence policy.
+                for attempt in 0..<4 {
+                    report.backgroundObserved = await waitFor(12) { UIApplication.shared.applicationState == .background }
+                    if report.backgroundObserved || coordinator.state != .active { break }
+                    if attempt < 3 {
+                        await coordinator.sendTyped("Give me one more short example of a polite coffee order.")
+                        await settleCaption()
+                    }
+                }
                 if report.backgroundObserved {
+                    let backgroundStarted = Date()
                     report.protectedStorageLocked = !UIApplication.shared.isProtectedDataAvailable
+                    if report.spokenCheckRequested {
+                        let spokenBefore = coordinator.session?.fragments.filter { $0.speaker == .user && !$0.typed }.count ?? 0
+                        let repliesBefore = coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0
+                        if coordinator.isMuted { coordinator.toggleMute() }
+                        report.status = "ready-for-speech"; write()
+                        report.spokenInputReceived = await waitFor(25) {
+                            (coordinator.session?.fragments.filter { $0.speaker == .user && !$0.typed }.count ?? 0) > spokenBefore
+                        }
+                        report.spokenInputInBackground = report.spokenInputReceived && UIApplication.shared.applicationState == .background
+                        // Secure-storage availability can lag a physical screen lock.
+                        // Record it separately from the lifecycle state at speech input.
+                        report.protectedStorageLockedAtSpeech = report.spokenInputReceived && !UIApplication.shared.isProtectedDataAvailable
+                        if report.spokenInputReceived {
+                            samplingSpokenReply = true
+                            report.spokenReplyReceived = await waitFor(25) {
+                                (coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0) > repliesBefore
+                            }
+                            report.spokenReplyInBackground = report.spokenReplyReceived && UIApplication.shared.applicationState == .background
+                            await settleCaption()
+                            samplingSpokenReply = false
+                        }
+                        if !coordinator.isMuted { coordinator.toggleMute() }
+                    }
+                    // New replies after background entry verify ongoing voice delivery.
+                    // Typed input deliberately keeps human microphone recognition a separate check.
+                    for reply in ["Ask me one short question about coffee.", "Give me one short example of a polite order."] {
+                        let before = coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0
+                        await coordinator.sendTyped(reply)
+                        if await waitFor(25, condition: { (coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0) > before }) {
+                            report.backgroundReplies += 1
+                            await settleCaption()
+                        }
+                        let pauseUntil = Date().addingTimeInterval(5)
+                        _ = await waitFor(6) { Date() >= pauseUntil }
+                    }
+                    let minimumEnd = backgroundStarted.addingTimeInterval(30)
+                    _ = await waitFor(max(0, minimumEnd.timeIntervalSinceNow) + 1) { Date() >= minimumEnd }
+                    report.backgroundSeconds = Date().timeIntervalSince(backgroundStarted)
                     do {
                         let result = try await coordinator.lookup(word: coordinator.language.greetingWord, sentence: coordinator.caption)
                         report.backgroundHelperReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -166,10 +236,18 @@ extension AudioVerification {
         let meaning = coordinator.meaning
         coordinator.toggleMeaning(); coordinator.toggleMeaning()
         report.cachedMeaningAfterEnd = !meaning.isEmpty && coordinator.meaning == meaning && !coordinator.translating
-        // Let the final assessment finish before checking actual saved evidence.
-        _ = await waitFor(12) { coordinator.store.sessions.contains { !$0.assessments.isEmpty } }
+        // An earlier support-language assessment can contain no target words.
+        // Wait for the last reply, including the final queue's full 15-second deadline.
+        report.assessedLastReply = await waitFor(18) {
+            guard let current = coordinator.session,
+                  let last = current.passages.last(where: { $0.speaker == .user }),
+                  let saved = coordinator.store.sessions.first(where: { $0.id == current.id }) else { return false }
+            return saved.assessments.contains { $0.passageID == last.id && $0.revisionKey == last.revisionKey }
+        }
         let saved = coordinator.store.sessions.filter { $0.languageID == id }
         let words = saved.flatMap { record in record.assessments.compactMap { LearningEngine.validate($0, session: record) }.flatMap(\.words) }
+        report.assessmentCount = saved.reduce(0) { $0 + $1.assessments.count }
+        report.acceptedWordCount = words.count
         report.supportedEvidenceOnly = !words.isEmpty && words.allSatisfy { $0.language == id && $0.kind != .independent }
         if let data = try? coordinator.store.exportData(), let restored = try? Archive.decode(data) {
             report.archiveRoundTrip = restored.sessions.count == saved.count && restored.sessions.allSatisfy { $0.languageID == id }
