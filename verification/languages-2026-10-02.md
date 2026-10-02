@@ -15,11 +15,11 @@ PR: [#140](https://github.com/Chuloo/mural/pull/140). Includes [#139](https://gi
 | Android release package validation | Passed for version code 15; no store release published |
 | Isolated Android live-verification APK and test APK | Built successfully; device run pending |
 | Signed iPhone build and update installation | Passed; existing installation retained |
-| iPhone simulator interface tests | All 52 cases passed across the initial run and targeted retests; a final combined run is in progress |
+| iPhone simulator interface tests | 52 passed in the final combined run; no failures, completed at 18:44 UTC |
 
 Shared fixtures cover Cyrillic and Latin Serbian, Greek tonos/diaeresis and question marks, Tagalog contractions and optional marks, both Unicode normalization forms, quoted evidence, word selection and archives. Hosted funding tests create and close sessions in each new locale using both credits and minutes. Credential tests cover locked helper access, expiration and saved-key replacement/deletion.
 
-The first CI run passed Checks, Contracts, Secret scan and Android build/release jobs. Its Android 16 emulator ran 88 tests and failed one background-service test because notification permission was absent. The test setup now grants Android 13+ notification permission. A new case also checks service restart ownership and stale notification End actions. CI must pass on the updated PR head before this draft is marked ready.
+The first CI run passed Checks, Contracts, Secret scan and Android build/release jobs. Its Android 16 emulator ran 88 tests and failed one background-service test waiting for a notification; the setup lacked notification permission. The test setup now grants Android 13+ notification permission. A new case also checks service restart ownership and stale notification End actions. The [PR's Checks tab](https://github.com/Chuloo/mural/pull/140/checks) records results for the latest head. Required CI must pass before this draft is marked ready.
 
 ## Production server
 
@@ -41,6 +41,6 @@ The deployed module matches the locally tested compiled module. Public health an
 
 The signed test build is installed on the connected iPhone 16 Pro running iOS 27.0. Its saved configuration and learning data were preserved. iOS rejected the live test launch because the phone was locked. The connected Samsung Galaxy S9 runs Android 10; an interface-test attempt could not find the app hierarchy while the phone was asleep. Neither attempt counts as a successful device check. The Mac is also locked, preventing both mirrors from being controlled.
 
-The PR remains a draft pending fresh CI, the final combined iPhone simulator run and the authorized live checks after device access is restored. The device flows described in [build and test](../docs/build-and-test.md) use temporary or separate learning storage. They must verify received voice, meanings, lookup, the same session on return and release of audio and service resources on End. Actual screen dim/lock and interruption checks remain required; synthetic typed turns do not verify recognition of human speech. A competent speaker must still assess accent, stress, pronunciation and correction quality. Tagalog text detection is recorded as unreliable and does not redirect valid Tagalog output.
+The PR remains a draft pending the authorized live checks after device access is restored. The device flows described in [build and test](../docs/build-and-test.md) use temporary or separate learning storage. They must verify received voice, meanings, lookup, the same session on return and release of audio and service resources on End. Actual screen dim/lock and interruption checks remain required; synthetic typed turns do not verify recognition of human speech. A competent speaker must still assess accent, stress, pronunciation and correction quality. Tagalog text detection is recorded as unreliable and does not redirect valid Tagalog output.
 
 The next Android store publication also needs the foreground-service declaration and demonstration in Play Console. This PR has not been merged and no phone store release has been published.
