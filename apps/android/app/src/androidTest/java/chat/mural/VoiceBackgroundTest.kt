@@ -21,8 +21,12 @@ class VoiceBackgroundTest {
 
     @Before fun prepare() {
         assertEquals("chat.mural.android.uitest", compose.activity.packageName)
-        instrumentation.uiAutomation.executeShellCommand("pm grant chat.mural.android.uitest android.permission.RECORD_AUDIO")
-            .use { descriptor -> java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() } }
+        val permissions = mutableListOf("android.permission.RECORD_AUDIO")
+        if (android.os.Build.VERSION.SDK_INT >= 33) permissions += "android.permission.POST_NOTIFICATIONS"
+        permissions.forEach { permission ->
+            instrumentation.uiAutomation.executeShellCommand("pm grant chat.mural.android.uitest $permission")
+                .use { descriptor -> java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() } }
+        }
 
         vm = compose.awaitHistoryLoaded()
         compose.runOnIdle {
@@ -92,5 +96,31 @@ class VoiceBackgroundTest {
             assertFalse(vm.isRunning)
             assertFalse(VoiceConversationService.holds(vm.session?.id))
         }
+    }
+
+    @Test fun anOldNotificationCannotEndTheNextConversationDuringQuickServiceRestart() {
+        val notifications = compose.activity.getSystemService(NotificationManager::class.java)
+        val first = SessionRecord(languageID = "sr")
+        lateinit var next: SessionRecord
+        instrumentation.runOnMainSync { VoiceConversationService.start(compose.activity, first.id) { fail("An old call ended the new one") } }
+        waitFor { notifications.activeNotifications.any { it.id == 139 } }
+        val oldEnd = notifications.activeNotifications.single { it.id == 139 }.notification.actions.single().actionIntent
+        instrumentation.runOnMainSync {
+            VoiceConversationService.stop(compose.activity, first.id)
+            next = SessionRecord(languageID = "tl")
+            state("session", next); state("state", "active"); voice(true)
+            VoiceConversationService.start(compose.activity, next.id) { vm.end() }
+        }
+        waitFor {
+            notifications.activeNotifications.any { it.id == 139 && it.notification.actions.single().actionIntent != oldEnd }
+        }
+        oldEnd.send()
+        Thread.sleep(250)
+        instrumentation.runOnMainSync {
+            assertTrue(VoiceConversationService.holds(next.id))
+            assertEquals("active", vm.state)
+        }
+        notifications.activeNotifications.single { it.id == 139 }.notification.actions.single().actionIntent.send()
+        waitFor { !VoiceConversationService.holds(next.id) && notifications.activeNotifications.none { it.id == 139 } }
     }
 }

@@ -4,6 +4,7 @@ import NaturalLanguage
 import AVFoundation
 import WebRTC
 import MuralCore
+import UIKit
 
 extension AudioVerification {
     /// Explicit device check using synthetic typed turns and the existing in-memory verification store.
@@ -29,6 +30,12 @@ extension AudioVerification {
             var cachedMeaningAfterEnd = false
             var closed = false
             var audioReleased = false
+            var backgroundRequested = false
+            var backgroundObserved = false
+            var protectedStorageLocked = false
+            var backgroundHelperReturned = false
+            var sameSessionInBackground = false
+            var endedInBackground = false
             var peakAudioLevel = 0.0
             var outputPorts: Set<String> = []
             var failure: String?
@@ -36,12 +43,14 @@ extension AudioVerification {
                 connected && receivedGreeting && typedReplies == 2 && translated &&
                 lookupReturned && (languageID != "zh" || pinyinAvailable) && supportedEvidenceOnly &&
                 archiveRoundTrip && switchedAwayAndBack && cachedMeaningAfterEnd && closed && audioReleased &&
-                peakAudioLevel > 0.001 && outputPorts.contains(AVAudioSession.Port.builtInSpeaker.rawValue) && failure == nil
+                peakAudioLevel > 0.001 && outputPorts.contains(AVAudioSession.Port.builtInSpeaker.rawValue) && failure == nil &&
+                (!backgroundRequested || (backgroundObserved && backgroundHelperReturned && sameSessionInBackground && endedInBackground))
             }
             var passed: Bool { flowPassed && languageDetectionReliable && targetLanguageDetected }
         }
         let id = coordinator.language.id
         var report = Report(languageID: id, languageDetectionReliable: TeachingPolicy.supportsSpeechLanguageDetection(language: coordinator.language))
+        report.backgroundRequested = ProcessInfo.processInfo.arguments.contains("--verify-background")
         let destination = URL.documentsDirectory.appendingPathComponent("language-verification-\(id).json")
         func write() {
             // Encode computed pass status explicitly alongside the report.
@@ -116,7 +125,21 @@ extension AudioVerification {
                 let result = try await coordinator.lookup(word: lookupWords[id] ?? coordinator.language.greetingWord, sentence: coordinator.caption)
                 report.lookupReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             } catch { report.failure = "Word lookup failed." }
+            if report.backgroundRequested {
+                let sessionID = coordinator.session?.id
+                report.status = "ready-for-background"; write()
+                report.backgroundObserved = await waitFor(15) { UIApplication.shared.applicationState == .background }
+                if report.backgroundObserved {
+                    report.protectedStorageLocked = !UIApplication.shared.isProtectedDataAvailable
+                    do {
+                        let result = try await coordinator.lookup(word: coordinator.language.greetingWord, sentence: coordinator.caption)
+                        report.backgroundHelperReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    } catch { report.failure = "The background helper failed." }
+                    report.sameSessionInBackground = coordinator.state == .active && coordinator.session?.id == sessionID && RTCAudioSession.sharedInstance().isActive
+                } else { report.failure = "The device did not enter the background during the check." }
+            }
         } else { report.failure = "Voice did not connect; check the device and API configuration." }
+        report.endedInBackground = UIApplication.shared.applicationState == .background
         coordinator.end(reason: "Language verification")
         report.closed = await waitFor(8) { !coordinator.isRunning }
         report.audioReleased = !RTCAudioSession.sharedInstance().isActive

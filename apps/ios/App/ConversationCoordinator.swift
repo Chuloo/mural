@@ -29,7 +29,11 @@ import MuralCore
     private var continuationOwner: UUID?
     private var freeBoundaryOwner: HostedOwner?
     var hasContinuation: Bool { continuationSession != nil }
-    private var continuationKey: String { "mural.continuation.v1." + (ManagedAccountConfiguration.load()?.storageScope ?? "disabled") }
+    private var continuationKey: String {
+        // Explicit live checks use temporary learning data and must not clear a real continuation.
+        (AudioVerification.requested ? "mural.verification.continuation.v1." : "mural.continuation.v1.") +
+            (ManagedAccountConfiguration.load()?.storageScope ?? "disabled")
+    }
     private func clearContinuation() {
         continuationSession = nil; continuationOwner = nil; continuationReady = false; continuationNeedsMinutes = false; freeBoundaryOwner = nil
         UserDefaults.standard.removeObject(forKey: continuationKey)
@@ -77,6 +81,7 @@ import MuralCore
     private var startingWithHistory = false
     private var languageGeneration = UUID()
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private var finalizationTask: Task<Void, Never>?
     private var resetTask: Task<Void, Never>?
     private var resetDeadline: Date?
 
@@ -169,6 +174,7 @@ import MuralCore
         if ProcessInfo.processInfo.arguments.contains("--preview") { showSettings = true; return }
         #endif
         guard conversationProvider != .personalKey || CredentialStore.hasKey else { requestAdvancedFocus = true; showSettings = true; return }
+        releaseBackgroundWork()
         cancelReset(); meanings.reset()
         error = nil; hostedAccessFailure = nil; notice = nil; lastAssessmentKey = ""
         lastLanguageCheck = ""; pendingCommands = [:]
@@ -360,13 +366,22 @@ import MuralCore
         // A live audio session owns its microphone until deliberately ended, interrupted,
         // or closed by the existing silence/duration policy. Locking is not inactivity.
         if transport.started && (state == .active || state == .closing) { save(); return }
-        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Close Mural conversation") { [weak self] in
-            Task { @MainActor in self?.finish(final: false) }
-        }
+        beginBackgroundWork()
         end(reason: "App moved to background")
+    }
+    private func beginBackgroundWork() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Finish Mural conversation") { [weak self] in
+            Task { @MainActor in self?.finish(final: false); self?.releaseBackgroundWork() }
+        }
+    }
+    private func releaseBackgroundWork() {
+        finalizationTask?.cancel(); finalizationTask = nil
+        if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
     }
     private func finish(final: Bool) {
         guard isRunning else { return }
+        if UIApplication.shared.applicationState == .background { beginBackgroundWork() }
         closeTask?.cancel(); durationTask?.cancel(); connectionTask?.cancel()
         assessmentTask?.cancel(); saveTask?.cancel(); saveTask = nil
         delegationTasks.values.forEach { $0.cancel() }; delegationTasks.removeAll()
@@ -393,7 +408,19 @@ import MuralCore
         if boundary == nil && !endNotices.contains(notice ?? "") {
             notice = !final && session?.providerID != nil ? "Conversation saved. Final voice usage is unconfirmed." : nil
         }
-        if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
+        if backgroundTask != .invalid {
+            let owner = backgroundTask, id = session?.id
+            finalizationTask?.cancel()
+            finalizationTask = Task { [weak self] in
+                let deadline = ContinuousClock.now + .seconds(25)
+                while let self, ContinuousClock.now < deadline,
+                      (id.map { self.finalAssessments.isPending($0) } ?? false) || self.meanings.isLoading {
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                }
+                guard !Task.isCancelled, let self, self.backgroundTask == owner else { return }
+                self.releaseBackgroundWork()
+            }
+        }
     }
     private func fail(_ message: String) {
         error = message; session?.endReason = "Connection failed"

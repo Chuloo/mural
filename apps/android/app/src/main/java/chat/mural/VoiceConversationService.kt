@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -21,8 +22,9 @@ class VoiceConversationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val id = sessionID
-        if (id == null) { stopSelf(); return }
+        if (sessionID == null) stopSelf()
+    }
+    private fun activate(id: String) {
         ownedSessionID = id
         try {
             val notifications = getSystemService(NotificationManager::class.java)
@@ -31,7 +33,8 @@ class VoiceConversationService : Service() {
             val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val end = PendingIntent.getService(this, 0, Intent(this, VoiceConversationService::class.java)
-                .setAction(END).putExtra(SESSION, id), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                .setAction(END).setData(Uri.parse("mural-internal://voice/end/$id")).putExtra(SESSION, id),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val notification = NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_voice_notification)
                 .setContentTitle(getString(R.string.voice_notification_title))
@@ -44,6 +47,7 @@ class VoiceConversationService : Service() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 else ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
             ServiceCompat.startForeground(this, NOTIFICATION, notification, types)
+            wakeLock?.let { if (it.isHeld) it.release() }
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Mural:voice").apply {
                     // The app's maximum session is 60 minutes. This is a final bound, not its timer.
@@ -57,6 +61,11 @@ class VoiceConversationService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == END && intent.getStringExtra(SESSION) == sessionID) endSession?.invoke()
+        else if (intent?.action != END && intent?.getStringExtra(SESSION) == sessionID) {
+            // Android may reuse this Service during a quick stop/start. The new
+            // start intent owns the notification and wake lock in either case.
+            sessionID?.let { if (ownedSessionID != it) activate(it) }
+        }
         if (sessionID == null) stopSelf()
         return START_NOT_STICKY
     }
@@ -86,7 +95,7 @@ class VoiceConversationService : Service() {
         fun start(context: Context, id: String, end: () -> Unit) {
             check(sessionID == null) { "A voice conversation already owns the service" }
             sessionID = id; endSession = end
-            try { ContextCompat.startForegroundService(context, Intent(context, VoiceConversationService::class.java)) }
+            try { ContextCompat.startForegroundService(context, Intent(context, VoiceConversationService::class.java).putExtra(SESSION, id)) }
             catch (error: Exception) { sessionID = null; endSession = null; throw error }
         }
         fun stop(context: Context, id: String?) {

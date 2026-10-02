@@ -64,6 +64,21 @@ Debug-only `--verify-audio --verify-language=<language ID>` starts two real voic
 
 For German, Italian, Brazilian Portuguese, Mandarin, Serbian, Greek or Tagalog, `--verify-audio --verify-language-flow --verify-language=<de|it|pt|zh|sr|el|tl>` runs one live session with a support-language beginner request and a more complex target-language typed reply. It checks received audio, meanings, word lookup, supported evidence, archive decoding and switching away and back. It records target-language detection separately; detection is unreliable for Tagalog. The microphone is muted once connected. The report is `Documents/language-verification-<ID>.json`; it contains no transcript, audio or credentials. These synthetic typed turns do not verify recognition of human speech or the quality of corrections and pronunciation. Reopen the app without verification flags to return to its persistent learning record.
 
+Add `--verify-background` to that iPhone flow to check the same active session and a helper request in the background, then end it there. The report pauses at `ready-for-background` for 15 seconds; send the app Home through the mirror or lock the phone during that window. This flag leaves the normal idle timer enabled. The report records background entry and protected-storage lock separately, so sending the app Home does not count as a locked-phone check. Verification uses a separate continuation checkpoint and temporary learning data.
+
+On Android, the explicit live variant installs as `chat.mural.android.verification`, preserving an existing Play installation and its data. It disables purchases and account sign-in. With a connected, unlocked phone and live usage authorized, run:
+
+```sh
+cd apps/android
+./gradlew --no-daemon -Pmural.liveDeviceVerification=true \
+  -Pmural.apiOrigin=https://api.mural.chat -Pmural.minutePurchasesEnabled=false \
+  -Pandroid.testInstrumentationRunnerArguments.class=chat.mural.LiveLanguageDeviceTest \
+  -Pandroid.testInstrumentationRunnerArguments.liveVerification=true \
+  :app:connectedVoiceVerificationAndroidTest
+```
+
+This performs one brief hosted voice call per new language using the test installation's guest minutes. It checks synthetic typed input, received audio, meanings, lookup, archive decoding, switching languages, an Activity stop/resume and the notification's End action. Reports are `files/language-verification-<ID>.json` in that app's container and contain no conversation text, audio or credentials. Activity lifecycle checks do not establish behavior during actual screen lock, human speech recognition or pronunciation quality; check those separately. Ordinary Android interface tests remain offline in the separate `.uitest` installation.
+
 Record the build, checks and remaining limitations in `verification/validation.md`. Successful API transport does not establish pronunciation quality or teaching effectiveness.
 
 ## Record a scripted Spanish demo

@@ -219,6 +219,7 @@ final class MuralUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         selectOnboardingLanguage("tl", in: app)
         XCTAssertTrue(picker.label.contains("Tagalog (Filipino) · Philippines"))
+        reveal(picker, in: app)
         let viewport = app.scrollViews.firstMatch.frame
         let continueButton = app.buttons["onboarding-continue"]
         XCTAssertGreaterThan(picker.frame.height, 0)
