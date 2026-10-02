@@ -8,6 +8,7 @@ PR: [#140](https://github.com/Chuloo/mural/pull/140). Includes [#139](https://gi
 | --- | --- |
 | Swift core | 171 passed; no failures or skips |
 | Android unit tests | 392 passed; no failures or skips |
+| Android 16 emulator | 89 passed; no failures or skips on `1fdd95d` |
 | API tests with disposable PostgreSQL | 438 passed; no failures or skips |
 | Repository contract tests | 70 passed |
 | Generated Android content and cross-platform contracts | Passed |
@@ -15,6 +16,7 @@ PR: [#140](https://github.com/Chuloo/mural/pull/140). Includes [#139](https://gi
 | Android release package validation | Passed for version code 15; no store release published |
 | Isolated Android live-verification APK and test APK | Built successfully; device run pending |
 | Signed iPhone build and update installation | Passed; existing installation retained |
+| iPhone Release build | Passed without signing |
 | iPhone simulator interface tests | 52 passed in the final combined run; no failures, completed at 18:44 UTC |
 
 Shared fixtures cover Cyrillic and Latin Serbian, Greek tonos/diaeresis and question marks, Tagalog contractions and optional marks, both Unicode normalization forms, quoted evidence, word selection and archives. Hosted funding tests create and close sessions in each new locale using both credits and minutes. Credential tests cover locked helper access, expiration and saved-key replacement/deletion.
@@ -39,7 +41,9 @@ The deployed module matches the locally tested compiled module. Public health an
 
 ## Connected phones and remaining checks
 
-The signed test build is installed on the connected iPhone 16 Pro running iOS 27.0. Its saved configuration and learning data were preserved. iOS rejected the live test launch because the phone was locked. The connected Samsung Galaxy S9 runs Android 10; an interface-test attempt could not find the app hierarchy while the phone was asleep. Neither attempt counts as a successful device check. The Mac is also locked, preventing both mirrors from being controlled.
+The signed test build is installed on the connected iPhone 16 Pro running iOS 27.0. Its saved configuration and learning data were preserved. On the later device attempt, Mural launched through iPhone Mirroring, but Apple displayed “iPhone microphone is not available from Mac.” [Apple documents this restriction](https://support.apple.com/en-us/120421). Mirroring was closed for physical voice testing; iOS then rejected a direct launch because the phone was locked. The verification harness now waits for an active app with protected storage available and records those conditions with its connection state. The updated signed build and installation pass, but no completed live voice result is claimed.
+
+The Samsung Galaxy S9 runs Android 10. An earlier interface-test attempt could not find the app hierarchy while the phone was asleep. The later USB connection appeared briefly and disconnected; the requested order is to complete iPhone testing first. Neither Android attempt counts as a successful physical-device check.
 
 The PR remains a draft pending the authorized live checks after device access is restored. The device flows described in [build and test](../docs/build-and-test.md) use temporary or separate learning storage. They must verify received voice, meanings, lookup, the same session on return and release of audio and service resources on End. Actual screen dim/lock and interruption checks remain required; synthetic typed turns do not verify recognition of human speech. A competent speaker must still assess accent, stress, pronunciation and correction quality. Tagalog text detection is recorded as unreliable and does not redirect valid Tagalog output.
 

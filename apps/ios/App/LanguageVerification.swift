@@ -14,6 +14,12 @@ extension AudioVerification {
             var languageID: String
             var status = "running"
             var connected = false
+            var readyToStart = false
+            var foregroundAtStart = false
+            var protectedDataAvailableAtStart = false
+            var connectionState = "idle"
+            var connectionErrorPresent = false
+            var provider = ""
             var receivedGreeting = false
             var targetLanguageDetected = false
             var languageDetectionReliable: Bool
@@ -87,8 +93,19 @@ extension AudioVerification {
         coordinator.selectMeaningLanguage("English")
         coordinator.store.updatePreferences { $0.meaningVisible = true }
         coordinator.chooseTheme(coordinator.language.themes.first { $0.id == "coffee" })
-        coordinator.start()
-        report.connected = await waitFor(45) { coordinator.state == .active }
+        // SwiftUI's launch task can run before the first active scene callback.
+        report.readyToStart = await waitFor(20) {
+            UIApplication.shared.applicationState == .active && UIApplication.shared.isProtectedDataAvailable
+        }
+        report.foregroundAtStart = UIApplication.shared.applicationState == .active
+        report.protectedDataAvailableAtStart = UIApplication.shared.isProtectedDataAvailable
+        report.provider = coordinator.conversationProvider.rawValue
+        if report.readyToStart {
+            coordinator.start()
+            report.connected = await waitFor(45) { coordinator.state == .active }
+        }
+        report.connectionState = String(describing: coordinator.state)
+        report.connectionErrorPresent = coordinator.error != nil
         if report.connected {
             if !coordinator.isMuted { coordinator.toggleMute() }
             report.receivedGreeting = await waitFor(30) { coordinator.assistantPassage != nil }
@@ -138,7 +155,10 @@ extension AudioVerification {
                     report.sameSessionInBackground = coordinator.state == .active && coordinator.session?.id == sessionID && RTCAudioSession.sharedInstance().isActive
                 } else { report.failure = "The device did not enter the background during the check." }
             }
-        } else { report.failure = "Voice did not connect; check the device and API configuration." }
+        } else {
+            report.failure = report.readyToStart ? "Voice did not connect; check the device and API configuration." :
+                "The app did not become active with protected storage available."
+        }
         report.endedInBackground = UIApplication.shared.applicationState == .background
         coordinator.end(reason: "Language verification")
         report.closed = await waitFor(8) { !coordinator.isRunning }
