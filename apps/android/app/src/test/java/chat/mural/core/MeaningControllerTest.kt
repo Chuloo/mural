@@ -19,6 +19,18 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MeaningControllerTest {
+    @Test fun GreekQuestionMarksTriggerSentenceMeaningsWithoutChangingOtherSemicolons() = runTest {
+        for ((id, ending, expected) in listOf(Triple("el", ";", 1), Triple("el", ";” ", 1), Triple("tl", ";", 0))) {
+            val translator = Translator()
+            val controller = MeaningController(backgroundScope, minimumSpacingMillis = 0, delayMillis = 200,
+                incompleteDelayMillis = 4000, now = { testScheduler.currentTime }, translate = translator::translate)
+            controller.update(request("Πώς είσαι" + ending).copy(learningLanguageID = id))
+            runCurrent(); advanceTimeBy(201); runCurrent()
+            assertEquals(expected, translator.requests.size)
+            if (expected == 1) { translator.succeed("How are you?"); runCurrent() }
+            controller.reset()
+        }
+    }
     private class Translator {
         val requests = mutableListOf<MeaningRequest>()
         val pending = ArrayDeque<CompletableDeferred<MeaningResult>>()

@@ -30,6 +30,18 @@ final class CrossPlatformFixtureTests: XCTestCase {
         }
     }
 
+    func testNewLanguageTextMatchesSharedWordLinksWithoutChangingSourceScalars() throws {
+        let data = try Data(contentsOf: directory.appendingPathComponent("language-text-cases.json"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        for item in try XCTUnwrap(root["cases"] as? [[String: Any]]) {
+            let id = try XCTUnwrap(item["language"] as? String)
+            let text = try XCTUnwrap(item["text"] as? String)
+            let segments = CaptionWords.segments(text, languageID: id)
+            XCTAssertEqual(segments.map(\.text).joined().unicodeScalars.map(\.value), text.unicodeScalars.map(\.value))
+            XCTAssertEqual(segments.compactMap(\.lookup), item["lookups"] as? [String], id)
+        }
+    }
+
     func testRedirectDecisionsMatchTheSharedCases() throws {
         let data = try Data(contentsOf: directory.appendingPathComponent("redirect-cases.json"))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

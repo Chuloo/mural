@@ -38,7 +38,7 @@ extension AudioVerification {
     // routing facts, never credentials, audio, or conversation text.
     @MainActor static func run(_ coordinator: ConversationCoordinator) async {
         let wasIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
-        UIApplication.shared.isIdleTimerDisabled = true
+        UIApplication.shared.isIdleTimerDisabled = !ProcessInfo.processInfo.arguments.contains("--verify-background")
         defer { UIApplication.shared.isIdleTimerDisabled = wasIdleTimerDisabled }
         if ProcessInfo.processInfo.arguments.contains("--record-spanish-demo") {
             await recordSpanishDemo(coordinator)

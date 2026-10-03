@@ -31,7 +31,8 @@ export class GoogleServiceAccountTokens implements GoogleAccessTokenSource {
   readonly #privateKeyPEM: string;
   #cached?: { token: string; until: number };
   #pending?: Promise<string>;
-  constructor(readonly email: string, privateKeyPEM: string, readonly request: typeof fetch = fetch) {
+  constructor(readonly email: string, privateKeyPEM: string, readonly request: typeof fetch = fetch,
+    readonly scope = 'https://www.googleapis.com/auth/androidpublisher') {
     if (!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$/.test(email) ||
       !privateKeyPEM.startsWith('-----BEGIN PRIVATE KEY-----')) throw new ServiceError('google_service_configuration_invalid', 503);
     this.#privateKeyPEM = privateKeyPEM;
@@ -44,7 +45,7 @@ export class GoogleServiceAccountTokens implements GoogleAccessTokenSource {
   }
   async #exchange(): Promise<string> {
     try {
-      const assertion = await new SignJWT({ scope: 'https://www.googleapis.com/auth/androidpublisher' })
+      const assertion = await new SignJWT({ scope: this.scope })
         .setProtectedHeader({ alg: 'RS256', typ: 'JWT' }).setIssuer(this.email).setAudience('https://oauth2.googleapis.com/token')
         .setIssuedAt().setExpirationTime('1h').sign(await (this.#key ??= importPKCS8(this.#privateKeyPEM, 'RS256')));
       const response = await this.request('https://oauth2.googleapis.com/token', { method: 'POST', redirect: 'error',

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { connectDatabase } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
 import { MinuteCommerceRunner, PlayVoidReconciler } from '../src/minute-commerce-runner.js';
+import { PlayNotificationTransportError } from '../src/google-play-rtdn.js';
 
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
 const databaseURL = process.env.TEST_DATABASE_URL;
@@ -40,6 +41,17 @@ test('runner bounds each cycle and reports only fixed error codes while continui
   await runner.runOnce(); await runner.stop(); assert.equal(deliveries, 3); assert.equal(polls, 2);
   assert.deepEqual(failures, ['minute_reconciliation_failed','minute_delivery_failed','minute_delivery_failed','minute_delivery_failed']);
   assert.equal(failures.join().includes('private'), false);
+});
+
+test('runner reports only fixed Play transport reason and HTTP status', async () => {
+  const failures: Array<[string, number | undefined]> = [];
+  const runner = new MinuteCommerceRunner({ scheduleReconciliation: async () => 0 },
+    { runBatch: async () => ({ processed: 0, completed: 0, retried: 0 }) }, undefined,
+    { onFailure: (code, status) => failures.push([code, status]) }, undefined,
+    { poll: async () => { throw new PlayNotificationTransportError('play_notification_unavailable', 403); },
+      isOperational: () => false });
+  await runner.runOnce();
+  assert.deepEqual(failures, [['play_notification_unavailable', 403]]);
 });
 
 test('runner observer failures and provider failures cannot create unhandled background work', async () => {

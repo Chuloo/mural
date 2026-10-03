@@ -177,7 +177,15 @@ class LiveTransport(
         mutedState = muted
         audioScope.launch {
             if (!isCurrent(attempt)) return@launch
-            try { attempt.track?.setEnabled(!muted) } catch (_: Exception) { }
+            try {
+                // Keep the WebRTC media clock moving while replacing microphone
+                // samples with silence. Disabling the track can stall GPT-Live's
+                // context timeline, leaving typed replies waiting indefinitely.
+                checkNotNull(attempt.audioDeviceModule).setMicrophoneMute(muted)
+            } catch (_: Exception) {
+                fail(attempt, applicationContext.getString(R.string.error_transport_audio_stopped))
+                return@launch
+            }
             sendNow(attempt, buildJsonObject {
                 put("type", if (muted) "session.input_audio.mute" else "session.input_audio.unmute")
                 put("event_id", UUID.randomUUID().toString())

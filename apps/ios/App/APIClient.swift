@@ -1,5 +1,6 @@
 import Foundation
 import MuralCore
+import UIKit
 
 final class NoRedirect: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
@@ -45,6 +46,34 @@ struct CustomEndpoint: Codable, Equatable {
     var hostedLease: HostedLease?
     private let session: URLSession
     private struct Target { var base: URL; var key: String?; var endpoint: CustomEndpoint? }
+    private var voiceCredential = VoiceCredentialScope()
+    private var credentialExpiry: Task<Void, Never>?
+    /// The Keychain service for the active target: a custom endpoint's own key, or OpenAI's.
+    private var keyService: String {
+        conversationProvider == .personalKey && CustomEndpoint.active != nil ? CredentialStore.customEndpoint : CredentialStore.openAI
+    }
+    func beginVoiceCredential() {
+        credentialExpiry?.cancel(); voiceCredential.clear()
+        guard let key = CredentialStore.read(service: keyService) else { return }
+        voiceCredential.begin(key: key)
+        expireVoiceCredential(after: .seconds(65 * 60))
+    }
+    func endVoiceCredential() {
+        voiceCredential.end()
+        expireVoiceCredential(after: .seconds(60))
+    }
+    private func expireVoiceCredential(after duration: Duration) {
+        credentialExpiry?.cancel()
+        credentialExpiry = Task { [weak self] in
+            do { try await Task.sleep(for: duration) } catch { return }
+            self?.voiceCredential.clear(); self?.credentialExpiry = nil
+        }
+    }
+    private func personalKey() -> String? {
+        let service = keyService
+        return voiceCredential.credential(protectedDataAvailable: UIApplication.shared.isProtectedDataAvailable,
+                                          readStored: { CredentialStore.read(service: service) })
+    }
     init() {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 45; config.timeoutIntervalForResource = 60
@@ -54,9 +83,9 @@ struct CustomEndpoint: Codable, Equatable {
     private func resolveTarget() throws -> Target {
         // A custom server may need no key; OpenAI always does. Hosted minutes never use the learner's endpoint.
         if conversationProvider == .personalKey, let endpoint = CustomEndpoint.active, let base = endpoint.url {
-            return Target(base: base, key: CredentialStore.read(service: CredentialStore.customEndpoint), endpoint: endpoint)
+            return Target(base: base, key: personalKey(), endpoint: endpoint)
         }
-        guard let key = CredentialStore.read() else { throw APIError.missingKey }
+        guard let key = personalKey() else { throw APIError.missingKey }
         return Target(base: URL(string: "https://api.openai.com/v1/")!, key: key, endpoint: nil)
     }
     func post(_ path: String, body: [String: Any]) async throws -> [String: Any] {

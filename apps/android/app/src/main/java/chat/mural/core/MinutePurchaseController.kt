@@ -14,7 +14,7 @@ enum class MinutePurchaseNotice { UNAVAILABLE, SIGN_IN_REQUIRED, PRICE_CHANGED, 
 data class MinutePack(val sku: String, val minutes: Int, val formattedPrice: String, val aiValue: AIValueEntitlement? = null)
 data class MinutePurchaseState(val busy: Boolean = false, val available: Boolean = false, val packs: List<MinutePack> = emptyList(),
     val balance: MinuteBalance? = null, val purchaseInProgress: Boolean = false, val notice: MinutePurchaseNotice? = null,
-    val channel: PurchaseChannel = PurchaseChannel.PLAY, val maximumQuantity: Int = 1)
+    val channel: PurchaseChannel = PurchaseChannel.PLAY, val maximumQuantity: Int = 1, val regionUnavailable: Boolean = false)
 
 /** UI state never contains an account bearer, receipt, provider binding or purchase token. */
 class MinutePurchaseController(
@@ -42,18 +42,33 @@ class MinutePurchaseController(
     /** Call on foreground and after account changes; it also recovers payments missed while closed. */
     suspend fun onForeground() = operation {
         val member = memberOrNull(); updateIdentity(member)
-        loadCatalog()
         if (member != null) {
-            store.connect()
-            processPurchases(store.purchases(), member)
-            updateBalance(member)
+            try {
+                store.connect()
+                processPurchases(store.purchases(), member)
+                updateBalance(member)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { failure(error) }
         }
+        // Recovery and browsing are independent; buy() still requires recovery before checkout.
+        loadCatalog()
     }
     suspend fun refresh() = onForeground()
     suspend fun buy(sku: String, launch: (PreparedMinutePurchase) -> MinuteStoreOutcome) = operation {
         val member = memberOrNull() ?: throw MinuteCommerceFailure.SignInRequired
         updateIdentity(member)
         if (mutable.value.purchaseInProgress) return@operation
+        // An unfinished Play purchase is authoritative even if its callback was missed.
+        // Recover it before preparing another payable order.
+        store.connect()
+        val owned = store.purchases()
+        if (owned.isNotEmpty()) {
+            val recovered = processPurchases(owned, member)
+            updateBalance(member)
+            // A receipt belonging to another Mural account can remain in Play's
+            // owned list. Only a receipt this account can recover defers checkout.
+            if (recovered) return@operation
+        }
         val shown = products[sku]?.first ?: throw MinuteCommerceFailure.Unavailable
         // Re-fetch both sources before creating a payable order. A changed quote needs a new tap.
         loadCatalog()
@@ -62,7 +77,15 @@ class MinutePurchaseController(
         requireCurrent(member)
         val attempt = member.accountID to sku
         val key = attempts.getOrPut(attempt) { UUID.randomUUID().toString() }
-        val order = api.create(member, sku, key)
+        val order = try { api.create(member, sku, key, product.aiValue?.quote?.play) }
+        catch (error: MinuteCommerceFailure.Http) {
+            if (error.status == 409 && error.code in listOf("purchase_quote_changed", "idempotency_conflict")) {
+                // This attempt never launched Play. Let the next tap prepare the current selection.
+                attempts.remove(attempt)
+                throw MinuteCommerceFailure.PriceChanged
+            }
+            throw error
+        }
         if (!order.matches(product)) {
             // This order was never passed to Play. A new tap may request the current quote.
             attempts.remove(attempt)
@@ -88,18 +111,28 @@ class MinutePurchaseController(
     fun close() { stopped = true; observer.cancel(); store.close(); products = emptyMap(); attempts.clear(); mutable.value = MinutePurchaseState() }
 
     private suspend fun loadCatalog() {
-        products = emptyMap(); mutable.value = mutable.value.copy(available = false, packs = emptyList())
-        val catalog = api.catalog(); requireOpen()
-        if (catalog.products.any { it.environment != expectedEnvironment }) throw MinuteCommerceFailure.InvalidResponse
-        if (!catalog.available) return
+        products = emptyMap(); mutable.value = mutable.value.copy(available = false, packs = emptyList(), maximumQuantity = 1, regionUnavailable = false)
         store.connect()
+        val region = store.billingRegion(); requireOpen()
+        if (!Regex("[A-Z]{2}").matches(region)) throw MinuteCommerceFailure.InvalidResponse
+        val catalog = api.catalog(region); requireOpen()
+        if (catalog.products.any { it.environment != expectedEnvironment }) throw MinuteCommerceFailure.InvalidResponse
+        if (catalog.products.any { it.aiValue?.quote?.play?.regionCode?.let { selected -> selected != region } == true })
+            throw MinuteCommerceFailure.InvalidResponse
+        if (!catalog.available) {
+            mutable.value = mutable.value.copy(regionUnavailable = catalog.regionUnavailable)
+            return
+        }
         val offers = store.offers(catalog.products.map { it.providerProduct }.distinct()); requireOpen()
-        products = catalog.products.mapNotNull { product ->
+        val eligible = catalog.products.mapNotNull { product ->
             val matches = offers.filter { it.matches(product) }
             // Ambiguous eligible offers cannot silently choose different purchase terms.
-            matches.singleOrNull()?.let { product.sku to (product to it) }
-        }.toMap()
-        mutable.value = mutable.value.copy(available = products.isNotEmpty(),
+            matches.singleOrNull()?.let { product to it }
+        }
+        // The regional catalog and Play's localized price must agree exactly.
+        products = eligible.groupBy { it.first.providerProduct }.values
+            .filter { it.size == 1 }.map { it.single() }.associate { (product, offer) -> product.sku to (product to offer) }
+        mutable.value = mutable.value.copy(available = products.isNotEmpty(), maximumQuantity = catalog.maximumQuantity,
             packs = products.values.map { (product, offer) -> MinutePack(product.sku, product.minutes, offer.formattedPrice, product.aiValue) })
     }
     private suspend fun processEvent(event: MinuteStoreEvent) {
@@ -119,9 +152,10 @@ class MinutePurchaseController(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) { failure(error) }
     }
-    private suspend fun processPurchases(purchases: List<MinuteStorePurchase>, member: AccountSession) {
+    private suspend fun processPurchases(purchases: List<MinuteStorePurchase>, member: AccountSession): Boolean {
         if (purchases.size > 100) throw MinuteCommerceFailure.InvalidResponse
         var pending = false
+        var recovered = false
         var verificationFailed = false
         for (purchase in purchases.distinctBy { it.token }) {
             requireCurrent(member)
@@ -129,7 +163,7 @@ class MinutePurchaseController(
             // Pending tokens are uploaded too so the server can observe completion without this app.
             try {
                 val result = api.recover(member, purchase.token)
-                requireCurrent(member); applyStatus(result)
+                requireCurrent(member); recovered = true; applyStatus(result)
                 pending = pending || result.state in listOf("created", "pending")
             } catch (error: MinuteCommerceFailure.Http) {
                 // An unrelated account's old receipt must not block this account's valid purchases.
@@ -139,6 +173,7 @@ class MinutePurchaseController(
         }
         mutable.value = mutable.value.copy(purchaseInProgress = pending,
             notice = if (pending) MinutePurchaseNotice.PENDING else if (verificationFailed) MinutePurchaseNotice.VERIFICATION_FAILED else mutable.value.notice)
+        return recovered
     }
     private fun applyStatus(result: MinutePurchaseStatus) {
         mutable.value = mutable.value.copy(purchaseInProgress = result.state in listOf("created", "pending"), notice = when {

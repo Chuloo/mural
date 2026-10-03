@@ -1,0 +1,112 @@
+{
+  "description": "Exact source preservation and contextual word links for the new language targets.",
+  "cases": [
+    {
+      "language": "sr",
+      "text": " Čaj, ćevapi, džem i đumbir.\n",
+      "lookups": [
+        "Čaj",
+        "ćevapi",
+        "džem",
+        "i",
+        "đumbir"
+      ]
+    },
+    {
+      "language": "sr",
+      "text": "„Хвала лепо!“",
+      "lookups": [
+        "Хвала",
+        "лепо"
+      ]
+    },
+    {
+      "language": "sr",
+      "text": "Mlijeko i mleko.",
+      "lookups": [
+        "Mlijeko",
+        "i",
+        "mleko"
+      ]
+    },
+    {
+      "language": "el",
+      "text": " Καλημέρα! Πώς είσαι;\n",
+      "lookups": [
+        "Καλημέρα",
+        "Πώς",
+        "είσαι"
+      ]
+    },
+    {
+      "language": "el",
+      "text": "Μαΐου, αϋπνία και ΰ.",
+      "lookups": [
+        "Μαΐου",
+        "αϋπνία",
+        "και",
+        "ΰ"
+      ]
+    },
+    {
+      "language": "el",
+      "text": "Μαΐου· πού και που;",
+      "lookups": [
+        "Μαΐου",
+        "πού",
+        "και",
+        "που"
+      ]
+    },
+    {
+      "language": "el",
+      "text": "Πότε; Ποτέ! Ο καφές.",
+      "lookups": [
+        "Πότε",
+        "Ποτέ",
+        "Ο",
+        "καφές"
+      ]
+    },
+    {
+      "language": "el",
+      "text": "Απ’ το σπίτι.",
+      "lookups": [
+        "Απ",
+        "το",
+        "σπίτι"
+      ]
+    },
+    {
+      "language": "tl",
+      "text": " Mag-aaral ako araw-araw.\n",
+      "lookups": [
+        "Mag-aaral",
+        "ako",
+        "araw-araw"
+      ]
+    },
+    {
+      "language": "tl",
+      "text": "Ako'y masaya. Siya’y narito!",
+      "lookups": [
+        "Ako'y",
+        "masaya",
+        "Siya’y",
+        "narito"
+      ]
+    },
+    {
+      "language": "tl",
+      "text": "Bukás ang pinto; búkas tayo aalis. ☕️",
+      "lookups": [
+        "Bukás",
+        "ang",
+        "pinto",
+        "búkas",
+        "tayo",
+        "aalis"
+      ]
+    }
+  ]
+}

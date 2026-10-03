@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { transaction, type Database } from './db.js';
 import { appendEntry, lockWallet } from './ledger.js';
 import { ServiceError } from './errors.js';
+import { storeRegionCode, validateStoreMarketPrice, type StoreMarketPrice } from './store-markets.js';
 import { quoteAITopUp, estimatedConversationMilliseconds, type ProcessingCost } from './ai-top-up-pricing.js';
 import { type MinutePurchases, type MinutePurchaseStatus, type MinutePurchaseVerifier, type PurchaseProvider,
   type PurchaseScope, type VerifiedMinutePurchase } from './minute-purchases.js';
@@ -37,7 +38,52 @@ export interface AIValueProduct extends PurchaseScope {
     processingBufferBasisPoints: number; exchangeRateNumerator: string; exchangeRateDenominator: string;
     exchangeRateVersion: string; estimatedNanoUSDPerMinute: string; estimateRateVersion: string;
     apple?: ApplePriceSnapshot;
+    play?: PlayPriceSnapshot;
   };
+}
+export interface LegacyPlayPriceSnapshot {
+  pricingBasis?: never; regionCode?: never;
+  currency:string; currencyExponent:number; unitTotalMinor:number; scheduleVersion:string;
+  /** Conservative reviewed fee and tax assumptions, not a claim about a settled payout. */
+  commissionBasisPoints:number; taxMinor:number; commissionMinor:number; residualMinor:number;
+}
+export interface RegionalPlayPriceSnapshot extends StoreMarketPrice { pricingBasis: 'fixed-usd-allocation' }
+export type PlayPriceSnapshot = LegacyPlayPriceSnapshot | RegionalPlayPriceSnapshot;
+
+/** Regional store prices never change the USD credit allocation or imply an exchange rate. */
+export function makeRegionalPlayAIValueProduct(input: Omit<AIValueProductInput,'processing'|'currency'|'currencyExponent'|'exchangeRate'> &
+  {play:RegionalPlayPriceSnapshot}):Readonly<AIValueProduct> {
+  const p=input.play;
+  if(input.provider!=='play' || !p || p.pricingBasis!=='fixed-usd-allocation' ||
+    Object.keys(p).some(key=>!['pricingBasis','regionCode','currency','currencyExponent','unitTotalMinor','scheduleVersion',
+      'taxBasis','taxRateBasisPoints','hasLocationOverrides','taxMinor','commissionBasisPoints','commissionMinor','proceedsMinor'].includes(key))) throw new ServiceError('invalid_ai_value_product');
+  try { validateStoreMarketPrice(p); } catch { throw new ServiceError('invalid_ai_value_product'); }
+  const base=makeAIValueProduct({...input,currency:'usd',currencyExponent:2,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0},
+    exchangeRate:{numerator:'1',denominator:'1',version:p.scheduleVersion}});
+  return Object.freeze({...base,currency:p.currency,totalMinor:p.unitTotalMinor,
+    quote:Object.freeze({...base.quote,play:Object.freeze({...p})})});
+}
+/** Fixed Play prices keep the same AI allocation as iOS without inventing a percentage-based checkout price. */
+export function makePlayAIValueProduct(input:Omit<AIValueProductInput,'processing'|'currency'|'currencyExponent'> &
+  {play:LegacyPlayPriceSnapshot}):Readonly<AIValueProduct & {quote:AIValueProduct['quote'] & {play:LegacyPlayPriceSnapshot}}> {
+  const p=input.play;
+  if(input.provider!=='play' || !p || Object.keys(p).some(key=>!['currency','currencyExponent','unitTotalMinor','scheduleVersion','commissionBasisPoints','taxMinor','commissionMinor','residualMinor'].includes(key)) || !/^[a-z]{3}$/.test(p.currency) || !identifier.test(p.scheduleVersion) ||
+    !Number.isInteger(p.currencyExponent) || p.currencyExponent<0 || p.currencyExponent>3 ||
+    (p.currency==='nok' && p.currencyExponent!==2) ||
+    ![p.unitTotalMinor,p.taxMinor,p.commissionMinor,p.residualMinor].every(v=>money(v)) || p.unitTotalMinor<=0 ||
+    !Number.isInteger(p.commissionBasisPoints) || p.commissionBasisPoints<0 || p.commissionBasisPoints>10000 ||
+    p.taxMinor>=p.unitTotalMinor ||
+    p.commissionMinor!==Number((BigInt(p.unitTotalMinor-p.taxMinor)*BigInt(p.commissionBasisPoints)+9999n)/10000n))
+    throw new ServiceError('invalid_ai_value_product');
+  const base=makeAIValueProduct({...input,currency:p.currency,currencyExponent:p.currencyExponent,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0}});
+  const fee=p.taxMinor+p.commissionMinor;
+  if(p.unitTotalMinor!==base.quote.aiValueMinor+base.quote.serviceFeeMinor+fee+p.residualMinor)
+    throw new ServiceError('invalid_ai_value_product');
+  return Object.freeze({...base,totalMinor:p.unitTotalMinor,quote:Object.freeze({...base.quote,
+    processingEstimateMinor:fee,processingBufferMinor:p.residualMinor,paymentFeeMinor:fee+p.residualMinor,
+    totalMinor:p.unitTotalMinor,play:Object.freeze({...p})})});
 }
 export interface ApplePriceSnapshot {
   storefront:'USA'|'NOR'; currency:string; currencyExponent:number; unitTotalMinor:number;
@@ -110,7 +156,12 @@ export function makeAIValueProduct(input: AIValueProductInput): Readonly<AIValue
 function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
   try {
     const q=product.quote;
-    const canonical=product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+    const canonical=product.provider==='play' && q.play?.pricingBasis==='fixed-usd-allocation'?makeRegionalPlayAIValueProduct({...product,
+      aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,serviceFeeBasisPoints:q.serviceFeeBasisPoints,
+      estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},play:q.play}):product.provider==='play' && q.play && q.play.pricingBasis===undefined?makePlayAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      serviceFeeBasisPoints:q.serviceFeeBasisPoints,exchangeRate:{numerator:q.exchangeRateNumerator,denominator:q.exchangeRateDenominator,
+        version:q.exchangeRateVersion},estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},
+      play:q.play}):product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
       serviceFeeBasisPoints:q.serviceFeeBasisPoints,estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},apple:q.apple!}):makeAIValueProduct({...product,currencyExponent:q.currencyExponent,aiValueMinor:q.aiValueMinor,
       policyVersion:q.policyVersion,serviceFeeBasisPoints:q.serviceFeeBasisPoints,
       processing:{rateBasisPoints:q.processingRateBasisPoints,fixedMinor:q.processingFixedMinor,bufferBasisPoints:q.processingBufferBasisPoints},
@@ -118,7 +169,8 @@ function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
       estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion}});
     for (const key of Object.keys(canonical) as (keyof AIValueProduct)[]) {
       if (key==='quote') {
-        if (Object.keys(q).length!==Object.keys(canonical.quote).length || Object.entries(canonical.quote).some(([k,v])=>k==='apple'?JSON.stringify(q.apple)!==JSON.stringify(v):q[k as keyof typeof q]!==v)) throw new Error();
+        if (Object.keys(q).length!==Object.keys(canonical.quote).length || Object.entries(canonical.quote).some(([k,v])=>
+          k==='apple'||k==='play'?JSON.stringify(q[k as 'apple'|'play'])!==JSON.stringify(v):q[k as keyof typeof q]!==v)) throw new Error();
       } else if (canonical[key]!==product[key]) throw new Error();
     }
     if (Object.keys(canonical).length!==Object.keys(product).length) throw new Error();
@@ -164,19 +216,25 @@ export class AIValuePurchases {
       if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifier.provider)) throw new ServiceError('invalid_purchase_verifier');
       this.#verifiers.set(verifier.provider,Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
     }
-    const bindings=new Set<string>();
+    const bindings=new Set<string>(),playMarkets=new Map<string,Readonly<AIValueProduct>[]>();
+    if((options.catalog?.length??0)>4096) throw new ServiceError('invalid_ai_value_catalog');
     for (const candidate of options.catalog??[]) {
-      const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,product.currency]);
+      const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,product.quote.play?.regionCode??product.currency]);
       const verifier=this.#verifiers.get(product.provider);
       if (this.#catalog.has(key) || bindings.has(binding) || !verifier || scopeKey(product)!==scopeKey(verifier)) throw new ServiceError('invalid_ai_value_catalog');
       this.#catalog.set(key,product);bindings.add(binding);
+      if(product.provider==='play') {
+        const market=product.quote.play?.regionCode??'legacy',rows=playMarkets.get(market)??[];
+        rows.push(product);playMarkets.set(market,rows);
+        if(rows.length>100 || Buffer.byteLength(JSON.stringify(rows))>120_000) throw new ServiceError('invalid_ai_value_catalog');
+      }
     }
   }
   maximumQuantity(provider:PurchaseProvider):number {return provider!=='play' && this.#quantityEnabled.has(provider)?10:1;}
   products(provider:PurchaseProvider):readonly Readonly<AIValueProduct>[] {
     return this.#salesEnabled?[...this.#catalog.values()].filter(product=>product.provider===provider):[];
   }
-  async createOrder(accountID:string,provider:PurchaseProvider,sku:string,idempotencyKey:string,quantity=1,appleSelection?:{storefront:string;scheduleVersion:string}):Promise<AIValueOrder> {
+  async createOrder(accountID:string,provider:PurchaseProvider,sku:string,idempotencyKey:string,quantity=1,appleSelection?:{storefront:string;scheduleVersion:string},playSelection?:{regionCode:string;scheduleVersion:string}):Promise<AIValueOrder> {
     if (!this.#salesEnabled) throw new ServiceError('ai_value_purchases_unavailable',503);
     if (!uuid.test(accountID) || typeof sku!=='string' || typeof idempotencyKey!=='string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) throw new ServiceError('invalid_ai_value_order');
     if (!Number.isInteger(quantity) || quantity<1 || quantity>10 || (provider==='play' && quantity!==1)) throw new ServiceError('invalid_purchase_quantity');
@@ -192,11 +250,16 @@ export class AIValuePurchases {
       if (prior) {
         if (prior.entitlement_kind!=='ai_value' || prior.provider!==provider || prior.sku!==sku || prior.environment!==verifier.environment || prior.merchant!==verifier.merchant || Number(prior.quantity)!==quantity)
           throw new ServiceError('idempotency_conflict',409);
+        if(provider==='play' && (prior.quote.play?.regionCode!==playSelection?.regionCode ||
+          (playSelection && prior.quote.play?.scheduleVersion!==playSelection.scheduleVersion))) throw new ServiceError('idempotency_conflict',409);
         if(provider==='apple' && (prior.quote.apple?.storefront!==appleSelection?.storefront || prior.quote.apple?.scheduleVersion!==appleSelection?.scheduleVersion)) throw new ServiceError('idempotency_conflict',409);
         return mappedOrder(prior);
       }
       if (quantity>this.maximumQuantity(provider)) throw new ServiceError('purchase_quantity_unavailable',503);
       const unit=this.#catalog.get(productKey(verifier,sku));if (!unit) throw new ServiceError('ai_value_product_unavailable',503);
+      if(provider==='play' && (unit.quote.play?.regionCode!==playSelection?.regionCode ||
+        (playSelection && (storeRegionCode(playSelection.regionCode)!==unit.quote.play?.regionCode || playSelection.scheduleVersion!==unit.quote.play?.scheduleVersion))))
+        throw new ServiceError('purchase_quote_changed',409);
       if(provider==='apple' && (!appleSelection || appleSelection.storefront!==unit.quote.apple?.storefront || appleSelection.scheduleVersion!==unit.quote.apple?.scheduleVersion)) throw new ServiceError('purchase_quote_changed',409);
       const product=quantityQuote(unit,quantity);
       const policy=(await sql.query('SELECT version,service_fee_basis_points FROM lock_ai_pricing_policy()')).rows[0];

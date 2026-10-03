@@ -3,6 +3,7 @@ import Security
 import CryptoKit
 import Observation
 import MuralCore
+import UIKit
 
 /// Only closure identifiers and the pinned owner's bearer are retained, in device-only Keychain storage.
 @MainActor @Observable final class HostedCloseRecovery {
@@ -63,7 +64,34 @@ import MuralCore
     }
     func close(_ lease: HostedLease) {
         active.remove(lease.sessionID)
-        Task { await resume() }
+        guard let client = HostedClient.shared else { return }
+        // The active lease already pins its owner in memory. Do not require an
+        // unlocked Keychain to stop metering a call ended from the lock screen.
+        // The record persisted before connection remains available for recovery.
+        var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+        func releaseBackgroundTask() {
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid
+            }
+        }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Settle Mural conversation") {
+            Task { @MainActor in releaseBackgroundTask() }
+        }
+        Task { [weak self] in
+            defer { releaseBackgroundTask() }
+            guard let self else { return }
+            do {
+                if try await client.close(sessionID: lease.sessionID, owner: lease.owner) {
+                    if var all = try? records() {
+                        all.removeAll { $0.sessionID == lease.sessionID }
+                        try? save(all)
+                    }
+                    revision += 1
+                }
+            } catch let error as HostedError { if error.needsSignInRecovery { needsSignIn = true } }
+            catch { /* The pre-existing record retries when storage is accessible. */ }
+            await resume()
+        }
     }
     func pause() { scheduler.pause() }
     func resume(round: Int = 0) async {

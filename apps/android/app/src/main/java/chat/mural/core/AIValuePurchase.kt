@@ -9,6 +9,7 @@ data class AIValueQuote(
     val processingEstimateMinor: Long, val processingBufferMinor: Long, val totalMinor: Long,
     val policyVersion: Int, val exchangeRateVersion: String, val estimateRateVersion: String,
     val quantity: Int = 1,
+    val play: PlayPriceSnapshot? = null,
 ) {
     init {
         require(Regex("[a-z]{3}").matches(currency) && currencyExponent in 0..3)
@@ -20,6 +21,25 @@ data class AIValueQuote(
         require(serviceFeeMinor / quantity == ((aiValueMinor / quantity) * serviceFeeBasisPoints + 9_999) / 10_000)
         require(totalMinor == aiValueMinor + serviceFeeMinor + processingEstimateMinor + processingBufferMinor)
         require(listOf(exchangeRateVersion, estimateRateVersion).all { it.length in 1..128 && it.none(Char::isISOControl) })
+        if (play != null) {
+            if (play.pricingBasis == "fixed-usd-allocation") require(currency == "usd" && currencyExponent == 2)
+            else require(play.currency == currency && play.currencyExponent == currencyExponent && play.unitTotalMinor == totalMinor)
+        }
+    }
+    fun matchesStorePrice(currency: String, totalMinor: Long) =
+        if (play != null) play.currency == currency && play.unitTotalMinor == totalMinor
+        else this.currency == currency && this.totalMinor == totalMinor
+}
+
+/** Catalog selection, echoed to the server so checkout cannot silently switch price schedules. */
+@Serializable
+data class PlayPriceSnapshot(val currency: String, val currencyExponent: Int, val unitTotalMinor: Long,
+    val scheduleVersion: String, val regionCode: String? = null, val pricingBasis: String? = null) {
+    init {
+        require(Regex("[a-z]{3}").matches(currency) && currencyExponent in 0..3 && unitTotalMinor in 1..100_000_000)
+        require(minuteIdentifier.matches(scheduleVersion))
+        require(regionCode == null || Regex("[A-Z]{2}").matches(regionCode))
+        require(pricingBasis == null || (pricingBasis == "fixed-usd-allocation" && regionCode != null))
     }
 }
 

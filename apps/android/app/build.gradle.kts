@@ -17,6 +17,19 @@ require(muralPurchaseChannel in listOf("play", "stripe")) { "mural.purchaseChann
 val muralMinuteEnvironment = muralConfiguration("mural.minutePurchaseEnvironment").ifBlank { "test" }
 require(muralMinutePurchases in listOf("false", "true")) { "mural.minutePurchasesEnabled must be false or true" }
 require(muralMinuteEnvironment in listOf("test", "live")) { "mural.minutePurchaseEnvironment must be test or live" }
+val muralVersionCode = muralConfiguration("mural.versionCode").ifBlank { "15" }.toIntOrNull()
+require(muralVersionCode != null && muralVersionCode in 12..2_100_000_000) { "mural.versionCode must be a supported positive Android version code" }
+val muralApiOrigin = muralConfiguration("mural.apiOrigin")
+if (muralVersionCode in listOf(12, 14)) {
+    require(muralMinutePurchases == "true" && muralPurchaseChannel == "play" && muralMinuteEnvironment == "test" &&
+        muralApiOrigin == "https://sandbox-api.mural.chat") { "version $muralVersionCode is reserved for an internal Play sandbox build" }
+}
+if (muralVersionCode in listOf(13, 15) && muralMinutePurchases == "true") {
+    require(muralPurchaseChannel == "play" && muralMinuteEnvironment == "live" &&
+        muralApiOrigin == "https://api.mural.chat") {
+        "version $muralVersionCode paid Play builds require the Play channel and live service"
+    }
+}
 android {
     namespace = "chat.mural"
     compileSdk = 36
@@ -24,10 +37,10 @@ android {
         applicationId = "chat.mural.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
+        versionCode = muralVersionCode
         versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "MANAGED_API_ORIGIN", buildString(muralConfiguration("mural.apiOrigin")))
+        buildConfigField("String", "MANAGED_API_ORIGIN", buildString(muralApiOrigin))
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", buildString(muralConfiguration("mural.googleServerClientID")))
         buildConfigField("boolean", "MINUTE_PURCHASES_ENABLED", muralMinutePurchases)
         buildConfigField("String", "PURCHASE_CHANNEL", buildString(muralPurchaseChannel))
@@ -39,6 +52,13 @@ android {
     if (personalDebugKey.exists()) signingConfigs.getByName("debug").storeFile = personalDebugKey
     // Interface tests install as a separate app so they never read or change a learner's data.
     buildTypes {
+        create("voiceVerification") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".verification"
+            matchingFallbacks += "debug"
+            buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"\"")
+            buildConfigField("boolean", "MINUTE_PURCHASES_ENABLED", "false")
+        }
         create("uiTest") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".uitest"
@@ -49,7 +69,9 @@ android {
             buildConfigField("String", "MINUTE_PURCHASE_ENVIRONMENT", "\"test\"")
         }
     }
-    testBuildType = "uiTest"
+    val liveDeviceVerification = providers.gradleProperty("mural.liveDeviceVerification").orNull == "true"
+    if (liveDeviceVerification) require(muralApiOrigin == "https://api.mural.chat")
+    testBuildType = if (liveDeviceVerification) "voiceVerification" else "uiTest"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -11,6 +11,17 @@ class CrossPlatformFixtureTest {
     private val expected = Json.parseToJsonElement(File(dir, "archive-expected.json").readText()).jsonObject
     private val archive = ArchiveCodec.decode(source)
 
+    @Test fun newLanguageWordLinksPreserveEverySourceCharacter() {
+        val root = Json.parseToJsonElement(File(dir, "language-text-cases.json").readText()).jsonObject
+        for (item in root.getValue("cases").jsonArray.map { it.jsonObject }) {
+            val text = item.getValue("text").jsonPrimitive.content
+            val language = item.getValue("language").jsonPrimitive.content
+            val segments = CaptionWords.segments(text, language, null)
+            assertEquals(text, segments.joinToString("") { it.text })
+            assertEquals(item.getValue("lookups").jsonArray.map { it.jsonPrimitive.content }, segments.mapNotNull { it.lookup })
+        }
+    }
+
     @Test fun accountAccessMatchesSharedBalanceAndFailureCases() {
         val root = Json.parseToJsonElement(File(dir, "account-access-cases.json").readText()).jsonObject
         val balances = root.getValue("balances").jsonArray

@@ -90,7 +90,12 @@ public protocol MeaningRetryGuidance: Error {
         }
         if desired != request { desiredUpdatedAt = .now; finalRequested = false }
         desired = request
-        if conversationEnded { finalRequested = true }
+        if conversationEnded && !finalRequested {
+            finalRequested = true
+            // A waiting quiet window must wake when the conversation ends.
+            // An admitted request still finishes before another is sent.
+            if !translating { cancelWorker() }
+        }
         if let cached, !cached.isEmpty {
             if !translating { cancelWorker() }
             text = cached; rendered = request; displayed = request; error = nil; canRetry = true
@@ -129,7 +134,7 @@ public protocol MeaningRetryGuidance: Error {
                 while true {
                     guard token == self.generation, !Task.isCancelled, let pending = self.desired else { return }
                     let now = ContinuousClock.now
-                    let quietUntil = (self.desiredUpdatedAt ?? now) + (self.finalRequested ? .zero : Self.endsSentence(pending.text) ? self.delay : self.incompleteDelay)
+                    let quietUntil = (self.desiredUpdatedAt ?? now) + (self.finalRequested ? .zero : Self.endsSentence(pending.text, languageID: pending.learningLanguageID) ? self.delay : self.incompleteDelay)
                     let pacedUntil = self.lastDispatchedAt.map { $0 + self.minimumSpacing } ?? now
                     let wait = max(max(.zero, now.duration(to: quietUntil)), max(.zero, now.duration(to: pacedUntil)))
                     if wait == .zero { break }
@@ -170,10 +175,10 @@ public protocol MeaningRetryGuidance: Error {
             }
         }
     }
-    private static func endsSentence(_ text: String) -> Bool {
+    private static func endsSentence(_ text: String, languageID: String) -> Bool {
         let ending = text.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'”’»)"))
-        return ending.last.map { ".!?。！？…".contains($0) } ?? false
+        return ending.last.map { ".!?。！？…".contains($0) || (languageID == "el" && ";;".contains($0)) } ?? false
     }
     private enum MeaningError: LocalizedError {
         case empty

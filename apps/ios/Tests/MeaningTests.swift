@@ -19,6 +19,32 @@ import XCTest
         func fail(_ error: Error = URLError(.notConnectedToInternet)) { pending.removeFirst().resume(throwing: error) }
     }
     private let sessionID = UUID()
+    func testGreekQuestionMarksDispatchAMeaningWhileOtherSemicolonsWait() async {
+        func sample(_ text: String, id: String) -> MeaningRequest {
+            let passage = Passage(id: "question", speaker: .assistant, fragments: [
+                Fragment(speaker: .assistant, text: text, startMS: 0, endMS: 1000)
+            ])
+            return MeaningRequest(sessionID: sessionID, passage: passage, learningLanguageID: id, meaningLanguage: "English")
+        }
+        for ending in [";", ";” "] {
+            let translator = Translator()
+            let controller = MeaningController(delay: .zero, incompleteDelay: .seconds(60), minimumSpacing: .zero, translate: translator.translate)
+            controller.update(sample("Πώς είσαι" + ending, id: "el"))
+            await waitUntil { translator.requests.count == 1 }
+            translator.succeed("How are you?")
+            await waitUntil { !controller.isLoading }
+        }
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, incompleteDelay: .seconds(60), minimumSpacing: .zero, translate: translator.translate)
+        let pending = sample("Mag-aaral ako;", id: "tl")
+        controller.update(pending)
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(translator.requests.isEmpty)
+        controller.update(pending, conversationEnded: true)
+        await waitUntil { translator.requests.count == 1 }
+        translator.succeed("I will study;")
+        await waitUntil { !controller.isLoading }
+    }
     func testPartialMeaningAppearsEarlyButOnlyCompletionIsSaved() async {
         let translator = Translator()
         let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
@@ -305,6 +331,37 @@ import XCTest
         translator.succeed("Hi, I like coffee.")
         await waitUntil { !controller.isLoading }
         XCTAssertEqual(controller.text, "Hi, I like coffee.")
+    }
+
+    func testSwitchingBetweenTagalogAndSpanishDiscardsLateMeaningsAndErrors() async {
+        for (oldID, newID) in [("tl", "es"), ("es", "tl")] {
+            for fails in [false, true] {
+                let translator = Translator()
+                let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
+                let passage = Passage(id: "same-passage", speaker: .assistant, fragments: [
+                    Fragment(speaker: .assistant, text: "Kumusta!", startMS: 0, endMS: 1000)
+                ])
+                func request(_ id: String) -> MeaningRequest {
+                    MeaningRequest(sessionID: sessionID, passage: passage, learningLanguageID: id, meaningLanguage: "English")
+                }
+                var saved: [String] = []
+                controller.onResult = { request, _ in saved.append(request.learningLanguageID) }
+                controller.update(request(oldID))
+                await waitUntil { translator.pending.count == 1 }
+                controller.update(request(newID))
+                if fails { translator.fail() } else { translator.succeed("Old meaning") }
+                await waitUntil { translator.requests.count == 2 }
+                try? await Task.sleep(for: .milliseconds(10))
+                XCTAssertEqual(controller.text, "")
+                XCTAssertNil(controller.error)
+                XCTAssertTrue(controller.isLoading)
+                XCTAssertTrue(saved.isEmpty)
+                translator.succeed("New meaning")
+                await waitUntil { !controller.isLoading }
+                XCTAssertEqual(controller.text, "New meaning")
+                XCTAssertEqual(saved, [newID])
+            }
+        }
     }
 
     func testChangingMeaningLanguageClearsOldTextAndUsesSeparateCacheKeys() async {

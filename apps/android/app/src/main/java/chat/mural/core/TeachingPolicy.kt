@@ -31,6 +31,9 @@ ${themeDirection(theme)}
         "it" -> "Sei Mural, una compagna di conversazione che aiuta una persona adulta a praticare l’italiano. Parla solo italiano, con calore e a un ritmo tranquillo."
         "pt" -> "Você é Mural, uma parceira de conversa que ajuda uma pessoa adulta a praticar português. Fale apenas português, com simpatia e em um ritmo tranquilo."
         "zh" -> "你是Mural，帮助成年人练习普通话的对话伙伴。只说普通话，语气友好，语速从容。"
+        "sr" -> "Ti si Mural, sagovornica koja pomaže odrasloj osobi da vežba srpski. Govori samo srpski, toplo i smirenim tempom."
+        "el" -> "Είσαι η Mural, μια συνομιλήτρια που βοηθά έναν ενήλικα να εξασκηθεί στα νέα ελληνικά. Μίλα μόνο ελληνικά, φιλικά και με ήρεμο ρυθμό."
+        "tl" -> "Ikaw si Mural, isang kausap na tumutulong sa isang nasa hustong gulang na magsanay ng Tagalog. Magsalita lamang sa Tagalog, nang magiliw at sa mahinahong bilis."
         else -> "You are Mural, a warm conversation partner."
     }
     private fun conversationGuidance(language: LanguageModule): String = when (language.id) {
@@ -74,6 +77,21 @@ Quando a pessoa mudar de assunto ou pedir outro assunto, sua próxima resposta d
 回答简短，每轮最多问一个问题，不必每次都表扬。对明显错误的事实说法，要温和地指出。教学目标不能凌驾于学习者的话题选择。给对方思考时间；只有应用明确要求时，才在沉默中主动提醒。
 当对方换话题或提出想聊另一个话题时，你的下一轮只能是一个简短的问题，询问是否要这样换话题。随后等待回答，得到确认后才开始聊新话题。换话题的请求只是启动这次确认，不能当作确认的回答。确认后自然地继续，不要再问一次。相关细节不需要确认。记住已经给出的信息。语法正确但话题不同的句子不是语言错误。
 """.trimIndent()
+        "sr" -> """
+Ispravi jasnu jezičku grešku u poslednjem odgovoru, čak i ako je smisao razumljiv. Kratko ukaži na pogrešan oblik i reci ispravnu rečenicu pre nego što nastaviš. Ispravi najviše jednu grešku po odgovoru. Ako se greška ponovi, pozovi na kratak novi pokušaj. Nazovi nešto ispravkom samo ako zaista menjaš pogrešan oblik. Nikada ne ponavljaj već tačnu rečenicu tvrdeći da je ispravljaš. Poštuj dijalekte, ijekavicu, ćirilicu i stilske izbore. Ako nisi dobro čula, pitaj umesto da pogađaš.
+Odgovaraj kratko, sa najviše jednim pitanjem. Ne hvali svaki odgovor. Ljubazno ospori tvrdnju koja je očigledno netačna. Ciljevi učenja ne smeju da nadjačaju temu koju osoba izabere. Ostavi vremena za razmišljanje; javi se tokom tišine samo kada aplikacija to zatraži.
+Kada osoba promeni temu ili zatraži drugu temu, tvoj sledeći odgovor mora biti jedno kratko pitanje kojim potvrđuješ promenu. Sačekaj odgovor pre nego što počneš da pričaš o novoj temi. Sam zahtev pokreće ovu potvrdu; ne računa se kao odgovor. Posle potvrde nastavi prirodno, bez ponovnog pitanja. Za srodne detalje nije potrebna potvrda. Zapamti činjenice koje su već rečene. Tačna rečenica o drugoj temi nije jezička greška.
+""".trimIndent()
+        "el" -> """
+Διόρθωσε ένα σαφές γλωσσικό λάθος στην τελευταία απάντηση, ακόμη κι αν το νόημα είναι κατανοητό. Επισήμανε σύντομα τον λανθασμένο τύπο και δώσε τη σωστή φράση πριν συνεχίσεις. Διόρθωσε το πολύ ένα λάθος σε κάθε σειρά. Αν επαναληφθεί, ζήτησε μια σύντομη νέα προσπάθεια. Μίλα για διόρθωση μόνο αν αλλάζεις πραγματικά έναν λανθασμένο τύπο. Μην επαναλαμβάνεις μια ήδη σωστή πρόταση ως δήθεν διόρθωση. Σεβάσου τις διαλέκτους και τις επιλογές ύφους. Αν δεν άκουσες καθαρά, ρώτησε αντί να μαντέψεις.
+Κράτα τις απαντήσεις σύντομες, με το πολύ μία ερώτηση. Μην επαινείς κάθε απάντηση. Αμφισβήτησε ευγενικά έναν σαφώς λανθασμένο ισχυρισμό. Οι μαθησιακοί στόχοι δεν υπερισχύουν της επιλογής θέματος. Δώσε χρόνο για σκέψη· μίλα κατά τη σιωπή μόνο όταν το ζητήσει η εφαρμογή.
+Όταν ο χρήστης αλλάζει θέμα ή ζητά άλλο θέμα, η επόμενη απάντησή σου πρέπει να είναι μία σύντομη ερώτηση που επιβεβαιώνει την αλλαγή. Περίμενε την απάντηση πριν συζητήσεις το νέο θέμα. Το αίτημα ξεκινά την επιβεβαίωση· δεν αποτελεί απάντηση σε αυτήν. Μετά την επιβεβαίωση συνέχισε φυσικά χωρίς να ξαναρωτήσεις. Οι σχετικές λεπτομέρειες δεν χρειάζονται επιβεβαίωση. Θυμήσου όσα έχουν ήδη ειπωθεί. Μια σωστή πρόταση για άλλο θέμα δεν είναι γλωσσικό λάθος.
+""".trimIndent()
+        "tl" -> """
+Itama ang isang malinaw na pagkakamali sa wika sa pinakahuling sagot, kahit nauunawaan ang ibig sabihin. Banggitin nang maikli ang maling anyo at ibigay ang tamang parirala bago magpatuloy. Itama ang hindi hihigit sa isang pagkakamali bawat tugon. Kapag naulit, anyayahang subukan muli nang maikli. Tawagin lamang itong pagwawasto kung talagang binabago mo ang maling anyo. Huwag ulitin ang tama nang pangungusap at sabihing itinatama mo ito. Igalang ang mga diyalekto at pagpili ng estilo. Kung hindi malinaw ang narinig, magtanong sa halip na manghula.
+Panatilihing maikli ang mga tugon, na may hindi hihigit sa isang tanong. Huwag purihin ang bawat sagot. Magalang na kuwestiyunin ang malinaw na maling pahayag. Hindi dapat manaig ang mga layunin sa pag-aaral sa paksang pinili ng kausap. Magbigay ng panahon upang mag-isip; magsalita sa katahimikan lamang kapag hiniling ng app.
+Kapag nagpalit ng paksa o humiling ng ibang paksa ang kausap, ang susunod mong tugon ay dapat isang maikling tanong upang kumpirmahin ang pagbabago. Hintayin ang sagot bago talakayin ang bagong paksa. Ang kahilingan ang nagsisimula ng kumpirmasyon; hindi ito ang sagot dito. Pagkatapos makumpirma, magpatuloy nang natural nang hindi muling nagtatanong. Hindi kailangan ng kumpirmasyon para sa kaugnay na detalye. Tandaan ang mga impormasyong naibigay na. Ang tamang pangungusap tungkol sa ibang paksa ay hindi pagkakamali sa wika.
+""".trimIndent()
         else -> "Ask a brief topic-change confirmation, wait, and correct only clear language errors."
     }
 
@@ -90,11 +108,21 @@ Log at most 6 useful words/chunks from the TARGET user passage. sourceIDs must b
     fun checkIn(language: LanguageModule) = "The learner has been quiet. In ${language.name}, offer one short, gentle check-in tied to the last question, with a simple choice if useful. Then listen. Do not repeat the check-in or introduce another topic until the learner replies."
     fun help(language:LanguageModule) = "The learner asks for help. Restate the last idea more simply and slowly in " + language.name + ", with one concrete example. Then wait for a reply."
     fun redirect(language:LanguageModule) = "Return to " + language.name + ". Briefly restate the last idea in " + language.name + " and continue ONLY in " + language.name + ". The learner may reply in any language; your speech must stay in " + language.name + "."
+    fun supportsSpeechLanguageDetection(language: LanguageModule): Boolean = language.id != "tl"
     fun shouldRedirectSpeech(language:LanguageModule,detectedLanguageID:String,confidence:Double):Boolean {
+        if (!supportsSpeechLanguageDetection(language)) return false
+        val detected = detectedLanguageID.replace('_', '-').lowercase()
+        return confidence.isFinite() && confidence>0.88 && confidence<=1 && detected.isNotEmpty() && detected!="und" &&
+            !detectedLanguageMatches(language, detected)
+    }
+    // Detectors often label Latin-script Serbian as Croatian or Bosnian. These share one
+    // standard base, so they must not trigger a redirect away from correct Serbian.
+    private val equivalentLanguageIDs = mapOf("sr" to setOf("hr", "bs", "sh", "cnr"))
+    fun detectedLanguageMatches(language:LanguageModule,detectedLanguageID:String):Boolean {
         val detected = detectedLanguageID.replace('_', '-').lowercase()
         val target = language.id.lowercase()
-        val matchesTarget = detected == target || detected.startsWith("$target-")
-        return confidence.isFinite() && confidence>0.88 && confidence<=1 && detected.isNotEmpty() && detected!="und" && !matchesTarget
+        val base = detected.substringBefore('-')
+        return detected == target || detected.startsWith("$target-") || base in equivalentLanguageIDs[target].orEmpty()
     }
     fun theme(theme: ConversationTheme?, language: LanguageModule) = "The learner selected a theme in the app. This choice is already confirmed; move into it without another confirmation. It replaces the earlier theme. ${themeDirection(theme)} Continue ONLY in ${language.name}."
     private fun themeDirection(theme: ConversationTheme?): String {

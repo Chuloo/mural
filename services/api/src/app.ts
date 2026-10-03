@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import type { Database } from './db.js';
 import { accountProfile, authenticate, bearerHash, createChallenge, connectGoogleIdentity, deleteAccount, exchangeIdentity, hasGoogleSignIn, signOut, type verifyIdentity, type AppleRevoker, type AuthConfig } from './auth.js';
 import { HelperSessionLimitError, ServiceError } from './errors.js';
+import { storeRegionCode } from './store-markets.js';
 import { applyStripeEvent, type SandboxPayments } from './payments.js';
 import { RATE_VERSION } from './pricing.js';
 import { aiPricingPolicy } from './ai-top-up-pricing.js';
@@ -19,6 +20,7 @@ import type { AIValuePurchases, PurchaseFulfillmentRouter } from './ai-value-pur
 import type { StripeMinuteProvider } from './stripe-minute-provider.js';
 import type { AppleMinuteProvider } from './apple-minute-provider.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
+import type { PlayRtdnSubscriber } from './google-play-rtdn.js';
 import { HOSTED_HELPER_BODY_LIMIT, type HostedHelpers } from './hosted-helpers.js';
 import { Diagnostics, errorReference } from './diagnostics.js';
 import { startupDiagnostic, type StartupDiagnostic } from './startup-diagnostics.js';
@@ -27,7 +29,7 @@ export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthC
   onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
   minuteCommerce?: { purchases: MinutePurchases; aiPurchases?: AIValuePurchases; fulfillment?: PurchaseFulfillmentRouter;
-    stripe?: StripeMinuteProvider; play?: PlayMinuteProvider; apple?:AppleMinuteProvider };
+    stripe?: StripeMinuteProvider; play?: PlayMinuteProvider; apple?:AppleMinuteProvider; playNotifications?: Pick<PlayRtdnSubscriber,'isOperational'> };
   accounts?: { admission: AuthAdmission; identityVerifier?: typeof verifyIdentity } }
 const accountPaths = new Set(['/v1/auth/challenge', '/v1/auth/exchange', '/v1/auth/sign-out', '/v1/account', '/v1/wallet', '/v1/minutes/welcome', '/v1/minutes/link-guest',
   '/v1/account/connect-google',
@@ -268,6 +270,18 @@ export function createApp(services: Services) {
     if (provider !== 'stripe' && provider !== 'play' && provider !== 'apple') throw new ServiceError('invalid_purchase_provider');
     if (services.minuteCommerce?.aiPurchases) {
       let products = services.minuteCommerce.aiPurchases.products(provider);
+      if(provider==='play') {
+        const selected=(request.query as Record<string,unknown>).regionCode;
+        if(selected!==undefined) {
+          const regionCode=storeRegionCode(selected),enabled=products.length>0;
+          products=products.filter(p=>p.quote.play?.regionCode===regionCode);
+          return {available:products.length>0,maximumQuantity:1,billingBasis:'actual-ai-usage',regionCode,
+            ...(enabled&&!products.length?{availabilityReason:'unsupported_country'}:{}),
+            products:products.map(({merchant:_merchant,provider:_provider,...product})=>product)};
+        }
+        // Shipped clients request no country and have a 100-row/128KiB parser bound.
+        products=products.filter(p=>p.quote.play?.regionCode===undefined);
+      }
       if(provider==='apple') {
         const storefront=(request.query as Record<string,unknown>).storefront;
         if(typeof storefront!=='string' || !['USA','NOR'].includes(storefront)) return {available:false,maximumQuantity:1,products:[]};
@@ -287,7 +301,7 @@ export function createApp(services: Services) {
   });
   app.post('/v1/minutes/orders', { bodyLimit: 1024 }, async request => {
     const account = await authenticate(db, request.headers.authorization), body = objectBody(request);
-    if (Object.keys(body).some(key => !['provider','sku','quantity','storefront','scheduleVersion'].includes(key))) throw new ServiceError('invalid_request');
+    if (Object.keys(body).some(key => !['provider','sku','quantity','storefront','scheduleVersion','regionCode'].includes(key))) throw new ServiceError('invalid_request');
     const provider = stringField(body, 'provider', 10), key = request.headers['idempotency-key'];
     if (provider !== 'stripe' && provider !== 'play' && provider !== 'apple') throw new ServiceError('invalid_purchase_provider');
     if (typeof key !== 'string') throw new ServiceError('idempotency_key_required');
@@ -296,7 +310,9 @@ export function createApp(services: Services) {
     const quantity=body.quantity===undefined?1:body.quantity;
     if (typeof quantity!=='number' || !Number.isInteger(quantity) || quantity<1 || quantity>10 || (provider==='play' && quantity!==1)) throw new ServiceError('invalid_purchase_quantity');
     if (!commerce.aiPurchases && quantity!==1) throw new ServiceError('invalid_purchase_quantity');
-    const order = commerce.aiPurchases ? await commerce.aiPurchases.createOrder(account, provider, stringField(body, 'sku', 128), key, quantity,provider==='apple'?{storefront:stringField(body,'storefront',3),scheduleVersion:stringField(body,'scheduleVersion',200)}:undefined)
+    const order = commerce.aiPurchases ? await commerce.aiPurchases.createOrder(account, provider, stringField(body, 'sku', 128), key, quantity,provider==='apple'?{storefront:stringField(body,'storefront',3),scheduleVersion:stringField(body,'scheduleVersion',200)}:undefined,
+      provider==='play' && (body.regionCode!==undefined || body.scheduleVersion!==undefined)?
+        {regionCode:storeRegionCode(body.regionCode),scheduleVersion:stringField(body,'scheduleVersion',200)}:undefined)
       : await commerce.purchases.createOrder(account, provider, stringField(body, 'sku', 128), key);
     const payment = provider === 'stripe' ? await commerce.stripe!.checkout(account, order.orderID)
       : provider==='apple'?await commerce.apple!.prepare(account,order.orderID):await commerce.play!.prepare(account, order.orderID);
@@ -382,7 +398,8 @@ export function createApp(services: Services) {
     const body = objectBody(request);
     if (Object.keys(body).some(key => key !== 'appleAuthorizationCode')) throw new ServiceError('invalid_request');
     const code = body.appleAuthorizationCode === undefined ? undefined : stringField(body, 'appleAuthorizationCode', 4096);
-    const result = await deleteAccount(db, account, services.appleRevoker, code, request.headers.authorization);
+    const result = await deleteAccount(db, account, services.appleRevoker, code, request.headers.authorization,
+      new Date(), services.minuteCommerce?.playNotifications?.isOperational() === true);
     return { deleted: true, retained: result.retainedFinancialRecords ? 'Required financial records, linked to an opaque account ID.' : null };
   });
   app.post('/v1/checkout', async request => {

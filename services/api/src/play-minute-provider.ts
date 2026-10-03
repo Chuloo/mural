@@ -18,10 +18,11 @@ const sameHash = (left: unknown, right: string) => typeof left === 'string' && /
   timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 const validToken = (token: unknown): token is string => typeof token === 'string' && /^[\x21-\x7e]{1,4096}$/.test(token);
 function moneyMinor(value: any, expectedCurrency: string, exponent: number): number {
-  if (!value || value.currencyCode !== expectedCurrency.toUpperCase() || typeof value.units !== 'string' || !/^\d{1,9}$/.test(value.units) ||
+  const units=value?.units??'0';
+  if (!value || value.currencyCode !== expectedCurrency.toUpperCase() || typeof units !== 'string' || !/^\d{1,9}$/.test(units) ||
     !Number.isSafeInteger(value.nanos ?? 0) || (value.nanos ?? 0) < 0 || (value.nanos ?? 0) > 999_999_999)
     throw new ServiceError('play_price_not_reconciled', 409);
-  const nanos = BigInt(value.units) * 1_000_000_000n + BigInt(value.nanos ?? 0), divisor = 10n ** BigInt(9 - exponent);
+  const nanos = BigInt(units) * 1_000_000_000n + BigInt(value.nanos ?? 0), divisor = 10n ** BigInt(9 - exponent);
   if (nanos % divisor !== 0n || nanos / divisor > 100_000_000n) throw new ServiceError('play_price_not_reconciled', 409);
   return Number(nanos / divisor);
 }
@@ -50,7 +51,7 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
   async prepare(accountID: string, orderID: string): Promise<{ orderID: string; obfuscatedAccountID: string; obfuscatedProfileID: string }> {
     if (!this.#purchasesEnabled) throw new ServiceError('minute_purchases_unavailable', 503);
     const order = await loadProviderOrder(this.db, orderID, this, accountID);
-    if (this.#exponents[order.currency] === undefined || (order.entitlement_kind==='ai_value' && order.ai_value_quote?.currencyExponent!==this.#exponents[order.currency]))
+    if (this.#exponents[order.currency] === undefined || (order.entitlement_kind==='ai_value' && (order.ai_value_quote?.play?.currencyExponent??order.ai_value_quote?.currencyExponent)!==this.#exponents[order.currency]))
       throw new ServiceError('play_currency_not_configured', 503);
     const accountHash = this.#binding('account', accountID), orderHash = this.#binding('order', order.id);
     await this.db.query(`INSERT INTO minute_play_order_bindings(order_id,account_hash,order_hash) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [order.id, accountHash, orderHash]);
@@ -65,6 +66,8 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
     if (!binding || (expectedOrderID !== undefined && binding.order_id !== expectedOrderID) || !sameHash(purchase.obfuscatedExternalAccountId, binding.account_hash))
       throw new ServiceError('play_purchase_binding_invalid', 409);
     const order = await loadProviderOrder(this.db, binding.order_id, this, accountID);
+    const regional=order.ai_value_quote?.play?.pricingBasis==='fixed-usd-allocation';
+    if (regional && purchase.regionCode!==order.ai_value_quote.play.regionCode) throw new ServiceError('play_purchase_region_mismatch',409);
     const test = purchase.testPurchaseContext;
     if ((this.environment === 'test' && test?.fopType !== 'TEST') || (this.environment === 'live' && test !== undefined))
       throw new ServiceError('play_purchase_environment_mismatch', 409);
@@ -77,39 +80,69 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
     if (!['PURCHASED','PENDING','CANCELLED'].includes(purchaseState)) throw new ServiceError('play_purchase_state_invalid', 409);
     let state: VerifiedMinutePurchase['state'] = purchaseState === 'PENDING' ? 'pending' : purchaseState === 'CANCELLED' ? 'voided' : 'purchased';
     let refundedMinor = 0;
+    let monetarySnapshot:Record<string,number>|undefined;
     if (purchaseState !== 'PENDING' && purchase.orderId) {
       if (typeof purchase.orderId !== 'string' || !/^GPA\.[0-9.-]{8,100}$/.test(purchase.orderId)) throw new ServiceError('play_order_not_reconciled', 409);
       const paidOrder = await this.transport.order(this.merchant, purchase.orderId), paidItem = paidOrder?.lineItems?.[0];
-      const exponent = order.entitlement_kind==='ai_value' ? order.ai_value_quote?.currencyExponent : this.#exponents[order.currency];
+      const exponent = order.entitlement_kind==='ai_value' ? (order.ai_value_quote?.play?.currencyExponent??order.ai_value_quote?.currencyExponent) : this.#exponents[order.currency];
       if (!Number.isInteger(exponent) || exponent<0 || exponent>3 || paidOrder?.orderId !== purchase.orderId || paidOrder.purchaseToken !== token ||
         !Array.isArray(paidOrder.lineItems) || paidOrder.lineItems.length !== 1 || paidItem.productId !== order.provider_product ||
         paidItem.oneTimePurchaseDetails?.quantity !== 1 || paidItem.subscriptionDetails || paidItem.paidAppDetails ||
         paidItem.oneTimePurchaseDetails?.rentalDetails || paidItem.oneTimePurchaseDetails?.preorderDetails ||
-        !['PROCESSED','PENDING_REFUND','PARTIALLY_REFUNDED','REFUNDED','CANCELED'].includes(paidOrder.state) ||
-        moneyMinor(paidOrder.total, order.currency, exponent) !== Number(order.total_minor) ||
-        moneyMinor(paidItem.total, order.currency, exponent) !== Number(order.total_minor)) throw new ServiceError('play_order_not_reconciled', 409);
+        !['PROCESSED','PENDING_REFUND','PARTIALLY_REFUNDED','REFUNDED','CANCELED'].includes(paidOrder.state)) throw new ServiceError('play_order_not_reconciled', 409);
+      const listedMinor=Number(order.total_minor), paidMinor=moneyMinor(paidOrder.total,order.currency,exponent);
+      let taxExclusive=false,paidTaxMinor=0,googleCouponMinor=0;
+      if(regional) {
+        // Google lists some countries before tax. Verify both listed price and Google's exact tax addition.
+        if((paidOrder.orderDetails!==undefined && (!paidOrder.orderDetails || typeof paidOrder.orderDetails!=='object' || Array.isArray(paidOrder.orderDetails))) ||
+          (paidOrder.orderDetails?.taxInclusive!==undefined && typeof paidOrder.orderDetails.taxInclusive!=='boolean') ||
+          paidItem.oneTimePurchaseDetails.offerId || moneyMinor(paidItem.listingPrice,order.currency,exponent)!==listedMinor)
+          throw new ServiceError('play_order_not_reconciled',409);
+        taxExclusive=paidOrder.orderDetails?.taxInclusive!==true;
+        paidTaxMinor=paidOrder.tax?moneyMinor(paidOrder.tax,order.currency,exponent):0;
+        // Google-funded Play Points coupons do not lower the catalog allocation. Their exact
+        // value must explain the entire discount; unidentified discounts remain unreconciled.
+        googleCouponMinor=paidOrder.pointsDetails?.pointsCouponValue?moneyMinor(paidOrder.pointsDetails.pointsCouponValue,order.currency,exponent):0;
+        if((paidItem.tax?moneyMinor(paidItem.tax,order.currency,exponent):0)!==paidTaxMinor || paidTaxMinor>paidMinor || googleCouponMinor>listedMinor ||
+          paidMinor!==listedMinor-googleCouponMinor+(taxExclusive?paidTaxMinor:0)) throw new ServiceError('play_order_not_reconciled',409);
+      } else if(paidMinor!==listedMinor) throw new ServiceError('play_order_not_reconciled',409);
+      if(moneyMinor(paidItem.total,order.currency,exponent)!==paidMinor) throw new ServiceError('play_order_not_reconciled',409);
+      const refundGross=(details:any):number=>{
+        const total=moneyMinor(details?.total,order.currency,exponent);
+        if(regional && details?.tax) {
+          const tax=moneyMinor(details.tax,order.currency,exponent);
+          if(tax>total || tax>paidTaxMinor) throw new ServiceError('play_refund_not_reconciled',409);
+        }
+        if(total>paidMinor) throw new ServiceError('play_refund_not_reconciled',409);
+        return total;
+      };
+      let grossRefundedMinor=0;
       const refunds = paidOrder.orderHistory?.partialRefundEvents ?? [];
       if (!Array.isArray(refunds) || refunds.length > 1000) throw new ServiceError('play_refund_not_reconciled', 409);
       for (const refund of refunds) {
         if (!['PENDING','PROCESSED_SUCCESSFULLY'].includes(refund?.state)) throw new ServiceError('play_refund_not_reconciled', 409);
-        if (refund.state === 'PROCESSED_SUCCESSFULLY') refundedMinor += moneyMinor(refund.refundDetails?.total, order.currency, exponent);
+        if (refund.state === 'PROCESSED_SUCCESSFULLY') grossRefundedMinor += refundGross(refund.refundDetails);
       }
       if (paidOrder.state === 'REFUNDED') {
-        const full = moneyMinor(paidOrder.orderHistory?.refundEvent?.refundDetails?.total, order.currency, exponent);
+        const full = refundGross(paidOrder.orderHistory?.refundEvent?.refundDetails);
         // A full-refund event may represent the remaining amount after earlier partial refunds.
-        if (full !== Number(order.total_minor) && full + refundedMinor !== Number(order.total_minor)) throw new ServiceError('play_refund_not_reconciled', 409);
-        refundedMinor = Number(order.total_minor);
+        if (full !== paidMinor && full + grossRefundedMinor !== paidMinor) throw new ServiceError('play_refund_not_reconciled', 409);
+        grossRefundedMinor = paidMinor;
         state = 'voided';
       }
-      if (!Number.isSafeInteger(refundedMinor) || refundedMinor > Number(order.total_minor) ||
-        (paidOrder.state === 'PARTIALLY_REFUNDED' && refundedMinor === 0)) throw new ServiceError('play_refund_not_reconciled', 409);
+      if (!Number.isSafeInteger(grossRefundedMinor) || grossRefundedMinor > paidMinor ||
+        (paidOrder.state === 'PARTIALLY_REFUNDED' && grossRefundedMinor === 0)) throw new ServiceError('play_refund_not_reconciled', 409);
+      // Normalize cumulative verified gross refunds once into the immutable catalog price basis.
+      // This preserves exact full reversal and never turns Google tax or discounts into AI credit.
+      refundedMinor=regional?(paidMinor===0?0:Number((BigInt(grossRefundedMinor)*BigInt(listedMinor)+BigInt(paidMinor)-1n)/BigInt(paidMinor))):grossRefundedMinor;
+      if(regional) monetarySnapshot={paidMinor,paidTaxMinor,googleCouponMinor,grossRefundedMinor};
       if (paidOrder.state === 'CANCELED' || paidOrder.orderHistory?.refundEvent?.refundReason === 'CHARGEBACK') state = 'voided';
     } else if (purchaseState === 'PURCHASED') {
       // Promo purchases can omit orderId. Paid minute packs require a verifiable monetary order.
       throw new ServiceError('play_order_not_reconciled', 409);
     }
     if (details.refundableQuantity === 0 || (await this.db.query('SELECT 1 FROM minute_provider_voids WHERE order_id=$1', [order.id])).rowCount) state = 'voided';
-    const snapshot = { orderID: order.id, tokenHash: providerHash(token), state, refundedMinor, total: Number(order.total_minor) };
+    const snapshot = { orderID: order.id, tokenHash: providerHash(token), state, refundedMinor, total: Number(order.total_minor),...(monetarySnapshot??{}) };
     return { evidence: { provider: this.provider, environment: this.environment, merchant: this.merchant, orderID: order.id,
       transactionID: token, eventID: `play-snapshot:${providerHash(JSON.stringify(snapshot))}`, providerProduct: order.provider_product,
       quantity: 1, currency: order.currency, totalMinor: Number(order.total_minor), state, refundedMinor }, consumptionState: details.consumptionState };
@@ -124,6 +157,13 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
     }
     let token: string, orderID: string | undefined, accountID: string | undefined;
     if (request.kind === 'stored') { orderID = request.orderID; token = await this.vault.read(request.orderID, this); }
+    else if (request.kind === 'notification') {
+      if (Object.keys(request).some(key => !['kind','purchaseToken','sku'].includes(key)) ||
+        !validToken(request.purchaseToken) || (request.sku !== undefined &&
+          (typeof request.sku !== 'string' || !/^[A-Za-z0-9_.-]{1,200}$/.test(request.sku))))
+        throw new ServiceError('invalid_play_verification');
+      token = request.purchaseToken;
+    }
     else if (request.kind === 'client') {
       if (!orderIDPattern.test(request.orderID) || !orderIDPattern.test(request.accountID) || !validToken(request.purchaseToken))
         throw new ServiceError('invalid_play_verification');
@@ -131,6 +171,8 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
       await loadProviderOrder(this.db, orderID!, this, accountID);
     } else throw new ServiceError('invalid_play_verification');
     const { evidence } = await this.#facts(token, orderID, accountID);
+    if (request.kind === 'notification' && request.sku !== undefined && request.sku !== evidence.providerProduct)
+      throw new ServiceError('play_purchase_product_mismatch', 409);
     await this.vault.save(evidence.orderID, this, token, request.kind !== 'stored');
     return evidence;
   }
@@ -142,6 +184,15 @@ export class PlayMinuteProvider implements MinuteDeliveryAdapter {
     const { evidence } = await this.#facts(purchaseToken, undefined, accountID);
     await this.vault.save(evidence.orderID, this, purchaseToken);
     return evidence;
+  }
+  /** Both subscriptions may receive both environments from the same Play app topic. */
+  async isForeignEnvironmentPurchase(purchaseToken: string): Promise<boolean> {
+    if (!validToken(purchaseToken)) throw new ServiceError('invalid_play_verification');
+    const purchase = await this.transport.purchase(this.merchant, purchaseToken);
+    if (!purchase || !purchase.purchaseStateContext || !Array.isArray(purchase.productLineItem))
+      throw new ServiceError('play_purchase_state_invalid', 409);
+    return this.environment === 'live' ? purchase.testPurchaseContext?.fopType === 'TEST' :
+      purchase.testPurchaseContext === undefined;
   }
   async complete(orderID: string): Promise<void> {
     const token = await this.vault.read(orderID, this), facts = await this.#facts(token, orderID);

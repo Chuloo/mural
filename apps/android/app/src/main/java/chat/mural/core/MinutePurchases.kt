@@ -15,18 +15,20 @@ data class MinuteProduct(val sku: String, val providerProduct: String, val minut
         require(sku.length <= 128 && minuteIdentifier.matches(sku) && minuteIdentifier.matches(providerProduct))
         require(minutes > 0 && (aiValue != null || minutes <= 1440) && Regex("[a-z]{3}").matches(currency) && totalMinor in 1..100_000_000)
         require(environment == "test" || environment == "live")
-        require(aiValue == null || (aiValue.quote.currency == currency && aiValue.quote.totalMinor == totalMinor && aiValue.displayMinutes == minutes))
+        require(aiValue == null || (aiValue.quote.matchesStorePrice(currency, totalMinor) && aiValue.displayMinutes == minutes))
     }
     fun expectedMicros(): Long? = try {
-        val exponent = Currency.getInstance(currency.uppercase(Locale.ROOT)).defaultFractionDigits
+        val exponent = aiValue?.quote?.play?.currencyExponent ?: Currency.getInstance(currency.uppercase(Locale.ROOT)).defaultFractionDigits
         if (exponent !in 0..3) null else totalMinor * when (exponent) { 0 -> 1_000_000; 1 -> 100_000; 2 -> 10_000; else -> 1_000 }
     } catch (_: IllegalArgumentException) { null }
 }
-data class MinuteCatalog(val available: Boolean, val products: List<MinuteProduct>, val maximumQuantity: Int = 1) {
+data class MinuteCatalog(val available: Boolean, val products: List<MinuteProduct>, val maximumQuantity: Int = 1,
+    val regionUnavailable: Boolean = false) {
     init {
         require(products.size <= 100 && available == products.isNotEmpty())
         require(products.distinctBy { it.sku }.size == products.size)
         require(maximumQuantity in listOf(1, 10))
+        require(!regionUnavailable || !available)
     }
 }
 data class PlayOrderBinding(val orderID: String, val obfuscatedAccountID: String, val obfuscatedProfileID: String) {
@@ -38,7 +40,7 @@ data class MinuteOrder(val orderID: String, val minutes: Int, val currency: Stri
     init {
         require(minuteUUID.matches(orderID) && payment.orderID == orderID && minutes > 0 && (aiValue != null || minutes <= 1440))
         require(Regex("[a-z]{3}").matches(currency) && totalMinor in 1..100_000_000)
-        require(aiValue == null || (aiValue.quote.currency == currency && aiValue.quote.totalMinor == totalMinor && aiValue.displayMinutes == minutes))
+        require(aiValue == null || (aiValue.quote.matchesStorePrice(currency, totalMinor) && aiValue.displayMinutes == minutes))
     }
     fun matches(product: MinuteProduct) = minutes == product.minutes && currency == product.currency && totalMinor == product.totalMinor && aiValue == product.aiValue
     override fun toString() = "MinuteOrder(redacted)"
@@ -57,8 +59,8 @@ data class MinutePurchaseStatus(val orderID: String, val state: String, val gran
     }
 }
 interface MinuteCommerceService {
-    suspend fun catalog(): MinuteCatalog
-    suspend fun create(session: AccountSession, sku: String, idempotencyKey: String): MinuteOrder
+    suspend fun catalog(regionCode: String? = null): MinuteCatalog
+    suspend fun create(session: AccountSession, sku: String, idempotencyKey: String, selection: PlayPriceSnapshot? = null): MinuteOrder
     suspend fun status(session: AccountSession, orderID: String): MinutePurchaseStatus
     suspend fun verify(session: AccountSession, orderID: String, token: String): MinutePurchaseStatus
     suspend fun recover(session: AccountSession, token: String): MinutePurchaseStatus
@@ -79,8 +81,10 @@ data class PreparedMinutePurchase(val product: MinuteProduct, val order: MinuteO
 }
 enum class MinuteStoreOutcome { OPENED, PURCHASES_UPDATED, CANCELED, UNAVAILABLE, ALREADY_OWNED, FAILED }
 enum class MinuteStorePurchaseState { PENDING, PURCHASED }
-class MinuteStorePurchase(val token: String, val state: MinuteStorePurchaseState) {
-    init { require(validPurchaseToken(token)) }
+class MinuteStorePurchase(val token: String, val state: MinuteStorePurchaseState, val quantity: Int = 1) {
+    // The buyer can change quantity in Play's cart after our order is prepared.
+    // The server verifies the purchased quantity and is the only source of credit.
+    init { require(validPurchaseToken(token) && quantity > 0) }
     override fun toString() = "MinuteStorePurchase(redacted)"
 }
 data class MinuteStoreEvent(val outcome: MinuteStoreOutcome, val purchases: List<MinuteStorePurchase> = emptyList()) {
@@ -90,6 +94,8 @@ data class MinuteStoreEvent(val outcome: MinuteStoreOutcome, val purchases: List
 interface MinuteStoreGateway {
     val events: Flow<MinuteStoreEvent>
     suspend fun connect()
+    /** Read afresh for each catalog request. The Play country must never be cached or inferred from the device locale. */
+    suspend fun billingRegion(): String
     suspend fun offers(productIDs: List<String>): List<MinuteStoreOffer>
     suspend fun purchases(): List<MinuteStorePurchase>
     fun close()
