@@ -46,6 +46,8 @@ data class AccountProfile(val accountID: String, val email: String?, val provide
     override fun toString() = "AccountProfile(redacted)"
 }
 
+const val MINIMUM_FREE_CONVERSATION_MILLISECONDS = 15_000L
+
 @Serializable
 data class MinuteBalance(
     val unit: String,
@@ -67,9 +69,13 @@ data class MinuteBalance(
             require(if (it.paidSupported) paid != null && it.paidEstimatedMilliseconds == paid.estimatedMilliseconds else paid == null)
         }
     }
-    val canStartConversation get() = presentation?.let { it.availabilityReason == "ready" } ?: (availableMilliseconds > 0 || paid?.available == true)
-    val readinessMilliseconds get() = if (availableMilliseconds > 0) availableMilliseconds
-        else paid?.takeIf { it.available }?.estimatedMilliseconds ?: 0L
+    val hasFreeConversationTime get() = availableMilliseconds >= MINIMUM_FREE_CONVERSATION_MILLISECONDS
+    val canStartConversation get() = presentation?.let { it.availabilityReason == "ready" } ?: (hasFreeConversationTime || paid?.available == true)
+    val readinessMilliseconds get() = when {
+        !canStartConversation -> 0L
+        hasFreeConversationTime -> availableMilliseconds
+        else -> paid?.takeIf { it.available }?.estimatedMilliseconds ?: 0L
+    }
 }
 
 interface AccountService {

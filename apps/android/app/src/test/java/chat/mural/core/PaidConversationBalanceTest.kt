@@ -8,6 +8,36 @@ class PaidConversationBalanceTest {
     private val paid = PaidConversationBalance("USD", "actual-ai-usage", "2000000000", "500000000", "1500000000",
         900_000, "100000000", "30000000", true)
 
+    @Test fun freeRemaindersStayVisibleButNeedTheMinimumOrPaidFallback() {
+        for (free in listOf(1L, 14_999L, 15_000L)) {
+            val balance = MinuteBalance("milliseconds", "connected-conversation-time", free, 0, free)
+            val eligible = free >= 15_000L
+            assertEquals(eligible, balance.hasFreeConversationTime)
+            assertEquals(eligible, balance.canStartConversation)
+            assertEquals(if (eligible) free else 0L, balance.readinessMilliseconds)
+            assertEquals(free, balance.availableMilliseconds)
+            val funded = balance.copy(paid = paid)
+            assertTrue(funded.canStartConversation)
+            assertEquals(if (eligible) free else paid.estimatedMilliseconds, funded.readinessMilliseconds)
+            assertEquals(free, funded.availableMilliseconds)
+        }
+        // The generic legacy readiness policy still accepts a positive time value.
+        assertTrue(HostedReadiness("owner", 1, true).ready)
+    }
+
+    @Test fun serverPresentationDeniesReadinessEvenWithFreeAndPaidTime() {
+        for (reason in listOf("insufficient_remaining_time", "settling", "active_conversation", "account_action_needed", "service_unavailable")) {
+            val free = 60_000L
+            val projection = MuralMinutesPresentation(1, "2026-10-03T20:00:00Z", "1", free, paid.estimatedMilliseconds,
+                true, free + paid.estimatedMilliseconds, "approximate", "nano-usd-per-minute-100000000", reason,
+                when (reason) { "settling" -> "pending"; "active_conversation" -> "in_use"; else -> "settled" }, true)
+            val balance = MinuteBalance("milliseconds", "connected-conversation-time", free, 0, free, paid, projection)
+            assertFalse(balance.canStartConversation)
+            assertEquals(0L, balance.readinessMilliseconds)
+            assertEquals(free, balance.availableMilliseconds)
+        }
+    }
+
     @Test fun freeTimeAndPaidEstimateRemainSeparateAndSpendable() {
         val balance = MinuteBalance("milliseconds", "connected-conversation-time", 480_000, 0, 480_000, paid)
         assertEquals(480_000, balance.readinessMilliseconds)
