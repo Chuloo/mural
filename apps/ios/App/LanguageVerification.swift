@@ -46,6 +46,11 @@ extension AudioVerification {
             var backgroundReplies = 0
             var backgroundAudioPeak = 0.0
             var backgroundSeconds = 0.0
+            var minimumBackgroundSeconds = 30.0
+            var returnRequested = false
+            var sameSessionAfterReturn = false
+            var interruptionRequested = false
+            var interruptionObserved = false
             var spokenCheckRequested = false
             var spokenInputReceived = false
             var spokenInputInBackground = false
@@ -64,8 +69,10 @@ extension AudioVerification {
                 archiveRoundTrip && switchedAwayAndBack && cachedMeaningAfterEnd && closed && audioReleased &&
                 peakAudioLevel > 0.001 && outputPorts.contains(AVAudioSession.Port.builtInSpeaker.rawValue) && failure == nil &&
                 (!spokenCheckRequested || (spokenInputReceived && spokenInputInBackground && spokenReplyReceived && spokenReplyInBackground && spokenReplyAudioPeak > 0.001)) &&
-                (!backgroundRequested || (backgroundObserved && backgroundHelperReturned && sameSessionInBackground && endedInBackground &&
-                    backgroundReplies == 2 && backgroundAudioPeak > 0.001 && backgroundSeconds >= 30))
+                (!interruptionRequested || interruptionObserved) &&
+                (!backgroundRequested || (backgroundObserved && backgroundHelperReturned && sameSessionInBackground &&
+                    (returnRequested ? sameSessionAfterReturn : endedInBackground) &&
+                    backgroundReplies >= 2 && backgroundAudioPeak > 0.001 && backgroundSeconds >= minimumBackgroundSeconds))
             }
             var passed: Bool { flowPassed && languageDetectionReliable && targetLanguageDetected }
         }
@@ -73,6 +80,9 @@ extension AudioVerification {
         var report = Report(languageID: id, languageDetectionReliable: TeachingPolicy.supportsSpeechLanguageDetection(language: coordinator.language))
         report.backgroundRequested = ProcessInfo.processInfo.arguments.contains("--verify-background")
         report.spokenCheckRequested = report.backgroundRequested && ProcessInfo.processInfo.arguments.contains("--verify-spoken-background")
+        report.returnRequested = report.backgroundRequested && ProcessInfo.processInfo.arguments.contains("--verify-background-return")
+        report.interruptionRequested = ProcessInfo.processInfo.arguments.contains("--verify-audio-interruption")
+        if report.returnRequested { report.minimumBackgroundSeconds = 60 }
         let destination = URL.documentsDirectory.appendingPathComponent("language-verification-\(id).json")
         var samplingSpokenReply = false
         func write() {
@@ -113,7 +123,7 @@ extension AudioVerification {
         }
         write()
         coordinator.selectMeaningLanguage("English")
-        coordinator.store.updatePreferences { $0.meaningVisible = true }
+        coordinator.store.updatePreferences { $0.meaningVisible = true; $0.sessionMinutes = 5 }
         coordinator.chooseTheme(coordinator.language.themes.first { $0.id == "coffee" })
         // SwiftUI's launch task can run before the first active scene callback.
         report.readyToStart = await waitFor(20) {
@@ -215,7 +225,13 @@ extension AudioVerification {
                         let pauseUntil = Date().addingTimeInterval(5)
                         _ = await waitFor(6) { Date() >= pauseUntil }
                     }
-                    let minimumEnd = backgroundStarted.addingTimeInterval(30)
+                    let minimumEnd = backgroundStarted.addingTimeInterval(report.minimumBackgroundSeconds)
+                    while minimumEnd.timeIntervalSinceNow > 12 && coordinator.state == .active {
+                        await coordinator.sendTyped("Give me one more short example of a polite coffee order.")
+                        await settleCaption()
+                        let pauseUntil = Date().addingTimeInterval(5)
+                        _ = await waitFor(6) { Date() >= pauseUntil }
+                    }
                     _ = await waitFor(max(0, minimumEnd.timeIntervalSinceNow) + 1) { Date() >= minimumEnd }
                     report.backgroundSeconds = Date().timeIntervalSince(backgroundStarted)
                     do {
@@ -223,7 +239,26 @@ extension AudioVerification {
                         report.backgroundHelperReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     } catch { report.failure = "The background helper failed." }
                     report.sameSessionInBackground = coordinator.state == .active && coordinator.session?.id == sessionID && RTCAudioSession.sharedInstance().isActive
+                    if report.returnRequested {
+                        report.status = "ready-for-unlock"; write()
+                        for attempt in 0..<8 {
+                            if await waitFor(12, condition: { UIApplication.shared.applicationState == .active }) { break }
+                            if coordinator.state != .active { break }
+                            if attempt < 7 { await coordinator.sendTyped("Give one short example of a polite coffee order."); await settleCaption() }
+                        }
+                        report.sameSessionAfterReturn = UIApplication.shared.applicationState == .active &&
+                            coordinator.state == .active && coordinator.session?.id == sessionID && RTCAudioSession.sharedInstance().isActive
+                    }
                 } else { report.failure = "The device did not enter the background during the check." }
+            }
+            if report.interruptionRequested && coordinator.state == .active {
+                report.status = "ready-for-interruption"; write()
+                for attempt in 0..<4 {
+                    if await waitFor(12, condition: { !coordinator.isRunning }) { break }
+                    if coordinator.state != .active { break }
+                    if attempt < 3 { await coordinator.sendTyped("Give one short example of a polite coffee order."); await settleCaption() }
+                }
+                report.interruptionObserved = !coordinator.isRunning && coordinator.session?.endReason == "Audio interrupted"
             }
         } else {
             report.failure = report.readyToStart ? "Voice did not connect; check the device and API configuration." :

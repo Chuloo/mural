@@ -11,6 +11,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import chat.mural.core.*
+import chat.mural.network.LiveTransport
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import org.json.JSONObject
 import org.junit.*
 import org.junit.Assert.*
@@ -23,6 +27,8 @@ class LiveLanguageDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private lateinit var vm: MuralViewModel
     private lateinit var original: Preferences
+    private val eventCounts = mutableMapOf<String, Int>()
+    private val providerErrorCodes = mutableSetOf<String>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private fun <T> main(body: () -> T): T = compose.runOnUiThread(body)
 
@@ -39,10 +45,22 @@ class LiveLanguageDeviceTest {
         }
         vm = compose.awaitHistoryLoaded()
         main {
+            // Observe protocol kinds only; retain the real handler and never collect payload text.
+            val transport = MuralViewModel::class.java.getDeclaredField("transport").apply { isAccessible = true }.get(vm) as LiveTransport
+            val handler = transport.onEvent
+            transport.onEvent = { event ->
+                val type = event["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                if (type.matches(Regex("[a-z_.]{1,80}"))) eventCounts[type] = (eventCounts[type] ?: 0) + 1
+                if (type == "error") {
+                    val code = (event["error"] as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull
+                    if (code != null && code.matches(Regex("[a-z_]{1,80}"))) providerErrorCodes += code
+                }
+                handler?.invoke(event)
+            }
             original = vm.archive.preferences.copy()
             vm.updatePreferences(original.copy(hasOnboarded = true, aiConsentVersion = 1,
                 meaningLanguage = "English", meaningVisible = true,
-                sessionMinutes = if (InstrumentationRegistry.getArguments().getString("screenOff") == "true") 3 else 2))
+                sessionMinutes = if (InstrumentationRegistry.getArguments().getString("screenOff") == "true") 5 else 2))
             vm.selectConversationProvider(if (personalKey) ConversationProvider.PERSONAL_KEY else ConversationProvider.HOSTED_MINUTES)
         }
         if (personalKey) {
@@ -84,20 +102,49 @@ class LiveLanguageDeviceTest {
         }
         assertTrue(message, main(condition))
     }
+    private fun waitForPerson(message: String, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 120_000
+        var nextPrompt = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            compose.mainClock.advanceTimeBy(50)
+            if (main(condition)) return
+            if (System.currentTimeMillis() >= nextPrompt) {
+                // A bounded synthetic turn keeps this verification call active while
+                // a person reaches for the phone; the product timeout is unchanged.
+                main { if (vm.state == "active" && !vm.working) vm.sendTyped("Give me one short example of a polite coffee order.") }
+                nextPrompt = System.currentTimeMillis() + 15_000
+            }
+            Thread.sleep(50)
+        }
+        assertTrue(message, main(condition))
+    }
     @After fun finish() {
         if (::vm.isInitialized) {
-            main { vm.end("Live verification cleanup") }
+            main {
+                vm.end("Live verification cleanup")
+                if (::original.isInitialized) vm.updatePreferences(original)
+            }
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         }
     }
     private fun verify(id: String, reply: String, word: String) {
         val screenOff = InstrumentationRegistry.getArguments().getString("screenOff") == "true"
+        val spokenBackground = InstrumentationRegistry.getArguments().getString("spokenBackground") == "true"
+        val returnFromScreenOff = InstrumentationRegistry.getArguments().getString("returnFromScreenOff") == "true"
+        require(!spokenBackground || screenOff)
+        require(!returnFromScreenOff || screenOff)
         val interruptAudio = InstrumentationRegistry.getArguments().getString("interruptAudio") == "true"
         val report = JSONObject().put("languageID", id).put("status", "running")
             .put("input", "synthetic typed turn").put("speakerQualityReview", "pending")
             .put("screenOffRequested", screenOff).put("audioInterruptionRequested", interruptAudio)
         val file = File(instrumentation.targetContext.filesDir, "language-verification-$id.json")
-        fun write() { file.writeText(report.toString()) }
+        fun write() {
+            main {
+                report.put("protocolEvents", JSONObject(eventCounts.toMap()))
+                    .put("providerErrorCodes", org.json.JSONArray(providerErrorCodes.toList()))
+            }
+            file.writeText(report.toString())
+        }
         write()
         try {
             main { vm.selectLanguage(id); vm.chooseTheme(vm.language.themes.first { it.id == "coffee" }); vm.start() }
@@ -108,10 +155,25 @@ class LiveLanguageDeviceTest {
                 peak = maxOf(peak, vm.outputLevel)
                 peak > 0.001 && vm.session?.fragments?.any { it.speaker == Speaker.assistant } == true
             }
+            var quietSince = System.currentTimeMillis()
+            waitFor(25_000, "The greeting must finish before the typed turn") {
+                if (vm.outputLevel > 0.001) quietSince = System.currentTimeMillis()
+                System.currentTimeMillis() - quietSince >= 1_500
+            }
             val sessionID = main { vm.session!!.id }
             val replies = main { vm.typedRepliesSent }
+            val assistantBefore = main { vm.session!!.fragments.count { it.speaker == Speaker.assistant } }
             main { vm.sendTyped(reply) }
             waitFor(30_000, "The target-language reply must be sent") { vm.typedRepliesSent > replies && !vm.working }
+            var typedResponsePeak = 0.0
+            waitFor(25_000, "The typed turn must receive a new spoken response") {
+                typedResponsePeak = maxOf(typedResponsePeak, vm.outputLevel)
+                report.put("typedResponseAudioPeak", typedResponsePeak)
+                    .put("typedResponseFragmentsBefore", assistantBefore)
+                    .put("typedResponseFragmentsAfter", vm.session!!.fragments.count { it.speaker == Speaker.assistant })
+                typedResponsePeak > 0.001 && vm.session!!.fragments.count { it.speaker == Speaker.assistant } > assistantBefore
+            }
+            report.put("typedResponseAudioPeak", typedResponsePeak).put("typedResponseReceived", true)
             waitFor(25_000, "Meaning subtitles must arrive") { vm.meaning.isNotBlank() && !vm.translating }
             main { vm.lookup(word, vm.session!!.passages.last { it.speaker == Speaker.assistant }.text) }
             waitFor(25_000, "Word lookup must complete") { !vm.lookupLoading && !vm.lookupResult.isNullOrBlank() }
@@ -120,16 +182,39 @@ class LiveLanguageDeviceTest {
             if (screenOff) {
                 val power = compose.activity.getSystemService(PowerManager::class.java)
                 report.put("status", "ready-for-lock"); write()
-                waitFor(25_000, "Lock the physical Samsung for the screen-off check") { !power.isInteractive }
+                waitForPerson("Lock the physical Samsung for the screen-off check") { !power.isInteractive }
                 val began = System.currentTimeMillis()
                 var backgroundPeak = 0.0
-                for (line in listOf("Ask me a short question about coffee.", "Give one short example of a polite order.")) {
+                if (spokenBackground) {
+                    val usersBefore = main { vm.session!!.fragments.count { it.speaker == Speaker.user && !it.typed } }
+                    main { if (vm.isMuted) vm.toggleMute() }
+                    report.put("status", "ready-for-speech"); write()
+                    waitFor(25_000, "A spoken reply must arrive while the display is off") {
+                        !power.isInteractive && vm.session!!.fragments.count { it.speaker == Speaker.user && !it.typed } > usersBefore
+                    }
+                    report.put("spokenInputWithScreenOff", true)
+                    val repliesBefore = main { vm.session!!.fragments.count { it.speaker == Speaker.assistant } }
+                    var spokenPeak = 0.0
+                    waitFor(25_000, "The assistant must answer the spoken reply with the display off") {
+                        spokenPeak = maxOf(spokenPeak, vm.outputLevel)
+                        !power.isInteractive && spokenPeak > 0.001 &&
+                            vm.session!!.fragments.count { it.speaker == Speaker.assistant } > repliesBefore
+                    }
+                    report.put("spokenResponseWithScreenOff", true).put("spokenResponseAudioPeak", spokenPeak)
+                    main { if (!vm.isMuted) vm.toggleMute() }
+                }
+                for ((index, line) in listOf("Ask me a short question about coffee.", "Give one short example of a polite order.").withIndex()) {
                     var replyPeak = 0.0
                     val before = main { vm.session!!.fragments.count { it.speaker == Speaker.assistant } }
+                    val typedBefore = main { vm.typedRepliesSent }
+                    report.put("backgroundTurn", index + 1).put("assistantFragmentsBefore", before)
                     main { vm.sendTyped(line) }
                     waitFor(30_000, "A new spoken reply must arrive with the screen off") {
                         replyPeak = maxOf(replyPeak, vm.outputLevel)
                         backgroundPeak = maxOf(backgroundPeak, replyPeak)
+                        report.put("screenOffAudioPeak", backgroundPeak)
+                            .put("screenOffTypedReplySent", vm.typedRepliesSent > typedBefore)
+                            .put("assistantFragmentsAfter", vm.session?.fragments?.count { it.speaker == Speaker.assistant } ?: 0)
                         !power.isInteractive && replyPeak > 0.001 &&
                             vm.session!!.fragments.count { it.speaker == Speaker.assistant } > before && !vm.working
                     }
@@ -149,6 +234,17 @@ class LiveLanguageDeviceTest {
                 vm.lookup(vm.language.greetingWord, vm.session!!.passages.last { it.speaker == Speaker.assistant }.text)
             }
             waitFor(25_000, "A helper must complete while the voice app is backgrounded") { !vm.lookupLoading && !vm.lookupResult.isNullOrBlank() }
+            if (returnFromScreenOff) {
+                report.put("status", "ready-for-unlock"); write()
+                val power = compose.activity.getSystemService(PowerManager::class.java)
+                waitForPerson("Wake the Samsung for the return check") { power.isInteractive }
+                compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+                main {
+                    assertEquals("active", vm.state); assertEquals(sessionID, vm.session?.id)
+                    assertTrue(VoiceConversationService.holds(sessionID))
+                }
+                report.put("activeSessionAfterScreenOn", true)
+            }
             val notifications = compose.activity.getSystemService(NotificationManager::class.java)
             val audio = compose.activity.getSystemService(AudioManager::class.java)
             var interruption: AudioFocusRequest? = null
@@ -188,6 +284,16 @@ class LiveLanguageDeviceTest {
             write()
         } catch (failure: Throwable) {
             report.put("status", "complete").put("passed", false).put("failure", failure.javaClass.simpleName)
+            main {
+                report.put("connectionState", vm.state).put("working", vm.working)
+                    .put("typedReplyErrorPresent", vm.typedReplyError != null)
+                    .put("voiceUpdateRejected", vm.notice == compose.activity.getString(R.string.notice_voice_update_rejected))
+                    .put("serviceRetained", VoiceConversationService.holds(vm.session?.id))
+                    .put("screenInteractive", compose.activity.getSystemService(PowerManager::class.java).isInteractive)
+                    .put("endReason", vm.session?.endReason?.takeIf {
+                        it in listOf("Inactivity", "Time limit", "App moved to background", "Audio interrupted")
+                    } ?: "other-or-none")
+            }
             write(); throw failure
         }
     }

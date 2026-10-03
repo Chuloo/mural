@@ -70,6 +70,8 @@ Add `--verify-background` to that iPhone flow to check two new spoken replies, a
 
 With a person ready to speak, also add `--verify-spoken-background`. Lock the phone at the cue, wait five seconds and say a short sentence. This opt-in mode unmutes the microphone after background entry and checks a non-typed user fragment and a new assistant reply before muting again. It records the lifecycle state at speech input and response, and samples reply audio before any further scripted turn. Protected-storage availability is a separate diagnostic because it may lag physical locking; record the person's confirmation that the phone stayed locked. Language quality still requires listening review. Final learning checks wait for the latest user passage's assessment, rather than accepting an earlier support-language assessment.
 
+Add `--verify-background-return` to keep the iPhone check in the background for at least 60 seconds, then wait at `ready-for-unlock` for the user to return to the same active conversation. `--verify-audio-interruption` adds a `ready-for-interruption` cue: invoke Siri on the physical phone, and verify that the OS interruption ends the call and releases its audio. Bounded synthetic turns keep the call active while waiting for the user; the temporary verification session has a five-minute limit. These flags do not change the saved learning record or the product's silence policy.
+
 On Android, the explicit live variant installs as `chat.mural.android.verification`, preserving an existing Play installation and its data. It disables purchases and account sign-in. With a connected, unlocked phone and live usage authorized, run:
 
 ```sh
@@ -91,7 +93,9 @@ adb shell am instrument -w -r -e class chat.mural.LiveLanguageDeviceTest \
   chat.mural.android.verification.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-For a separate physical screen-off check, target one method, such as `-e class 'chat.mural.LiveLanguageDeviceTest#serbian'`, and add `-e screenOff true`. Lock the Samsung at the `ready-for-lock` report. The test requires its screen to remain off for at least 30 seconds while two new replies arrive. Add `-e interruptAudio true` to end via an Android audio-focus interruption and verify cleanup; otherwise the notification's End action closes the call. Unlock afterward to inspect the retained conversation. This verifies OS audio-focus loss, not an incoming cellular call. A spoken microphone check remains separate on Android.
+For a physical screen-off check, target one method, such as `-e class 'chat.mural.LiveLanguageDeviceTest#serbian'`, and add `-e screenOff true`. Lock the Samsung at the `ready-for-lock` report. The test requires its screen to remain off for at least 30 seconds while two new replies arrive. Add `-e spokenBackground true` with a person ready to speak: lock the phone, wait five seconds, then say a short sentence. The runner checks non-typed input and new response audio while the display is off. Add `-e returnFromScreenOff true` to wait for `ready-for-unlock`, wake the device and check the same active session. Lock and wake windows last up to two minutes, with bounded synthetic turns that keep the test call active without changing the product's silence policy.
+
+Add `-e interruptAudio true` to end via an Android audio-focus interruption and verify cleanup; otherwise the notification's End action closes the call. This verifies OS audio-focus loss, not an incoming cellular call. Diagnostics count protocol event kinds, audio levels and transcript fragments without collecting their content. Each language must receive a fresh spoken response after its typed turn; greeting audio alone is insufficient. The runner restores the original preferences after failures as well as successes.
 
 Record the build, checks and remaining limitations in `verification/validation.md`. Successful API transport does not establish pronunciation quality or teaching effectiveness.
 
