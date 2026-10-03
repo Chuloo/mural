@@ -12,13 +12,17 @@ export async function conversationBalance(db: Database, account: string, publicM
   return transaction(db, async sql => {
     const owner = (await sql.query('SELECT is_guest,minutes_revision FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [account])).rows[0];
     if (!owner) throw new ServiceError('account_not_found',404);
-    const free = await minuteBalance(sql,account,publicMinutes);
+    const minuteWalletBalance = await minuteBalance(sql,account,publicMinutes);
+    // A verified public sandbox request has only sandbox paid funding. The
+    // underlying free wallet still participates in settlement detection below.
+    const free = publicMinutes && environment==='test' ? {...minuteWalletBalance,
+      balanceMilliseconds:0,reservedMilliseconds:0,availableMilliseconds:0} : minuteWalletBalance;
     const wallet = owner.is_guest ? undefined : await lockWallet(sql,account,true,true,environment);
     const supported = !!policy?.enabled && !!wallet?.cashProvenanceVerified;
     const available = supported ? wallet!.fundedAvailable : 0n;
     const estimate = supported ? estimatedConversationMilliseconds(available,policy!.estimatedNanoUSDPerMinute) : 0;
     const active = (await sql.query("SELECT state FROM hosted_sessions WHERE account_id=$1 AND state<>'closed' LIMIT 1",[account])).rows[0]?.state;
-    const settling = active==='closing' || active==='incomplete' || (!active && (free.reservedMilliseconds>0 || (wallet?.reserved??0n)>0n));
+    const settling = active==='closing' || active==='incomplete' || (!active && (minuteWalletBalance.reservedMilliseconds>0 || (wallet?.reserved??0n)>0n));
     const paid = supported ? {currency:'USD' as const,billingBasis:'actual-ai-usage' as const,
       balanceNanoUSD:wallet!.fundedBalance.toString(),reservedNanoUSD:wallet!.fundedReserved.toString(),availableNanoUSD:available.toString(),
       estimatedMilliseconds:estimate,estimatedNanoUSDPerMinute:policy!.estimatedNanoUSDPerMinute.toString(),

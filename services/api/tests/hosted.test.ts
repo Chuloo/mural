@@ -129,6 +129,18 @@ integration('minute admission reserves helpers before any provider call and roll
       assert.equal((await f.db.query(`SELECT count(*) AS total FROM ${table}`)).rows[0].total, '0');
   } finally { await f.cleanup(); }
 });
+integration('legacy isolated minute admission retains its allowance with an explicit test environment',async()=>{
+  const f=await fixture(2_000_000_000n,600_000);
+  try {
+    const session=await f.controller.create(f.account,randomUUID(),'v=0','es-ES',undefined,60_000,'test');
+    assert.equal(session.fundingMode,'minutes');assert.equal(session.reservedMilliseconds,60_000);
+    assert.deepEqual(await f.minutes(),{balance_ms:'600000',reserved_ms:'60000'});
+    f.send(session.providerSessionID,{type:'session.closed',usage:{seconds:20}});
+    await until(async()=> (await f.controller.status(f.account,session.sessionID)).state==='closed');
+    assert.deepEqual(await f.minutes(),{balance_ms:'580000',reserved_ms:'0'});
+    assert.equal(f.creates,1);
+  } finally {await f.cleanup();}
+});
 integration('sign-out records a durable stop before revocation so a discarded bearer cannot strand live audio', async () => {
   const f = await fixture();
   try {

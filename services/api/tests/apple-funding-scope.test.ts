@@ -18,6 +18,7 @@ import {HostedVoice} from '../src/hosted-voice.js';
 import {HostedHelpers,HOSTED_HELPER_MODEL} from '../src/hosted-helpers.js';
 import type {LiveProvider,VoiceUsage} from '../src/live-provider.js';
 import {paidAIBalance,appendEntry,reservePaidInTransaction,settlePaidInTransaction} from '../src/ledger.js';
+import {appendMinuteEntry,minuteBalance} from '../src/minutes.js';
 
 const databaseURL=process.env.TEST_DATABASE_URL;
 if(databaseURL && !new URL(databaseURL).pathname.endsWith('_test'))throw new Error('Use an isolated test database.');
@@ -207,16 +208,59 @@ integration('payment reads share trusted-network limits before Apple verificatio
   }finally{await f.cleanup();}
 });
 
-integration('verified TestFlight purchases fund public hosted calls/helpers without using or converting real paid value',async()=>{
+integration('verified sandbox calls reject production free and paid funds before a purchase',async()=>{
+  const f=await fixture();try{
+    await transaction(f.db,async sql=>{
+      await appendMinuteEntry(sql,f.account,'production-free','gift',193000,0);
+      await appendEntry(sql,f.account,'production-paid','purchase',2000000000n,0n);
+    });
+    const freeBefore=await minuteBalance(f.db,f.account,true),paidBefore=await paidAIBalance(f.db,f.account,'live');
+    const balance=await f.app.inject({url:'/v1/minutes',headers:f.headers('test')});
+    assert.equal(balance.statusCode,200,balance.body);assert.equal(balance.json().availableMilliseconds,0);
+    assert.equal(balance.json().presentation.totalDisplayMilliseconds,0);
+    assert.equal(balance.json().presentation.availabilityReason,'insufficient_remaining_time');
+    assert.equal(balance.json().paid.availableNanoUSD,'0');
+    const response=await f.app.inject({method:'POST',url:'/v1/live/sessions',headers:{...f.headers('test'),'idempotency-key':randomUUID()},
+      payload:{sdp:'v=0\r\noffer',language:'es-ES',requestedMilliseconds:60000}});
+    assert.equal(response.statusCode,402,response.body);assert.equal(response.json().error.code,'insufficient_credit');
+    assert.equal(f.voice.creates,0);
+    for(const table of ['hosted_sessions','hosted_helper_sessions','minute_reservations','reservations'])
+      assert.equal((await f.db.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0');
+    assert.deepEqual(await minuteBalance(f.db,f.account,true),freeBefore);
+    assert.deepEqual(await paidAIBalance(f.db,f.account,'live'),paidBefore);
+    assert.equal((await f.db.query('SELECT count(*) FROM minute_entries')).rows[0].count,'1');
+  }finally{await f.cleanup();}
+});
+
+integration('verified TestFlight calls and helpers preserve production free time and paid value',async()=>{
   const f=await fixture();try{
     const {order,value}=await f.order('test');await f.fulfillment.reconcile('apple',{kind:'client',environment:'test',accountID:f.account,orderID:order.orderID,transactionID:value.transactionId});
     const liveCall=await f.app.inject({method:'POST',url:'/v1/live/sessions',headers:{...f.headers(),'idempotency-key':randomUUID()},payload:{sdp:'v=0\r\noffer',language:'es-ES',requestedMilliseconds:60000}});
     assert.equal(liveCall.statusCode,402);assert.equal(f.voice.creates,0);
     await transaction(f.db,sql=>appendEntry(sql,f.account,'real-funds','purchase',2000000000n,0n));
+    await transaction(f.db,sql=>appendMinuteEntry(sql,f.account,'production-free','gift',193000,0));
+    const freeBefore=(await f.db.query('SELECT * FROM minute_wallets WHERE account_id=$1',[f.account])).rows;
+    const freeEntriesBefore=(await f.db.query('SELECT * FROM minute_entries WHERE account_id=$1 ORDER BY id',[f.account])).rows;
     const before=await paidAIBalance(f.db,f.account);
+    const testView=(await f.app.inject({url:'/v1/minutes',headers:f.headers('test')})).json();
+    assert.equal(testView.availableMilliseconds,0);assert.equal(testView.presentation.freeAvailableMilliseconds,0);
+    assert.equal(testView.presentation.totalDisplayMilliseconds,testView.paid.estimatedMilliseconds);
+    for(const environment of [undefined,'live'] as const){
+      const view=(await f.app.inject({url:'/v1/minutes',headers:f.headers(environment)})).json();
+      assert.equal(view.availableMilliseconds,193000);assert.equal(view.paid.availableNanoUSD,'2000000000');
+    }
     const response=await f.app.inject({method:'POST',url:'/v1/live/sessions',headers:{...f.headers('test'),'idempotency-key':randomUUID()},payload:{sdp:'v=0\r\noffer',language:'es-ES',requestedMilliseconds:60000}});
     assert.equal(response.statusCode,200,response.body);const session=response.json();
+    assert.equal(session.fundingMode,'ai-value');
     assert.equal((await f.db.query('SELECT funding_environment FROM hosted_sessions WHERE id=$1',[session.sessionID])).rows[0].funding_environment,'test');
+    assert.equal((await f.db.query('SELECT count(*) FROM minute_reservations')).rows[0].count,'0');
+    assert.equal((await f.db.query('SELECT funding_environment,cash_funded FROM hosted_helper_sessions WHERE session_id=$1',[session.sessionID])).rows[0].funding_environment,'test');
+    assert.equal((await f.db.query('SELECT cash_funded FROM hosted_helper_sessions WHERE session_id=$1',[session.sessionID])).rows[0].cash_funded,true);
+    for(const environment of ['test','live'] as const){
+      const conflict=await f.app.inject({method:'POST',url:'/v1/live/sessions',headers:{...f.headers(environment),'idempotency-key':randomUUID()},
+        payload:{sdp:'v=0\r\noffer',language:'es-ES',requestedMilliseconds:60000}});
+      assert.equal(conflict.statusCode,409);assert.equal(conflict.json().error.code,'live_session_unresolved');
+    }
     const helper=await f.helpers.request(f.account,session.sessionID,{requestID:randomUUID(),purpose:'meaning',instructions:'Translate into English.',input:'Hola.'});assert.equal(helper.text,'Hola.');
     f.voice.listeners.get(session.providerSessionID)!({type:'session.closed',usage:{seconds:20}});
     await until(async()=> (await f.db.query('SELECT state FROM hosted_sessions WHERE id=$1',[session.sessionID])).rows[0].state==='closed');
@@ -224,6 +268,8 @@ integration('verified TestFlight purchases fund public hosted calls/helpers with
     await f.db.query("UPDATE hosted_helper_sessions SET expires_at=now()-interval '1 second' WHERE session_id=$1",[session.sessionID]);
     await f.db.query('ALTER TABLE hosted_helper_sessions ENABLE TRIGGER hosted_helper_budget_immutable');await f.helpers.expireBudgets();
     assert.equal((await paidAIBalance(f.db,f.account)).availableNanoUSD,before.availableNanoUSD);
+    assert.deepEqual((await f.db.query('SELECT * FROM minute_wallets WHERE account_id=$1',[f.account])).rows,freeBefore);
+    assert.deepEqual((await f.db.query('SELECT * FROM minute_entries WHERE account_id=$1 ORDER BY id',[f.account])).rows,freeEntriesBefore);
     const testBalance=await paidAIBalance(f.db,f.account,'test');assert.ok(BigInt(testBalance.availableNanoUSD)<3690000000n);assert.equal(testBalance.reservedNanoUSD,'0');
     assert.equal((await f.db.query("SELECT count(*) FROM reservations WHERE funding_environment<>'test'")).rows[0].count,'0');
     await assert.rejects(f.db.query("UPDATE hosted_sessions SET funding_environment='live' WHERE id=$1",[session.sessionID]));
