@@ -38,6 +38,20 @@ class PaidConversationBalanceTest {
         }
     }
 
+    @Test fun authoritativeLegacyReadinessKeepsSmallFreeTimeAndPrefersAvailablePaidTime() {
+        for (free in listOf(1L, 14_999L)) for (cash in listOf(null, paid)) {
+            val estimate = cash?.estimatedMilliseconds ?: 0L
+            val projection = MuralMinutesPresentation(1, "2026-10-03T20:00:00Z", "1", free, estimate,
+                cash != null, free + estimate, if (cash == null) "exactFree" else "approximate",
+                if (cash == null) null else "nano-usd-per-minute-100000000", "ready", "settled", cash != null)
+            val balance = MinuteBalance("milliseconds", "connected-conversation-time", free, 0, free, cash, projection)
+            assertTrue(balance.canStartConversation)
+            assertFalse(balance.hasFreeConversationTime)
+            assertEquals(cash?.estimatedMilliseconds ?: free, balance.readinessMilliseconds)
+            assertEquals(free, balance.availableMilliseconds)
+        }
+    }
+
     @Test fun freeTimeAndPaidEstimateRemainSeparateAndSpendable() {
         val balance = MinuteBalance("milliseconds", "connected-conversation-time", 480_000, 0, 480_000, paid)
         assertEquals(480_000, balance.readinessMilliseconds)

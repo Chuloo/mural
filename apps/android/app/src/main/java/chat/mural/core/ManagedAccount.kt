@@ -74,7 +74,7 @@ data class MinuteBalance(
     val readinessMilliseconds get() = when {
         !canStartConversation -> 0L
         hasFreeConversationTime -> availableMilliseconds
-        else -> paid?.takeIf { it.available }?.estimatedMilliseconds ?: 0L
+        else -> paid?.takeIf { it.available }?.estimatedMilliseconds ?: availableMilliseconds
     }
 }
 
