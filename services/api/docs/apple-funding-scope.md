@@ -39,6 +39,10 @@ Payment monitor targets can set `expectedHistoryScopes` to require exact provide
 
 Other clients retain production defaults on the public deployment. TestFlight and App Review sandbox proof selects test credit without changing the existing hosted limits or adding a lifetime cap.
 
+## Small free remainders
+
+A new public free conversation needs at least 15,000 milliseconds, covering Mural's minimum connected-time charge. A smaller remainder stays credited and visible. Admission uses purchased value from the selected environment when it can fund a paid session; otherwise it rejects before creating a provider session or reserving funds. The balance presentation reports `insufficient_remaining_time` when neither source can fund a call, which opens the apps' existing funding sheet. Guests retain the existing sign-in requirement for paid access. Restricted legacy minute admission keeps its prior behavior.
+
 ## Starting a public sandbox test
 
 A new TestFlight or App Review test account has zero sandbox paid minutes on the public API. Verified sandbox purchase delivery adds value to the signed-in account. Existing production free time and paid value remain in their original balances. Sandbox voice and helper usage debit only sandbox paid value; balance reads still report pending settlement when an underlying free reservation or unresolved conversation requires it.

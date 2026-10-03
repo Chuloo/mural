@@ -1,6 +1,6 @@
 import type { PurchaseEnvironment } from './minute-purchases.js';
 import { transaction, type Database } from './db.js';
-import { minuteBalance } from './minutes.js';
+import { minuteBalance, MINIMUM_PUBLIC_FREE_SESSION_MS } from './minutes.js';
 import { lockWallet } from './ledger.js';
 import { ServiceError } from './errors.js';
 import { estimatedConversationMilliseconds } from './ai-top-up-pricing.js';
@@ -28,7 +28,7 @@ export async function conversationBalance(db: Database, account: string, publicM
       estimatedMilliseconds:estimate,estimatedNanoUSDPerMinute:policy!.estimatedNanoUSDPerMinute.toString(),
       minimumSessionNanoUSD:policy!.minimumSessionNanoUSD.toString(),available:available>=policy!.minimumSessionNanoUSD} : undefined;
     const paidUnknown = !owner.is_guest && !!wallet && (!wallet.cashProvenanceVerified || (!supported && wallet.fundedBalance>0n));
-    const ready = free.availableMilliseconds>0 || paid?.available===true;
+    const ready = free.availableMilliseconds >= (publicMinutes ? MINIMUM_PUBLIC_FREE_SESSION_MS : 1) || paid?.available===true;
     const presentation = {schemaVersion:1,asOf:new Date().toISOString(),revision:String(owner.minutes_revision),
       freeAvailableMilliseconds:free.availableMilliseconds,paidEstimatedMilliseconds:paidUnknown?null:estimate,
       hasPurchasedRemainder:available>0n,totalDisplayMilliseconds:paidUnknown?null:free.availableMilliseconds+estimate,

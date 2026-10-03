@@ -7,7 +7,7 @@ import { ServiceError } from './errors.js';
 import { VoiceMeter } from './meter.js';
 import { cost, RATE_VERSION, TRIAL_MS } from './pricing.js';
 import { LiveCreateFailure, LiveCreateRejectedError, supportsLanguage, parseLiveContext, type LiveProvider, type Sideband, type VoiceUsage } from './live-provider.js';
-import { appendMinuteEntry, lockMinuteWallet } from './minutes.js';
+import { appendMinuteEntry, lockMinuteWallet, MINIMUM_PUBLIC_FREE_SESSION_MS } from './minutes.js';
 import { recoverMinutePurchaseShortfalls } from './minute-purchases.js';
 import type { PurchaseEnvironment } from './minute-purchases.js';
 import { hostedHelperExposure, type HostedHelpers } from './hosted-helpers.js';
@@ -147,13 +147,14 @@ export class HostedVoice {
         reservedMilliseconds = this.publicMinuteAccess && requestedFundingEnvironment==='test' ? 0 :
           Math.min(TRIAL_MS,requestedMilliseconds ?? TRIAL_MS, Number(wallet.balance) - Number(wallet.reserved) -
             (this.publicMinuteAccess ? minuteWallet!.sandbox : 0));
-        if (reservedMilliseconds<=0 && this.publicPaidAccess) {
+        const minimumFreeMilliseconds=this.publicMinuteAccess ? MINIMUM_PUBLIC_FREE_SESSION_MS : 1;
+        if (reservedMilliseconds<minimumFreeMilliseconds && this.publicPaidAccess) {
           const cash=await lockPaidWallet(sql,account,true,fundingEnvironment);
           if (cash.fundedAvailable<this.minimumPaidSessionNanoUSD) throw new ServiceError('insufficient_credit',402);
           let low=15_000,high=requestedMilliseconds ?? 900_000;
           while (low<high) { const middle=Math.ceil((low+high)/2); if (this.paidHold(middle).total<=cash.fundedAvailable) low=middle; else high=middle-1; }
           reservedMilliseconds=low; paidReserve=this.paidHold(low); paid=true; minutes=false; wallet=cash;
-        } else if (reservedMilliseconds <= 0) throw new ServiceError('insufficient_minutes', 402);
+        } else if (reservedMilliseconds<minimumFreeMilliseconds) throw new ServiceError('insufficient_minutes', 402);
       }
       if (minutes) {
         const funding = voiceCost(Math.max(15_000, reservedMilliseconds));
