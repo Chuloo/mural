@@ -259,6 +259,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private var lastLanguageRedirect: String? = null
     private val delegations = mutableMapOf<String, Job>()
     private var voiceSession = false
+    private var inForeground = true
     private var activity = ConversationActivity(activityNow())
     private var conversationPace = ConversationPace()
     var inactivitySeconds by mutableStateOf<Int?>(null); private set
@@ -751,7 +752,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         session = record; save(record)
     }
     fun start() {
-        if (isRunning || !cloudReady()) return
+        if (!inForeground || isRunning || !cloudReady()) return
         if (hasContinuation && !continuationReady) { reconcileHostedSessions(); refreshHostedReadiness(); return }
         val continuing = continuationSession
         val continuingOwner = continuationOwnerID
@@ -768,6 +769,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
         newSession(true); state = "connecting"
         val id = session!!.id
+        try {
+            // Start while visible and after microphone consent, before Android 15 audio focus.
+            VoiceConversationService.start(getApplication(), id) { end("Ended by you") }
+        } catch (error: Exception) {
+            fail(error, R.string.error_voice_connect_failed); return
+        }
         val module = language
         val instructions = TeachingPolicy.voice(module, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage)
         val history = ConversationHistory.messages(continuing ?: session)
@@ -826,10 +833,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         closeJob = viewModelScope.launch { delay(5000); if (state == "closing") finish(false) }
     }
     fun background() {
-        // Leaving the foreground ends the conversation and releases the microphone; its final assessment still completes.
+        inForeground = false
+        // Screen state is not learner inactivity. The foreground service owns this call.
+        if (isRunning && voiceSession && VoiceConversationService.holds(session?.id)) return
         generation++; actionJob?.cancel(); clearLookup(); meanings.reset(); working = false
         if (isRunning) { updateSession { it.endReason = "App moved to background" }; finish(false) }
     }
+    fun foreground() { inForeground = true }
     private fun finish(final: Boolean) {
         if (!isRunning) return
         if (ConversationContinuationPolicy.reachedFreeBoundary(freeBoundaryOwnerID != null,
@@ -840,6 +850,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         actionJob?.cancel(); clearLookup(); languageCheckJob?.cancel()
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()
         transport.disconnect(); inputLevel = 0.0; outputLevel = 0.0; working = false; isMuted = false
+        VoiceConversationService.stop(getApplication(), session?.id)
         updateSession { it.endedAt = nowSeconds(); it.usageFinal = final }
         state = "ended"
         notice = when (session?.endReason) {
@@ -1210,5 +1221,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         return try { archive = ArchiveCodec.merge(archive, prepareImportedArchive(data)); persist(); notice = getApplication<Application>().getString(R.string.notice_backup_imported); true }
         catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.error_import_failed)); false }
     }
-    override fun onCleared() { hostedBindings.disableHelpers(); transport.disconnect(); super.onCleared() }
+    override fun onCleared() {
+        if (isRunning) finish(false)
+        VoiceConversationService.stop(getApplication(), session?.id)
+        hostedBindings.disableHelpers(); transport.disconnect(); super.onCleared()
+    }
 }

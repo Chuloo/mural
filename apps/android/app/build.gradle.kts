@@ -52,6 +52,13 @@ android {
     if (personalDebugKey.exists()) signingConfigs.getByName("debug").storeFile = personalDebugKey
     // Interface tests install as a separate app so they never read or change a learner's data.
     buildTypes {
+        create("voiceVerification") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".verification"
+            matchingFallbacks += "debug"
+            buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"\"")
+            buildConfigField("boolean", "MINUTE_PURCHASES_ENABLED", "false")
+        }
         create("uiTest") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".uitest"
@@ -62,7 +69,9 @@ android {
             buildConfigField("String", "MINUTE_PURCHASE_ENVIRONMENT", "\"test\"")
         }
     }
-    testBuildType = "uiTest"
+    val liveDeviceVerification = providers.gradleProperty("mural.liveDeviceVerification").orNull == "true"
+    if (liveDeviceVerification) require(muralApiOrigin == "https://api.mural.chat")
+    testBuildType = if (liveDeviceVerification) "voiceVerification" else "uiTest"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

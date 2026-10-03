@@ -1,5 +1,6 @@
 import Foundation
 import MuralCore
+import UIKit
 
 final class NoRedirect: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
@@ -12,6 +13,29 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
     var conversationProvider: ConversationProvider = .personalKey
     var hostedLease: HostedLease?
     private let session: URLSession
+    private var voiceCredential = VoiceCredentialScope()
+    private var credentialExpiry: Task<Void, Never>?
+    func beginVoiceCredential() {
+        credentialExpiry?.cancel(); voiceCredential.clear()
+        guard let key = CredentialStore.read() else { return }
+        voiceCredential.begin(key: key)
+        expireVoiceCredential(after: .seconds(65 * 60))
+    }
+    func endVoiceCredential() {
+        voiceCredential.end()
+        expireVoiceCredential(after: .seconds(60))
+    }
+    private func expireVoiceCredential(after duration: Duration) {
+        credentialExpiry?.cancel()
+        credentialExpiry = Task { [weak self] in
+            do { try await Task.sleep(for: duration) } catch { return }
+            self?.voiceCredential.clear(); self?.credentialExpiry = nil
+        }
+    }
+    private func personalKey() -> String? {
+        voiceCredential.credential(protectedDataAvailable: UIApplication.shared.isProtectedDataAvailable,
+                                   readStored: CredentialStore.read)
+    }
     init() {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 45; config.timeoutIntervalForResource = 60
@@ -19,7 +43,7 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         session = URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
     }
     func post(_ path: String, body: [String: Any]) async throws -> [String: Any] {
-        guard let key = CredentialStore.read() else { throw APIError.missingKey }
+        guard let key = personalKey() else { throw APIError.missingKey }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/" + path)!)
         request.httpMethod = "POST"; request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -69,7 +93,7 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         return APIResult(text: text, sources: sources, usage: usage)
     }
     private func streamResponse(body: [String: Any], onText: @MainActor (String) -> Void) async throws -> [String: Any] {
-        guard let key = CredentialStore.read() else { throw APIError.missingKey }
+        guard let key = personalKey() else { throw APIError.missingKey }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
         request.httpMethod = "POST"
         request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")

@@ -215,7 +215,8 @@ final class LanguageTests: XCTestCase {
         for language in LanguageRegistry.all {
             XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: language.id, confidence: 0.99))
             let otherID = language.id == "en" ? "fr" : "en"
-            XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: otherID, confidence: 0.99))
+            XCTAssertEqual(TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: otherID, confidence: 0.99),
+                           TeachingPolicy.supportsSpeechLanguageDetection(language: language))
             for confidence in [0.0, 0.88, .nan, .infinity, 1.1] {
                 XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: otherID, confidence: confidence))
             }

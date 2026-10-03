@@ -93,7 +93,8 @@ struct RootView: View {
             }
             #endif
             if AudioVerification.requested { await AudioVerification.run(coordinator) }
-            else if ProcessInfo.processInfo.arguments.contains("--ended-conversation") { coordinator.prepareEndedPreview() }
+            else if ProcessInfo.processInfo.arguments.contains("--ended-conversation") { coordinator.prepareConversationPreview(active: false) }
+            else if ProcessInfo.processInfo.arguments.contains("--active-conversation") { coordinator.prepareConversationPreview(active: true) }
         }
         #endif
     }

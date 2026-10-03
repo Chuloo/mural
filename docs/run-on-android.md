@@ -28,7 +28,11 @@ Choose the language you practise and the language for meanings. When you practis
 
 In **Settings**, save your own OpenAI key. Do not send it through chat or put it in repository files. It is encrypted with an Android Keystore key and is never included in learning backups.
 
-On **Talk**, start a conversation and allow the microphone. You should hear a greeting in the language you chose. **Type instead** lets you practise without the microphone. You can mute, ask for a little help, show meanings, tap a word to look it up, and end the conversation. Any conversation ends when the app moves to the background. A voice conversation also ends when audio is interrupted, when it reaches the chosen duration, or after 30 seconds of quiet, with a gentle check-in and a five-second countdown. Speaking or typing gives you time to continue; waiting for an answer also receives a bounded grace period; a written conversation stays open while you compose a reply.
+On **Talk**, start a conversation and allow the microphone. You should hear a greeting in the language you chose. **Type instead** lets you practise without the microphone. You can mute, ask for a little help, show meanings, tap a word to look it up, and end the conversation.
+
+An active voice conversation continues when the screen dims or locks and when you leave Mural. Its ongoing notification lets you return to the same conversation or end it. On Android 13 or later, allow notifications to keep that control in the notification drawer; denying notifications still permits the voice session. A written conversation ends when you leave the app.
+
+A voice conversation ends when audio is interrupted, when it reaches the chosen duration, or after 30 seconds of quiet, with a gentle check-in and a five-second countdown. Speaking or typing gives you time to continue; waiting for an answer also receives a bounded grace period. Locking the screen does not count as a reply or extend the silence limit.
 
 Mural needs the internet to talk, translate and search. History and vocabulary are available offline. Requests are billed to your OpenAI project; **Settings** shows recorded voice time and a voice cost estimate. The app's time limit is not a billing cap.
 

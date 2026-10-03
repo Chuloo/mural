@@ -616,6 +616,43 @@ integration('a late provider result cannot reopen a session closed by operator r
   } finally { await f.cleanup(); }
 });
 
+integration('new language locales create and settle voice while aliases cannot reserve credit or minutes', async () => {
+  for (const [locale, target, aliases] of [
+    ['sr-Latn-RS', 'Standard Serbian', ['sr', 'sr-RS', 'sr-Cyrl-RS']],
+    ['el-GR', 'Modern Standard Greek', ['el', 'gr-GR', 'el_GR']],
+    ['tl-PH', 'Tagalog', ['tl', 'fil', 'fil-PH', 'tgl-PH', 'tl_PH']]
+  ] as const) for (const minuteAllowance of [undefined, 90_000]) {
+    const f = await fixture(2_000_000_000n, minuteAllowance);
+    try {
+      const beforeWallet = await f.wallet(), beforeMinutes = await f.minutes();
+      for (const language of [...aliases, '__proto__']) {
+        await assert.rejects(f.controller.create(f.account, `language-invalid-${language}`, 'v=0', language), { code: 'invalid_live_offer' });
+      }
+      assert.equal(f.creates, 0);
+      assert.deepEqual(await f.wallet(), beforeWallet);
+      assert.deepEqual(await f.minutes(), beforeMinutes);
+      for (const table of ['reservations', 'minute_reservations', 'hosted_sessions'])
+        assert.equal((await f.db.query(`SELECT count(*) FROM ${table}`)).rows[0].count, '0');
+      const live = await f.controller.create(f.account, 'new-language-valid-offer', 'v=0', locale);
+      assert.equal(f.creates, 1);
+      assert.ok((f.payloads[0] as { session: { instructions: string } }).session.instructions.includes(`Speak only ${target}`));
+      if (minuteAllowance === undefined) assert.equal((await f.wallet()).reserved_nano, '500000000');
+      else assert.deepEqual(await f.minutes(), { balance_ms: '90000', reserved_ms: '90000' });
+      await f.controller.close(f.account, live.sessionID);
+      f.send(live.providerSessionID, { type: 'session.closed', usage: { seconds: 20 } });
+      await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
+      const status = await f.controller.status(f.account, live.sessionID);
+      if (minuteAllowance === undefined) {
+        assert.equal((await f.wallet()).reserved_nano, '0');
+        assert.equal(status.chargedNanoUSD, '16666667');
+      } else {
+        assert.deepEqual(await f.minutes(), { balance_ms: '70000', reserved_ms: '0' });
+        assert.equal(status.chargedMilliseconds, 20_000);
+      }
+    } finally { await f.cleanup(); }
+  }
+});
+
 integration('signed-in International English uses free minutes and settles the conversation', async () => {
   const f = await fixture(2_000_000_000n, 600_000, 50_000_000n, true);
   try {
