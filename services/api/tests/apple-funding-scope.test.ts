@@ -248,7 +248,7 @@ integration('actual runtime grants support dual Apple purchases, scoped settleme
     const value=f.testTransport.bind(order.orderID);
     await fulfillment.reconcile('apple',{kind:'client',environment:'test',accountID:f.account,orderID:order.orderID,transactionID:value.transactionId});
     const hold=randomUUID();await transaction(runtime,sql=>reservePaidInTransaction(sql,f.account,hold,'runtime-test-hold',100000000n,'test-rate','test'));
-    await assert.rejects(runtime.query("UPDATE reservations SET funding_environment='live' WHERE id=$1",[hold]),/permission denied|immutable/);
+    await assert.rejects(runtime.query("UPDATE reservations SET funding_environment='live' WHERE id=$1",[hold]),{code:'42501'});
     await transaction(runtime,sql=>settlePaidInTransaction(sql,f.account,hold,50000000n));
     assert.equal((await paidAIBalance(runtime,f.account,'test')).availableNanoUSD,'3640000000');
     assert.equal((await paidAIBalance(runtime,f.account)).availableNanoUSD,'0');
