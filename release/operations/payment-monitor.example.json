@@ -17,6 +17,19 @@
       "database": "mural",
       "expectedProviders": [
         "play"
+      ],
+      "expectedHistoryScopes": [
+        {
+          "provider": "apple",
+          "environment": "test",
+          "merchant": "chat.mural.ios"
+        },
+        {
+          "provider": "apple",
+          "environment": "live",
+          "merchant": "chat.mural.ios",
+          "pendingUntilFirstCompletion": true
+        }
       ]
     },
     {
