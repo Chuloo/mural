@@ -41,7 +41,7 @@ Other clients retain production defaults on the public deployment. TestFlight an
 
 ## Small free remainders
 
-A new public free conversation needs at least 15,000 milliseconds, covering the provider's minimum charge. A smaller remainder stays credited and visible. Admission uses purchased value from the selected environment when it can fund a paid session; otherwise it rejects before creating a provider session or reserving funds. The balance presentation reports `insufficient_remaining_time` when neither source can fund a call, which opens the apps' existing funding sheet. Guests retain the existing sign-in requirement for paid access. Restricted legacy minute admission keeps its prior behavior.
+A new public free conversation needs at least 15,000 milliseconds, covering Mural's minimum connected-time charge. A smaller remainder stays credited and visible. Admission uses purchased value from the selected environment when it can fund a paid session; otherwise it rejects before creating a provider session or reserving funds. The balance presentation reports `insufficient_remaining_time` when neither source can fund a call, which opens the apps' existing funding sheet. Guests retain the existing sign-in requirement for paid access. Restricted legacy minute admission keeps its prior behavior.
 
 ## Starting a public sandbox test
 

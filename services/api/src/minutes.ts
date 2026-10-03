@@ -13,7 +13,7 @@ export class UnconfiguredMinuteAttestor implements MinuteAttestor {
 }
 
 export const MS_PER_MINUTE = 60_000;
-// Public free admission must cover the provider's minimum charge.
+// Public free admission must cover Mural's minimum connected-time charge.
 export const MINIMUM_PUBLIC_FREE_SESSION_MS = 15_000;
 export function millisecondsForMinutes(minutes: number): number {
   if (!Number.isSafeInteger(minutes) || minutes < 0 || minutes > 1440) throw new ServiceError('invalid_minutes');
