@@ -149,7 +149,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             balance.presentation?.availabilityReason)
         if (continuationNeedsMinutes) notice = getApplication<Application>().getString(R.string.notice_continue_insufficient)
         else if (continuationReady) notice = getApplication<Application>().getString(
-            if (balance.availableMilliseconds > 0) R.string.notice_continue_remaining_free
+            if (balance.hasFreeConversationTime) R.string.notice_continue_remaining_free
             else R.string.notice_continue_purchased)
     }
     var meaning by mutableStateOf(""); private set
@@ -445,7 +445,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             val owner = availableHostedOwner() ?: return null
             val enabled = hostedClient(owner.accountID).available()
             val balance = if (enabled) hostedBalance(owner) else return null
-            balance.availableMilliseconds.takeIf { availableHostedOwner() == owner && !isRunning }
+            balance.readinessMilliseconds.takeIf { availableHostedOwner() == owner && !isRunning }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
     }
@@ -789,7 +789,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     val hosted = hostedClient(owner.accountID)
                     val balance = hostedBalance(owner)
                     if (!balance.canStartConversation || !hosted.available()) throw HostedFailure.Unavailable
-                    freeBoundaryOwnerID = if (balance.availableMilliseconds in 1 until archive.preferences.sessionMinutes * 60_000L &&
+                    freeBoundaryOwnerID = if (balance.hasFreeConversationTime && balance.availableMilliseconds < archive.preferences.sessionMinutes * 60_000L &&
                         balance.paid?.available == true) owner.accountID else null
                     if (freeBoundaryOwnerID != null) notice = getApplication<Application>().getString(R.string.notice_free_minutes_first)
                     // Commit provider provenance and the unresolved-owner marker before making a paid create.

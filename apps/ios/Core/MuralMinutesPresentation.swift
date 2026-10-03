@@ -1,5 +1,13 @@
 import Foundation
 
+public enum HostedFundingAvailability {
+    public static func hasFreeConversationTime(_ milliseconds: Int) -> Bool { milliseconds >= 15_000 }
+    public static func canStart(freeMilliseconds: Int, paidAvailable: Bool, availabilityReason: String?) -> Bool {
+        if let availabilityReason { return availabilityReason == "ready" }
+        return hasFreeConversationTime(freeMilliseconds) || paidAvailable
+    }
+}
+
 public struct MuralMinutesPresentation: Decodable, Sendable {
     public let schemaVersion: Int
     public let asOf: String

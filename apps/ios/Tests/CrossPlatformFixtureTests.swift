@@ -11,6 +11,28 @@ final class CrossPlatformFixtureTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
+    func testHostedFreeRemaindersKeepTheirCreditWithoutFundingAMinimumConversation() {
+        for milliseconds in [0, 1, 14_999, 15_000] {
+            let eligible = milliseconds >= 15_000
+            XCTAssertEqual(HostedFundingAvailability.hasFreeConversationTime(milliseconds), eligible)
+            XCTAssertEqual(HostedFundingAvailability.canStart(freeMilliseconds: milliseconds, paidAvailable: false,
+                                                              availabilityReason: nil), eligible)
+            XCTAssertTrue(HostedFundingAvailability.canStart(freeMilliseconds: milliseconds, paidAvailable: true,
+                                                             availabilityReason: nil))
+        }
+        // The general time formatter still accepts the retained legacy remainder.
+        XCTAssertTrue(MinuteBalanceTime.isEligible(1))
+        XCTAssertEqual(MinuteBalanceTime.roundedSeconds(14_999), 15)
+    }
+
+    func testHostedProjectionCanBlockBothFreeAndPurchasedFunding() {
+        for reason in ["insufficient_remaining_time", "settling", "active_conversation", "account_action_needed", "service_unavailable"] {
+            XCTAssertFalse(HostedFundingAvailability.canStart(freeMilliseconds: 60_000, paidAvailable: true,
+                                                              availabilityReason: reason))
+        }
+        XCTAssertTrue(HostedFundingAvailability.canStart(freeMilliseconds: 1, paidAvailable: true, availabilityReason: "ready"))
+    }
+
     func testAccountAccessMatchesSharedBalanceAndFailureCases() throws {
         let data = try Data(contentsOf: directory.appendingPathComponent("account-access-cases.json"))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
