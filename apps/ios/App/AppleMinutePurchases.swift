@@ -31,7 +31,8 @@ final class AppleMinutePurchases {
     @ObservationIgnored private var checking = false
     @ObservationIgnored private let http = ManagedAccountHTTP()
     private let configuration = ManagedAccountConfiguration.load()
-    private let expectedEnvironment = Bundle.main.object(forInfoDictionaryKey: "MuralApplePurchaseEnvironment") as? String ?? "live"
+    private let configuredEnvironment = Bundle.main.object(forInfoDictionaryKey: "MuralApplePurchaseEnvironment") as? String ?? "live"
+    private var resolvedEnvironment: String?
     private var preview: Bool {
         #if DEBUG && targetEnvironment(simulator)
         return ProcessInfo.processInfo.arguments.contains("--preview") && ProcessInfo.processInfo.arguments.contains("--preview-purchases")
@@ -45,7 +46,16 @@ final class AppleMinutePurchases {
         return value as? Bool == true || (value as? String)?.uppercased() == "YES"
     }
     var refundRequestsEnabled: Bool { enabled && !preview }
-    private var storageKey: String { "mural.apple-purchases.v1." + (configuration?.storageScope ?? "disabled") + "." + expectedEnvironment }
+    var testPurchases: Bool { preview || resolvedEnvironment == "test" }
+    private var storageKey: String { "mural.apple-purchases.v1." + (configuration?.storageScope ?? "disabled") + "." + (resolvedEnvironment ?? configuredEnvironment) }
+    private func prepareEnvironment() async throws -> String {
+        if let resolvedEnvironment { return resolvedEnvironment }
+        let environment = configuredEnvironment == "auto"
+            ? try await AppleStorePurchaseContext.shared.proof().environment : configuredEnvironment
+        guard ["test", "live"].contains(environment) else { throw ManagedAccountError.invalidResponse }
+        resolvedEnvironment = environment
+        return environment
+    }
     private func member() -> ManagedAccountSession? {
         guard let configuration else { return nil }
         return try? ManagedAccountKeychain(scope: configuration.storageScope).load()
@@ -77,7 +87,10 @@ final class AppleMinutePurchases {
                 await self.deliver(result, owner: member)
             }
         }
-        Task { await checkPurchases(includeHistory: false) }
+        Task {
+            _ = try? await prepareEnvironment()
+            await checkPurchases(includeHistory: false)
+        }
     }
     func load() async {
         #if DEBUG && targetEnvironment(simulator)
@@ -97,6 +110,7 @@ final class AppleMinutePurchases {
         guard enabled, !busy else { return }
         busy = true; defer { busy = false }
         do {
+            let expectedEnvironment = try await prepareEnvironment()
             if let owner = member() { await recoverRecordedOrders(owner: owner) }
             guard let storefront = await Storefront.current else { throw ManagedAccountError.unavailable }
             let catalog: MinuteCatalog = try await request("/v1/minutes/products", query: [URLQueryItem(name: "provider", value: "apple"),
@@ -210,6 +224,9 @@ final class AppleMinutePurchases {
     func checkPurchases(includeHistory: Bool = true) async {
         guard enabled, !checking, !ProcessInfo.processInfo.arguments.contains("--preview"), let owner = member() else { return }
         checking = true; defer { checking = false }
+        guard (try? await prepareEnvironment()) != nil else {
+            message = "Couldn’t check purchases. Please try again."; return
+        }
         await recoverRecordedOrders(owner: owner)
         for await result in Transaction.unfinished { await deliver(result, owner: owner) }
         if includeHistory {
@@ -240,6 +257,9 @@ final class AppleMinutePurchases {
         }
         guard let owner = member(), enabled else { return }
         loadingHistory = true; defer { loadingHistory = false }
+        guard (try? await prepareEnvironment()) != nil else {
+            historyMessage = "Couldn’t check purchases. Please try again."; return
+        }
         var checked = 0
         for await result in Transaction.all {
             guard current(owner), !Task.isCancelled else { recentPurchases = []; return }
@@ -283,6 +303,8 @@ final class AppleMinutePurchases {
         // StoreKit's local verification is followed by server verification and an owned durable grant.
         delivering.insert(transaction.id); defer { delivering.remove(transaction.id) }
         do {
+            let environment = try await prepareEnvironment()
+            guard try ApplePurchaseScope.environment(transaction.environment) == environment else { return false }
             // A notification may already have fulfilled this purchase. Confirm the
             // owned durable grant before resubmitting an older StoreKit receipt.
             let recorded: ApplePurchaseStatus? = try? await request("/v1/minutes/orders/" + orderID.uuidString.lowercased(), owner: owner)

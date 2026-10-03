@@ -52,6 +52,17 @@ class PaymentHealthMonitorTests(unittest.TestCase):
         snapshot["cursors"][0]["age_seconds"] = 3600
         self.assertEqual(len(monitor.inspect_snapshot(snapshot, ["apple"])), 1)
 
+    def test_play_and_apple_histories_are_checked_independently(self):
+        snapshot = self.snapshot()
+        snapshot["cursors"] = [{"provider": "apple", "age_seconds": 0}]
+        self.assertEqual(monitor.inspect_snapshot(snapshot, ["apple", "play"]),
+                         [{"kind": "provider_history_stalled", "reference": monitor.reference("play")}])
+        snapshot["cursors"].append({"provider": "play", "age_seconds": 3599})
+        self.assertEqual(monitor.inspect_snapshot(snapshot, ["apple", "play"]), [])
+        snapshot["cursors"][0]["age_seconds"] = 3600
+        self.assertEqual(monitor.inspect_snapshot(snapshot, ["apple", "play"]),
+                         [{"kind": "provider_history_stalled", "reference": monitor.reference("apple")}])
+
     def test_deduplication_recovery_and_daily_reminder(self):
         alerts = [{"kind": "settlement_overdue", "reference": "abc"}]
         previous = {"sentAt": 100000, "alerts": alerts}

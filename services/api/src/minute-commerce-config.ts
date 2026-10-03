@@ -9,6 +9,7 @@ import { MinutePurchases, type MinuteProduct, type PurchaseEnvironment } from '.
 import { MinuteReceiptVault, MinuteDeliveryWorker, type MinuteDeliveryAdapter } from './minute-provider-delivery.js';
 import { StripeMinuteProvider, type StripeMinuteTransport } from './stripe-minute-provider.js';
 import { AppleMinuteProvider, type AppleMinuteTransport } from './apple-minute-provider.js';
+import { ApplePurchaseScopes } from './apple-purchase-scope.js';
 import { PlayMinuteProvider } from './play-minute-provider.js';
 import { GooglePlayHTTPTransport, GoogleServiceAccountTokens, type PlayTransport } from './google-play-transport.js';
 import { PlayRtdnSubscriber } from './google-play-rtdn.js';
@@ -65,6 +66,8 @@ export interface MinuteCommerceServices {
   stripe?: StripeMinuteProvider;
   play?: PlayMinuteProvider;
   apple?: AppleMinuteProvider;
+  appleSandbox?: AppleMinuteProvider;
+  appleScopes?: ApplePurchaseScopes;
   vault: MinuteReceiptVault;
   worker: MinuteDeliveryWorker;
   runner: MinuteCommerceRunner;
@@ -77,6 +80,7 @@ export interface MinuteCommerceDependencies {
   stripeTransport?: StripeMinuteTransport;
   playTransport?: PlayTransport;
   appleTransport?: AppleMinuteTransport;
+  appleSandboxTransport?: AppleMinuteTransport;
   request?: typeof fetch;
   onFailure?: CommerceRunnerOptions['onFailure'];
   onPlayNotificationHandled?: (eventType: 'purchased' | 'canceled' | 'voided') => void;
@@ -122,7 +126,8 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
   const receipt = keys((await protectedJSON(env[prefix + 'RECEIPT_KEYS_FILE'])).value, ['activeKeyID','keys']);
   const ring = new Map(Object.entries(object(receipt.keys)).map(([id, key]) => [id, base64Key(key)]));
   const vault = new MinuteReceiptVault(db, receipt.activeKeyID, ring);
-  let stripe: StripeMinuteProvider | undefined, play: PlayMinuteProvider | undefined, apple:AppleMinuteProvider | undefined;
+  let stripe: StripeMinuteProvider | undefined, play: PlayMinuteProvider | undefined, apple:AppleMinuteProvider | undefined,
+    appleSandbox:AppleMinuteProvider | undefined;
   let playNotificationTokens: GoogleServiceAccountTokens | undefined;
   let playNotificationConfig: { topic: string; subscription: string; packageName: string; projectID: string } | undefined;
   if (manifest.stripe) {
@@ -157,7 +162,8 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
       ('quote' in product && (product.quote.play?.currencyExponent??product.quote.currencyExponent)!==settings.currencyExponents[product.currency]))) throw invalid();
   } else if (env[prefix + 'PLAY_SERVICE_ACCOUNT_FILE'] !== undefined || env[prefix + 'PLAY_BINDING_KEY_FILE'] !== undefined || dependencies.playTransport) throw invalid();
   if(manifest.apple) {
-    const settings=keys(manifest.apple,['bundleID','appAppleID']);
+    const settings=keys(manifest.apple,['bundleID','appAppleID','sandboxEnabled']);
+    if(settings.sandboxEnabled!==undefined && (typeof settings.sandboxEnabled!=='boolean' || environment!=='live')) throw invalid();
     const credentials=keys((await protectedJSON(env[prefix+'APPLE_CREDENTIALS_FILE'])).value,['signingKey','keyID','issuerID','rootCertificates']);
     if(!Array.isArray(credentials.rootCertificates) || credentials.rootCertificates.length<1 || credentials.rootCertificates.length>5 ||
       credentials.rootCertificates.some((v:unknown)=>typeof v!=='string' || v.length>10000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(v))) throw invalid();
@@ -166,9 +172,11 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     apple=new AppleMinuteProvider(db,vault,{bundleID:settings.bundleID,appAppleID:settings.appAppleID,environment,allowLive,
       signingKey:credentials.signingKey,keyID:credentials.keyID,issuerID:credentials.issuerID,
       rootCertificates:credentials.rootCertificates.map((v:string)=>Buffer.from(v,'base64')),purchasesEnabled:salesEnabled},dependencies.appleTransport);
-  } else if(env[prefix+'APPLE_CREDENTIALS_FILE']!==undefined || dependencies.appleTransport) throw invalid();
-  const adapters: MinuteDeliveryAdapter[] = [stripe, play,apple].filter((item): item is StripeMinuteProvider | PlayMinuteProvider | AppleMinuteProvider => !!item);
-  const purchases = new MinutePurchases(db, { catalog: products, verifiers: adapters, salesEnabled: false });
+    if(settings.sandboxEnabled) appleSandbox=new AppleMinuteProvider(db,vault,{...apple.config,environment:'test',allowLive:false},dependencies.appleSandboxTransport);
+    else if(dependencies.appleSandboxTransport) throw invalid();
+  } else if(env[prefix+'APPLE_CREDENTIALS_FILE']!==undefined || dependencies.appleTransport || dependencies.appleSandboxTransport) throw invalid();
+  const adapters: MinuteDeliveryAdapter[] = [stripe, play,apple,appleSandbox].filter((item): item is StripeMinuteProvider | PlayMinuteProvider | AppleMinuteProvider => !!item);
+  const purchases = new MinutePurchases(db, { catalog: products, verifiers: adapters.filter(adapter=>adapter!==appleSandbox), salesEnabled: false });
   const aiPurchases = new AIValuePurchases(db, { catalog: aiProducts, verifiers: adapters, salesEnabled, quantityEnabled: [...(flag(env,'STRIPE_QUANTITY_ENABLED')?['stripe' as const]:[]),...(flag(env,'APPLE_QUANTITY_ENABLED')?['apple' as const]:[])] });
   const fulfillment = new PurchaseFulfillmentRouter(db, purchases, aiPurchases, adapters);
   const playNotifications = playNotificationConfig && playNotificationTokens
@@ -183,7 +191,9 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     ['intervalMilliseconds','deliveryLimit','reconciliationLimit','voidPagesPerRun']);
   const worker = new MinuteDeliveryWorker(db, fulfillment, adapters);
   const runner = new MinuteCommerceRunner(vault, worker, play ? new PlayVoidReconciler(db, play) : undefined,
-    { ...runnerSettings, onFailure: dependencies.onFailure },apple?new AppleHistoryReconciler(db,apple):undefined,playNotifications);
-  return { purchases, aiPurchases, fulfillment, ...(stripe ? { stripe } : {}), ...(play ? { play } : {}), ...(apple?{apple}:{}), vault, worker, runner,
+    { ...runnerSettings, onFailure: dependencies.onFailure },apple?new AppleHistoryReconciler(db,apple):undefined,playNotifications,
+    appleSandbox?[new AppleHistoryReconciler(db,appleSandbox)]:[]);
+  return { purchases, aiPurchases, fulfillment, ...(stripe ? { stripe } : {}), ...(play ? { play } : {}),
+    ...(apple?{apple,appleScopes:new ApplePurchaseScopes(apple,appleSandbox)}:{}),...(appleSandbox?{appleSandbox}:{}), vault, worker, runner,
     ...(playNotifications ? { playNotifications } : {}), environment, salesEnabled, catalogSHA256: catalogFile.hash };
 }

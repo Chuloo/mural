@@ -12,14 +12,16 @@ All flags accept only `true` or `false`. All file paths are absolute. Files are 
 | `MURAL_MINUTE_SALES_ENABLED` | `false` | Enables catalog visibility and new purchases. Requires commerce enabled and catalog approval. Existing payment reconciliation remains available with sales disabled. |
 | `MURAL_MINUTE_ALLOW_LIVE` | `false` | Permits a manifest with environment `live`. A test manifest with this flag true is rejected. |
 | `MURAL_MINUTE_COMMERCE_CONFIG_FILE` | absent | Required manifest, at most 64 KiB. |
-| `MURAL_MINUTE_CATALOG_FILE` | absent | Required canonical product catalog, at most 256 KiB. |
+| `MURAL_MINUTE_CATALOG_FILE` | absent | Required canonical product catalog, at most 8 MiB. |
 | `MURAL_MINUTE_CATALOG_APPROVED_SHA256` | absent | Lowercase SHA-256 of the exact catalog file bytes. Required for sales. A supplied digest must match even when sales are disabled. |
 | `MURAL_MINUTE_RECEIPT_KEYS_FILE` | absent | Required receipt encryption key ring, at most 64 KiB. |
 | `MURAL_MINUTE_STRIPE_CREDENTIALS_FILE` | absent | Required exactly when the manifest includes Stripe. |
 | `MURAL_MINUTE_PLAY_SERVICE_ACCOUNT_FILE` | absent | Required exactly when the manifest includes Play. |
 | `MURAL_MINUTE_PLAY_BINDING_KEY_FILE` | absent | Required exactly when the manifest includes Play. |
+| `MURAL_MINUTE_APPLE_CREDENTIALS_FILE` | absent | Required exactly when the manifest includes Apple. |
+| `MURAL_MINUTE_APPLE_QUANTITY_ENABLED` | `false` | Enables Apple quantities 1–10 when true; otherwise quantity 1. |
 
-Sales enabled while commerce is disabled is an error. Missing, partial or mismatched active configuration raises `minute_commerce_configuration_invalid` with status 503. Separate test and live configurations cannot share a database containing receipts from both environments.
+Sales enabled while commerce is disabled is an error. Missing, partial or mismatched active configuration raises `minute_commerce_configuration_invalid` with status 503. Each retained receipt and order requires its configured provider scope. Apple can explicitly configure both production and sandbox scopes in a live runtime; Stripe and Play retain the manifest environment.
 
 ## File formats
 
@@ -30,6 +32,7 @@ The manifest contains `version: 1`, `environment: "test" | "live"`, at least one
 | `webOrigin` | HTTPS origin without credentials, port, query, fragment or non-root path. Required for Stripe. |
 | `stripe` | `{ "accountID": "acct_…", "managedPayments": false }`; mode defaults to `false` and accepts only a boolean. |
 | `play` | `{ "packageName": "chat.mural.android", "currencyExponents": { "usd": 2 } }`; optional `notifications` is described below. |
+| `apple` | `{ "bundleID": "chat.mural.ios", "appAppleID": 6816001011, "sandboxEnabled": true }`; `sandboxEnabled` is optional and accepted only in a live manifest. |
 | `runner` | Optional limits listed below. |
 
 `chat.mural.android` is the permanent Play package. Each configured Play currency has an explicit exponent from 0 to 3. Catalog currency names use lowercase ISO-style three-letter identifiers.
@@ -47,13 +50,13 @@ Both resources must belong to the project in `MURAL_MINUTE_PLAY_SERVICE_ACCOUNT_
 
 The commerce runner validates the subscription's topic on each pull, reads at most five messages, extends their acknowledgment deadline, and acknowledges each only after provider verification, encrypted receipt capture and ledger reconciliation commit. An unknown token or provider failure remains unacknowledged for retry. A successful pull opens the account-deletion gate for three minutes; failure or stale health closes it. Receiptless Play orders then use the existing 24-hour abandonment window. Saved receipts, pending payments, paid value and refund debt continue to block deletion. No public webhook or additional environment variable is needed.
 
-The active catalog contains `{ "version": 2, "products": [...] }`. It has at most 100 canonical `AIValueProduct` objects and no default price. Generate each product with `makeAIValueProduct` from `src/ai-value-purchases.ts`; do not manually calculate or insert the derived fields. Each product has exactly these fields:
+The active catalog contains `{ "version": 2, "products": [...] }`. It has at most 4096 canonical `AIValueProduct` objects and no default price. Generate each product with `makeAIValueProduct` from `src/ai-value-purchases.ts`; do not manually calculate or insert the derived fields. Each product has exactly these fields:
 
 | Field | Accepted value |
 | --- | --- |
-| `provider` | `stripe` or `play` |
+| `provider` | `stripe`, `play` or `apple` |
 | `environment` | The configured provider environment |
-| `merchant` | The pinned Stripe account ID or Play package |
+| `merchant` | The pinned Stripe account ID, Play package or Apple bundle ID |
 | `sku` | Server SKU, 1–128 characters using letters, numbers, `.`, `_`, `:`, `-` |
 | `providerProduct` | Actual Stripe Price ID or Play product ID, at most 200 characters |
 | `currency` | Three lowercase letters |
@@ -118,6 +121,8 @@ Migration 013 adds `minute_play_void_cursors`. A transaction-scoped advisory loc
 The initial sweep covers the previous 29 days, leaving time to complete pagination within Google's 30-day boundary. Subsequent completed sweeps wait 15 minutes and overlap the prior checkpoint by five minutes. Each window ends one minute before the current time. Partial pagination resumes its exact stored window. A stalled token or an expired history window fails without advancing the checkpoint. The completed watermark cannot move backward.
 
 The cursor stores only environment, package, pagination token, timestamps and watermark; it stores no user or purchase tokens. Receipt reconciliation every six hours also refetches individual provider orders. Google applies void time filters to when its systems observe the void and supports token pagination. [Google Play voided purchases API](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.voidedpurchases/list).
+
+Apple credentials, dual environment routing and hosted funding are defined in the [Apple funding scope reference](apple-funding-scope.md).
 
 Related: [How to enable minute commerce](enable-minute-commerce.md), [provider integration](minute-provider-integration.md), [minute purchase accounting](minute-purchases.md).
 

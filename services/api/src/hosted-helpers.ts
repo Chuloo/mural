@@ -141,8 +141,8 @@ export class HostedHelpers {
   async reserveSessionBudget(sql: PoolClient, account: string, sessionID: string): Promise<void> {
     if (!this.allows(account)) throw new ServiceError('hosted_helpers_not_ready', 503);
     await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
-    const owner=(await sql.query('SELECT funding_mode FROM hosted_sessions WHERE id=$1 AND account_id=$2',[sessionID,account])).rows[0];
-    if (owner?.funding_mode==='ai-value') await lockPaidWallet(sql,account);
+    const owner=(await sql.query('SELECT funding_mode,funding_environment FROM hosted_sessions WHERE id=$1 AND account_id=$2',[sessionID,account])).rows[0];
+    if (owner?.funding_mode==='ai-value') await lockPaidWallet(sql,account,true,owner.funding_environment);
     const session = (await sql.query(`SELECT h.*,a.deleted_at,r.account_id AS minute_owner,r.amount_ms AS minute_amount,r.state AS minute_state
       FROM hosted_sessions h JOIN accounts a ON a.id=h.account_id LEFT JOIN minute_reservations r ON r.id=h.minute_reservation_id
       WHERE h.id=$1 AND h.account_id=$2 FOR UPDATE OF h`, [sessionID, account])).rows[0];
@@ -192,8 +192,8 @@ export class HostedHelpers {
   private async reserve(account: string, sessionID: string, input: HostedHelperInput, providerBody: HostedResponsesRequest) {
     return transaction(this.db, async sql => {
       await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
-      const owner = (await sql.query('SELECT funding_mode FROM hosted_sessions WHERE id=$1 AND account_id=$2', [sessionID,account])).rows[0];
-      const paidWallet = owner?.funding_mode==='ai-value' ? await lockPaidWallet(sql,account) : undefined;
+      const owner = (await sql.query('SELECT funding_mode,funding_environment FROM hosted_sessions WHERE id=$1 AND account_id=$2', [sessionID,account])).rows[0];
+      const paidWallet = owner?.funding_mode==='ai-value' ? await lockPaidWallet(sql,account,true,owner.funding_environment) : undefined;
       const session = (await sql.query(`SELECT h.*,a.deleted_at,r.account_id AS minute_owner,r.amount_ms AS minute_amount,r.state AS minute_state,
         EXISTS(SELECT 1 FROM minute_purchase_transactions p WHERE p.account_id=h.account_id
           AND (NOT h.public_minutes OR p.environment='live') AND p.recovered_ms<LEAST(p.reversal_target_ms,p.granted_ms)) AS refund_due,now() AS database_now
@@ -204,7 +204,7 @@ export class HostedHelpers {
       if (paid && !this.config.publicPaidAccess) throw new ServiceError('hosted_paid_not_ready',503);
       if (this.config.publicMinuteAccess && !session.public_minutes && !paid) throw new ServiceError('helper_session_funding_unavailable',409);
       if (!paid && (!session.minute_reservation_id || !session.reserved_ms)) throw new ServiceError('helper_minute_session_required', 409);
-      if (paid ? !paidWallet || paidWallet.fundedBalance < paidWallet.reserved :
+      if (paid ? !paidWallet || paidWallet.fundedBalance < paidWallet.fundedReserved :
         session.minute_owner !== account || Number(session.minute_amount) !== Number(session.reserved_ms) || session.refund_due ||
         (session.state === 'active' ? session.minute_state !== 'open' : session.minute_state !== 'settled'))
         throw new ServiceError('helper_session_funding_unavailable', 409);
@@ -247,7 +247,7 @@ export class HostedHelpers {
         cashReservation=randomUUID();
         await appendEntry(sql,account,`helper-pool-allocate:${input.requestID}`,'release',0n,-hold,budget.rate_version);
         await sql.query('UPDATE hosted_helper_sessions SET cash_pool_nano=cash_pool_nano-$2 WHERE session_id=$1',[sessionID,hold.toString()]);
-        await reservePaidInTransaction(sql,account,cashReservation,`helper:${input.requestID}`,hold,budget.rate_version);
+        await reservePaidInTransaction(sql,account,cashReservation,`helper:${input.requestID}`,hold,budget.rate_version,session.funding_environment);
       }
       await sql.query(`INSERT INTO hosted_helper_requests(request_id,session_id,purpose,search_requested,input_token_ceiling,output_token_ceiling,hold_nano,active_until,cash_reservation_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [input.requestID, sessionID, input.purpose, Boolean(input.search), inputCeiling, providerBody.max_output_tokens, hold.toString(), activeUntil,cashReservation]);
@@ -269,20 +269,20 @@ export class HostedHelpers {
         throw new ServiceError('hosted_funding_cap_reached', 503);
     }
     if (paid) {
-      const wallet=await lockPaidWallet(sql,session.account_id);
+      const wallet=await lockPaidWallet(sql,session.account_id,true,session.funding_environment);
       if (wallet.fundedAvailable<amount) throw new ServiceError('insufficient_credit',402);
       await appendEntry(sql,session.account_id,`helper-pool-open:${session.id}`,'reserve',0n,amount,HOSTED_HELPER_RATE_VERSION);
     }
     return (await sql.query(`INSERT INTO hosted_helper_sessions(session_id,reserved_ms,per_minute_nano,budget_nano,liability_nano,
       request_limit,search_limit,concurrency_limit,post_session_ms,framing_tokens,search_input_tokens,timeout_ms,rate_version,activation_pending,expires_at,
-      earned_time,requests_per_minute,post_close_budget_nano,cash_funded,cash_pool_nano)
-      VALUES($1,$2,$3,$4,$15,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$16,$17,$18,$19,$20) RETURNING *`,
+      earned_time,requests_per_minute,post_close_budget_nano,cash_funded,cash_pool_nano,funding_environment)
+      VALUES($1,$2,$3,$4,$15,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$16,$17,$18,$19,$20,$21) RETURNING *`,
     [session.id, duration, this.config.helperBudgetNanoPerMinute.toString(), amount.toString(),
       Math.max(1, Math.ceil(duration * this.config.maxRequestsPerMinute / 60_000)), this.config.maxSearchesPerSession,
       this.config.maxConcurrentPerSession, this.config.postSessionMilliseconds, this.config.inputFramingTokenAllowance, this.config.searchInputTokenAllowance,
       this.config.timeoutMilliseconds, HOSTED_HELPER_RATE_VERSION, session.state === 'creating',
       new Date(session.deadline.getTime() + this.config.postSessionMilliseconds), liability.toString(), earnedTime,
-      this.config.maxRequestsPerMinute, postClose?.toString() ?? null,paid,paid ? amount.toString() : '0'])).rows[0];
+      this.config.maxRequestsPerMinute, postClose?.toString() ?? null,paid,paid ? amount.toString() : '0',session.funding_environment??'live'])).rows[0];
   }
   private async uncertain(requestID: string) {
     // A failed write leaves 'pending'. Both states retain funding; concurrency expires at active_until.
@@ -341,7 +341,7 @@ export class HostedHelpers {
   }
 }
 async function syncCashPool(sql: PoolClient,account: string,budget: any,event: string) {
-  const wallet=await lockWallet(sql,account);
+  const wallet=await lockWallet(sql,account,false,false,budget.funding_environment);
   const exposure=BigInt((await sql.query(`SELECT COALESCE(sum(CASE WHEN state='settled' THEN cost_nano ELSE hold_nano END),0) AS total
     FROM hosted_helper_requests WHERE session_id=$1`,[budget.session_id])).rows[0].total);
   const allowance=BigInt(budget.post_close_budget_nano ?? budget.budget_nano);

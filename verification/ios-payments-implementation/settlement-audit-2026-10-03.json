@@ -1,0 +1,262 @@
+{
+  "sessions": [
+    {
+      "state": "incomplete",
+      "close_reason": "sideband_lost",
+      "created_at": "2026-10-01T11:37:50.11254+00:00",
+      "deadline": "2026-10-01T11:47:21.451+00:00",
+      "close_requested_at": "2026-10-01T11:38:32.759+00:00",
+      "observed_ms": 27000,
+      "reserved_ms": 571000,
+      "charged_ms": null,
+      "provider_cost_nano": null,
+      "provider_bound": true,
+      "funding_mode": "minutes",
+      "reservation_state": "open",
+      "amount_ms": 571000,
+      "used_ms": null,
+      "helper_count": 9,
+      "unfinished_helpers": 0,
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "state": "incomplete",
+      "close_reason": "sideband_lost",
+      "created_at": "2026-10-01T23:21:00.737539+00:00",
+      "deadline": "2026-10-01T23:21:02.69+00:00",
+      "close_requested_at": "2026-10-01T23:21:03.333+00:00",
+      "observed_ms": 0,
+      "reserved_ms": 1000,
+      "charged_ms": null,
+      "provider_cost_nano": null,
+      "provider_bound": true,
+      "funding_mode": "minutes",
+      "reservation_state": "open",
+      "amount_ms": 1000,
+      "used_ms": null,
+      "helper_count": 0,
+      "unfinished_helpers": 0,
+      "reference": "98122fdb250c"
+    },
+    {
+      "state": "incomplete",
+      "close_reason": "sideband_lost",
+      "created_at": "2026-10-02T18:10:11.844998+00:00",
+      "deadline": "2026-10-02T18:19:57.241+00:00",
+      "close_requested_at": "2026-10-02T18:14:08.075+00:00",
+      "observed_ms": 223000,
+      "reserved_ms": 585000,
+      "charged_ms": null,
+      "provider_cost_nano": null,
+      "provider_bound": true,
+      "funding_mode": "minutes",
+      "reservation_state": "open",
+      "amount_ms": 585000,
+      "used_ms": null,
+      "helper_count": 30,
+      "unfinished_helpers": 0,
+      "reference": "c78c03c4ed18"
+    }
+  ],
+  "cursors": [
+    {
+      "provider": "play",
+      "environment": "live",
+      "updated_at": "2026-10-03T09:44:39.153767+00:00",
+      "completed_through_ms": 1791020619155
+    }
+  ],
+  "activity": {
+    "unresolved_count": 3,
+    "active_count": 0,
+    "closed_since_sep17": 1261,
+    "new_incomplete_since_sep17": 3
+  },
+  "relatedLogEventCounts": {
+    "98122fdb250c:voice_hangup_failed": 20999,
+    "c78c03c4ed18:voice_connection_lost": 10500,
+    "c78c03c4ed18:voice_hangup_failed": 20998,
+    "b9f95ca8e5c7:voice_connection_lost": 10499,
+    "b9f95ca8e5c7:voice_hangup_failed": 20998,
+    "98122fdb250c:voice_connection_lost": 10499
+  },
+  "relatedLastLogEvents": [
+    {
+      "timestamp": "2026-10-03T09:56:50.084Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:50.093Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:50.627Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:50.794Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:50.803Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:51.261Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "c78c03c4ed18"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:51.424Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "c78c03c4ed18"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:51.432Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "c78c03c4ed18"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:51.867Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:52.035Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:52.049Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:52.632Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:52.794Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:52.803Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:53.254Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "c78c03c4ed18"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:53.425Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "c78c03c4ed18"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:53.435Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "c78c03c4ed18"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:53.906Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:54.081Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:54.088Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "b9f95ca8e5c7"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:54.643Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:54.806Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:54.814Z",
+      "event": "voice_hangup_failed",
+      "operation": "voice.hangup",
+      "reason": "provider_hangup_unconfirmed",
+      "source": "live-provider.js:195:19",
+      "reference": "98122fdb250c"
+    },
+    {
+      "timestamp": "2026-10-03T09:56:55.276Z",
+      "event": "voice_connection_lost",
+      "operation": "voice.sideband",
+      "reference": "c78c03c4ed18"
+    }
+  ],
+  "checkedAt": "2026-10-03T09:56:58.352345+00:00"
+}
