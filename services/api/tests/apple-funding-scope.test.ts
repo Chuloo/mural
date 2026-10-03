@@ -12,6 +12,7 @@ import {MinutePurchases,type PurchaseEnvironment} from '../src/minute-purchases.
 import {MinuteReceiptVault,MinuteDeliveryWorker} from '../src/minute-provider-delivery.js';
 import {createApp} from '../src/app.js';
 import {AuthAdmission} from '../src/auth-admission.js';
+import {AppleHistoryReconciler} from '../src/minute-commerce-runner.js';
 import {digest,deleteAccount} from '../src/auth.js';
 import {HostedVoice} from '../src/hosted-voice.js';
 import {HostedHelpers,HOSTED_HELPER_MODEL} from '../src/hosted-helpers.js';
@@ -54,7 +55,7 @@ class Voice implements LiveProvider {
   async hangup(){}
 }
 async function until(predicate:()=>Promise<boolean>){const deadline=Date.now()+3000;while(!await predicate()){if(Date.now()>deadline)throw new Error('Condition timed out');await new Promise(r=>setTimeout(r,5));}}
-async function fixture(){
+async function fixture(historyAdmissionRequired=false){
   const schema=`apple_scope_${randomUUID().replaceAll('-','')}`,url=new URL(databaseURL!);url.searchParams.set('options',`-c search_path=${schema}`);
   const db=connectDatabase(url.toString());await db.query(`CREATE SCHEMA ${schema}`);await migrate(db);
   const vault=new MinuteReceiptVault(db,'test',new Map([['test',randomBytes(32)]]));
@@ -62,7 +63,7 @@ async function fixture(){
   const config={bundleID:'chat.mural.ios',appAppleID:6816001011,signingKey:'unused',keyID:'TESTKEY123',issuerID:randomUUID(),rootCertificates:[],purchasesEnabled:true};
   const live=new AppleMinuteProvider(db,vault,{...config,environment:'live',allowLive:true},liveTransport);
   const sandbox=new AppleMinuteProvider(db,vault,{...config,environment:'test'},testTransport);
-  const scopes=new ApplePurchaseScopes(live,sandbox),catalog=[product('live'),product('test')];
+  const scopes=new ApplePurchaseScopes(live,sandbox,historyAdmissionRequired),catalog=[product('live'),product('test')];
   const ai=new AIValuePurchases(db,{catalog,verifiers:[live,sandbox],salesEnabled:true,quantityEnabled:['apple']});
   const legacy=new MinutePurchases(db,{verifiers:[live]}),fulfillment=new PurchaseFulfillmentRouter(db,legacy,ai,[live,sandbox]);
   const account=randomUUID(),token=randomBytes(32).toString('base64url');
@@ -98,6 +99,57 @@ test('unsigned environment hints never verify a funding scope; only verified mat
   assert.equal(await scopes.verify(proof('test')),'test');assert.equal(await scopes.verify(proof('test')),'test');
   for(const bad of [proof('test').replace('.verified','.forged'),signed({receiptType:'Xcode'}),signed({receiptType:'Sandbox',bundleId:'wrong.app'}),'Sandbox',undefined])
     await assert.rejects(scopes.verify(bad));
+});
+
+integration('dual Apple checkout opens separately after real completed history and closes on stale, uncompleted or foreign cursors',async()=>{
+  const f=await fixture(true);try{
+    const catalog=(environment:PurchaseEnvironment)=>f.app.inject({url:'/v1/minutes/products?provider=apple&storefront=USA',headers:f.headers(environment)});
+    const checkout=(environment:PurchaseEnvironment)=>f.app.inject({method:'POST',url:'/v1/minutes/orders',headers:{...f.headers(environment),'idempotency-key':randomUUID()},
+      payload:{provider:'apple',sku:'small-us-v1',storefront:'USA',scheduleVersion:'test-schedule'}});
+    assert.deepEqual(await f.scopes.historyReadiness(),{liveReady:false,testReady:false});
+    for(const scope of ['live','test'] as const){assert.equal((await catalog(scope)).json().available,false);assert.equal((await checkout(scope)).statusCode,503);}
+    await f.db.query("INSERT INTO apple_notification_cursors(environment,merchant,completed_through_ms) VALUES('live','foreign.app',floor(extract(epoch FROM now())*1000)::bigint)");
+    assert.equal(await f.scopes.admissionReady('live'),false);
+    await new AppleHistoryReconciler(f.db,f.sandbox).page();
+    assert.deepEqual(await f.scopes.historyReadiness(),{liveReady:false,testReady:true});
+    assert.equal((await catalog('test')).json().available,true);await f.order('test');
+    const original=f.liveTransport.history;
+    f.liveTransport.history=async()=>{throw new Error('Production API is unavailable before release');};
+    await assert.rejects(new AppleHistoryReconciler(f.db,f.live).page());
+    assert.equal((await f.db.query("SELECT count(*) FROM apple_notification_cursors WHERE environment='live' AND merchant='chat.mural.ios'")).rows[0].count,'0');
+    assert.equal((await checkout('live')).statusCode,503);
+    f.liveTransport.history=original;await new AppleHistoryReconciler(f.db,f.live).page();
+    assert.deepEqual(await f.scopes.historyReadiness(),{liveReady:true,testReady:true});
+    assert.equal((await catalog('live')).json().available,true);await f.order('live');
+    await f.db.query("UPDATE apple_notification_cursors SET completed_through_ms=floor(extract(epoch FROM now()-interval '2 hours')*1000)::bigint,updated_at=now(),page_token='page-in-progress',window_start_ms=1,window_end_ms=2 WHERE merchant='chat.mural.ios' AND environment='live'");
+    assert.equal(await f.scopes.admissionReady('live'),false);assert.equal((await catalog('live')).json().available,false);assert.equal((await checkout('live')).statusCode,503);
+    assert.equal(await f.scopes.admissionReady('test'),true);
+    await f.db.query("UPDATE apple_notification_cursors SET completed_through_ms=NULL,updated_at=now() WHERE merchant='chat.mural.ios' AND environment='test'");
+    assert.equal(await f.scopes.admissionReady('test'),false);
+    await f.db.query("UPDATE apple_notification_cursors SET completed_through_ms=floor(extract(epoch FROM now()+interval '1 hour')*1000)::bigint WHERE merchant='chat.mural.ios' AND environment='test'");
+    assert.equal(await f.scopes.admissionReady('test'),false);
+  }finally{await f.cleanup();}
+});
+
+integration('closed Apple checkout retains authenticated balance, delivery, recovery and refunds',async()=>{
+  const f=await fixture(true);try{
+    await new AppleHistoryReconciler(f.db,f.sandbox).page();
+    const {order,value}=await f.order('test');
+    await f.db.query("UPDATE apple_notification_cursors SET completed_through_ms=floor(extract(epoch FROM now()-interval '2 hours')*1000)::bigint,updated_at=now()");
+    assert.equal(await f.scopes.admissionReady('test'),false);
+    const delivered=await f.app.inject({method:'POST',url:`/v1/minutes/orders/${order.orderID}/apple`,headers:f.headers('test'),payload:{transactionID:value.transactionId}});
+    assert.equal(delivered.statusCode,200,delivered.body);
+    for(const url of ['/v1/wallet','/v1/minutes',`/v1/minutes/orders/${order.orderID}`])assert.equal((await f.app.inject({url,headers:f.headers('test')})).statusCode,200);
+    const recovered=await f.app.inject({method:'POST',url:'/v1/minutes/apple/recover',headers:f.headers('test'),payload:{transactionID:value.transactionId}});
+    assert.equal(recovered.statusCode,200,recovered.body);assert.equal((await paidAIBalance(f.db,f.account,'test')).balanceNanoUSD,'3690000000');
+    value.revocationDate=1700000000002;value.signedDate=1700000000003;value.revocationType='REFUND_FULL';value.revocationPercentage=100000;
+    const notification:ResponseBodyV2DecodedPayload={notificationUUID:randomUUID(),version:'2.0',signedDate:1700000000004,notificationType:'REFUND',
+      data:{bundleId:'chat.mural.ios',appAppleId:6816001011,environment:Environment.SANDBOX,signedTransactionInfo:signed(value)}};
+    const jws=signed(notification);f.testTransport.notifications.set(jws,notification);
+    const notified=await f.app.inject({method:'POST',url:'/v1/webhooks/apple',headers:f.headers(),payload:{signedPayload:jws}});assert.equal(notified.statusCode,200,notified.body);
+    const worker=new MinuteDeliveryWorker(f.db,f.fulfillment,[f.live,f.sandbox]);assert.equal((await worker.runBatch()).completed,1);
+    assert.equal((await paidAIBalance(f.db,f.account,'test')).balanceNanoUSD,'0');
+  }finally{await f.cleanup();}
 });
 
 integration('public API requires Apple proof, isolates same-SKU catalog/order scopes and durable recovery/account ownership',async()=>{
@@ -241,6 +293,10 @@ integration('actual runtime grants support dual Apple purchases, scoped settleme
     const url=new URL(f.url);url.searchParams.set('options',`-c search_path=${f.schema} -c role=${role}`);runtime=connectDatabase(url.toString());
     const vault=new MinuteReceiptVault(runtime,'test',new Map([['test',randomBytes(32)]]));
     const live=new AppleMinuteProvider(runtime,vault,f.live.config,f.liveTransport),sandbox=new AppleMinuteProvider(runtime,vault,f.sandbox.config,f.testTransport);
+    const scopes=new ApplePurchaseScopes(live,sandbox,true);
+    assert.deepEqual(await scopes.historyReadiness(),{liveReady:false,testReady:false});
+    await new AppleHistoryReconciler(runtime,sandbox).page();
+    assert.deepEqual(await scopes.historyReadiness(),{liveReady:false,testReady:true});
     const ai=new AIValuePurchases(runtime,{catalog:f.ai.products('apple'),verifiers:[live,sandbox],salesEnabled:true,quantityEnabled:['apple']});
     const legacy=new MinutePurchases(runtime,{verifiers:[live]}),fulfillment=new PurchaseFulfillmentRouter(runtime,legacy,ai,[live,sandbox]);
     const order=await ai.createOrder(f.account,'apple','small-us-v1',randomUUID(),1,{storefront:'USA',scheduleVersion:'test-schedule'},undefined,'test');

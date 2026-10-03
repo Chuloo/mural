@@ -20,11 +20,29 @@ export function appleSignedEnvironment(signed:string,field:'receiptType'|'enviro
 /** Bounds repeat certificate work; cached entries contain only verified scope, never JWS. */
 export class ApplePurchaseScopes {
   readonly #cache=new Map<string,{scope:PurchaseEnvironment;until:number}>();
-  constructor(readonly live:AppleMinuteProvider,readonly sandbox?:AppleMinuteProvider) {}
+  constructor(readonly live:AppleMinuteProvider,readonly sandbox?:AppleMinuteProvider,readonly historyAdmissionRequired=false) {}
   provider(scope:PurchaseEnvironment) {
     const provider=scope===this.live.environment?this.live:this.sandbox;
     if(!provider || provider.environment!==scope) throw new ServiceError('minute_purchases_unavailable',503);
     return provider;
+  }
+  /** Opening checkout requires a verified, completed history window for that exact scope. */
+  async historyReadiness():Promise<{liveReady:boolean;testReady:boolean}> {
+    const providers=[this.live,...(this.sandbox?[this.sandbox]:[])];
+    if(!this.historyAdmissionRequired)return {liveReady:providers.some(p=>p.environment==='live'),testReady:providers.some(p=>p.environment==='test')};
+    const rows=(await this.live.db.query(`SELECT environment FROM apple_notification_cursors WHERE merchant=$1
+      AND environment=ANY($2::text[]) AND completed_through_ms>
+      floor(extract(epoch FROM now()-interval '1 hour')*1000) AND completed_through_ms<=floor(extract(epoch FROM now())*1000)`,
+      [this.live.merchant,providers.map(p=>p.environment)])).rows;
+    return {liveReady:rows.some(row=>row.environment==='live'),testReady:rows.some(row=>row.environment==='test')};
+  }
+  async admissionReady(scope:PurchaseEnvironment):Promise<boolean> {
+    this.provider(scope);
+    const ready=await this.historyReadiness();
+    return scope==='live'?ready.liveReady:ready.testReady;
+  }
+  async requireAdmission(scope:PurchaseEnvironment):Promise<void> {
+    if(!await this.admissionReady(scope))throw new ServiceError('minute_purchases_unavailable',503);
   }
   async verify(signed:unknown):Promise<PurchaseEnvironment> {
     if(typeof signed!=='string')throw new ServiceError('apple_purchase_verification_failed',502);
