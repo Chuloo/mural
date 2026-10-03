@@ -232,6 +232,46 @@ integration('verified sandbox calls reject production free and paid funds before
   }finally{await f.cleanup();}
 });
 
+integration('verified sandbox paid calls bypass unused legacy minute reconciliation while production admission stays guarded',async()=>{
+  const f=await fixture();try{
+    const {order,value}=await f.order('test');
+    await f.fulfillment.reconcile('apple',{kind:'client',environment:'test',accountID:f.account,orderID:order.orderID,transactionID:value.transactionId});
+    await transaction(f.db,async sql=>{
+      await appendMinuteEntry(sql,f.account,'legacy-production-free','gift',193000,0);
+      await appendEntry(sql,f.account,'production-paid','purchase',2000000000n,0n);
+    });
+    await f.db.query('UPDATE minute_wallets SET sandbox_reconciled=false WHERE account_id=$1',[f.account]);
+    const freeBefore=(await f.db.query('SELECT * FROM minute_wallets WHERE account_id=$1',[f.account])).rows;
+    const entriesBefore=(await f.db.query('SELECT * FROM minute_entries WHERE account_id=$1 ORDER BY id',[f.account])).rows;
+    const liveBefore=await paidAIBalance(f.db,f.account,'live');
+    const create=(environment?:PurchaseEnvironment)=>f.app.inject({method:'POST',url:'/v1/live/sessions',
+      headers:{...f.headers(environment),'idempotency-key':randomUUID()},payload:{sdp:'v=0\r\noffer',language:'es-ES',requestedMilliseconds:60000}});
+    for(const environment of [undefined,'live'] as const){
+      const rejected=await create(environment);
+      assert.equal(rejected.statusCode,409,rejected.body);
+      assert.equal(rejected.json().error.code,'minute_balance_reconciliation_required');
+    }
+    assert.equal(f.voice.creates,0);
+    const balance=(await f.app.inject({url:'/v1/minutes',headers:f.headers('test')})).json();
+    assert.equal(balance.availableMilliseconds,0);assert.equal(balance.paid.availableNanoUSD,'3690000000');
+    const response=await create('test');assert.equal(response.statusCode,200,response.body);
+    const session=response.json();assert.equal(session.fundingMode,'ai-value');
+    const reservation=(await f.db.query('SELECT r.id,r.funding_environment FROM reservations r JOIN hosted_sessions h ON h.reservation_id=r.id WHERE h.id=$1',[session.sessionID])).rows[0];
+    assert.equal(reservation.funding_environment,'test');
+    await assert.rejects(f.db.query("UPDATE reservations SET funding_environment='live' WHERE id=$1",[reservation.id]));
+    assert.equal((await f.db.query('SELECT count(*) FROM minute_reservations')).rows[0].count,'0');
+    f.voice.listeners.get(session.providerSessionID)!({type:'session.closed',usage:{seconds:20}});
+    await until(async()=>(await f.db.query('SELECT state FROM hosted_sessions WHERE id=$1',[session.sessionID])).rows[0].state==='closed');
+    await f.db.query('ALTER TABLE hosted_helper_sessions DISABLE TRIGGER hosted_helper_budget_immutable');
+    await f.db.query("UPDATE hosted_helper_sessions SET expires_at=now()-interval '1 second' WHERE session_id=$1",[session.sessionID]);
+    await f.db.query('ALTER TABLE hosted_helper_sessions ENABLE TRIGGER hosted_helper_budget_immutable');await f.helpers.expireBudgets();
+    assert.deepEqual((await f.db.query('SELECT * FROM minute_wallets WHERE account_id=$1',[f.account])).rows,freeBefore);
+    assert.deepEqual((await f.db.query('SELECT * FROM minute_entries WHERE account_id=$1 ORDER BY id',[f.account])).rows,entriesBefore);
+    assert.deepEqual(await paidAIBalance(f.db,f.account,'live'),liveBefore);
+    const paid=await paidAIBalance(f.db,f.account,'test');assert.ok(BigInt(paid.availableNanoUSD)<3690000000n);assert.equal(paid.reservedNanoUSD,'0');
+  }finally{await f.cleanup();}
+});
+
 integration('verified TestFlight calls and helpers preserve production free time and paid value',async()=>{
   const f=await fixture();try{
     const {order,value}=await f.order('test');await f.fulfillment.reconcile('apple',{kind:'client',environment:'test',accountID:f.account,orderID:order.orderID,transactionID:value.transactionId});

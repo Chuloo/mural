@@ -140,7 +140,8 @@ export class HostedVoice {
       const exposure = this.publicMinuteAccess ? 0n : BigInt((await sql.query('SELECT COALESCE(sum(funding_exposure_nano),0) AS total FROM hosted_sessions')).rows[0].total) +
         await hostedHelperExposure(sql);
       if (minutes) {
-        if (this.publicMinuteAccess && !minuteWallet!.sandboxReconciled) throw new ServiceError('minute_balance_reconciliation_required',409);
+        if (this.publicMinuteAccess && requestedFundingEnvironment!=='test' && !minuteWallet!.sandboxReconciled)
+          throw new ServiceError('minute_balance_reconciliation_required',409);
         // Explicit verified sandbox scope cannot reserve production free time.
         // Historical callers without a scope keep their existing funding order.
         reservedMilliseconds = this.publicMinuteAccess && requestedFundingEnvironment==='test' ? 0 :
