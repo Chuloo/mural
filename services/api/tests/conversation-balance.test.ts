@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
-import { appendEntry } from '../src/ledger.js';
-import { appendMinuteEntry } from '../src/minutes.js';
+import { appendEntry, reservePaidInTransaction } from '../src/ledger.js';
+import { appendMinuteEntry, reserveMinutes } from '../src/minutes.js';
 import { conversationBalance } from '../src/conversation-balance.js';
 
 const databaseURL = process.env.TEST_DATABASE_URL;
@@ -92,5 +92,47 @@ test('guest balance does not require a cash wallet or expose paid admission', { 
     const balance = await conversationBalance(db, account, true, policy);
     assert.equal(balance.availableMilliseconds, 600_000);
     assert.ok(!('paid' in balance));
+    const sandbox = await conversationBalance(db,account,true,policy,'test');
+    assert.equal(sandbox.balanceMilliseconds,0);assert.equal(sandbox.reservedMilliseconds,0);assert.equal(sandbox.availableMilliseconds,0);
+    assert.equal(sandbox.presentation.totalDisplayMilliseconds,0);assert.equal(sandbox.presentation.availabilityReason,'insufficient_remaining_time');
+    assert.ok(!('paid' in sandbox));
+    await reserveMinutes(db,account,'guest-unresolved-free',60_000);
+    const settling = await conversationBalance(db,account,true,policy,'test');
+    assert.equal(settling.availableMilliseconds,0);assert.equal(settling.presentation.settlementState,'pending');
+    assert.equal(settling.presentation.availabilityReason,'settling');
   } finally { await db.query(`DROP SCHEMA ${schema} CASCADE`); await db.end(); }
+});
+
+test('sandbox balance excludes free time while mixed cash reservations and legacy views retain their scopes',{skip:!databaseURL},async()=>{
+  const schema=`scoped_balance_${randomUUID().replaceAll('-','')}`,url=new URL(databaseURL!);
+  url.searchParams.set('options',`-c search_path=${schema}`);
+  const db=connectDatabase(url.toString());await db.query(`CREATE SCHEMA ${schema}`);
+  try {
+    await migrate(db);const account=randomUUID();
+    await transaction(db,async sql=>{
+      await sql.query('INSERT INTO accounts(id) VALUES($1)',[account]);
+      await sql.query('INSERT INTO wallets(account_id) VALUES($1)',[account]);
+      await appendMinuteEntry(sql,account,'public-free','gift',193_000,0);
+      await appendMinuteEntry(sql,account,'legacy-test-time','purchase',90_000,0,'sandbox');
+      await appendEntry(sql,account,'live-value','purchase',2_000_000_000n,0n);
+      await appendEntry(sql,account,'test-value','purchase',5_000_000_000n,0n,null,5_000_000_000n);
+      await reservePaidInTransaction(sql,account,randomUUID(),'live-hold',400_000_000n,'synthetic-rate','live');
+      await reservePaidInTransaction(sql,account,randomUUID(),'test-hold',600_000_000n,'synthetic-rate','test');
+    });
+    await reserveMinutes(db,account,'unresolved-free-hold',50_000);
+    const testView=await conversationBalance(db,account,true,policy,'test');
+    assert.deepEqual([testView.balanceMilliseconds,testView.reservedMilliseconds,testView.availableMilliseconds],[0,0,0]);
+    assert.equal(testView.presentation.freeAvailableMilliseconds,0);assert.equal(testView.presentation.totalDisplayMilliseconds,2_640_000);
+    assert.equal(testView.paid?.balanceNanoUSD,'5000000000');assert.equal(testView.paid?.reservedNanoUSD,'600000000');
+    assert.equal(testView.paid?.availableNanoUSD,'4400000000');assert.equal(testView.presentation.settlementState,'pending');
+    for(const environment of [undefined,'live'] as const){
+      const live=await conversationBalance(db,account,true,policy,environment);
+      assert.equal(live.availableMilliseconds,143_000);assert.equal(live.reservedMilliseconds,50_000);
+      assert.equal(live.paid?.balanceNanoUSD,'2000000000');assert.equal(live.paid?.reservedNanoUSD,'400000000');
+      assert.equal(live.paid?.availableNanoUSD,'1600000000');assert.equal(live.presentation.totalDisplayMilliseconds,1_103_000);
+    }
+    const legacy=await conversationBalance(db,account,false,policy,'test');
+    assert.equal(legacy.availableMilliseconds,233_000);assert.equal(legacy.reservedMilliseconds,50_000);
+    assert.equal(legacy.presentation.totalDisplayMilliseconds,2_873_000);
+  } finally {await db.query(`DROP SCHEMA ${schema} CASCADE`);await db.end();}
 });

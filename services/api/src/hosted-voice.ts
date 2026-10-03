@@ -140,9 +140,13 @@ export class HostedVoice {
       const exposure = this.publicMinuteAccess ? 0n : BigInt((await sql.query('SELECT COALESCE(sum(funding_exposure_nano),0) AS total FROM hosted_sessions')).rows[0].total) +
         await hostedHelperExposure(sql);
       if (minutes) {
-        if (this.publicMinuteAccess && !minuteWallet!.sandboxReconciled) throw new ServiceError('minute_balance_reconciliation_required',409);
-        reservedMilliseconds = Math.min(TRIAL_MS,requestedMilliseconds ?? TRIAL_MS, Number(wallet.balance) - Number(wallet.reserved) -
-          (this.publicMinuteAccess ? minuteWallet!.sandbox : 0));
+        if (this.publicMinuteAccess && requestedFundingEnvironment!=='test' && !minuteWallet!.sandboxReconciled)
+          throw new ServiceError('minute_balance_reconciliation_required',409);
+        // Explicit verified sandbox scope cannot reserve production free time.
+        // Historical callers without a scope keep their existing funding order.
+        reservedMilliseconds = this.publicMinuteAccess && requestedFundingEnvironment==='test' ? 0 :
+          Math.min(TRIAL_MS,requestedMilliseconds ?? TRIAL_MS, Number(wallet.balance) - Number(wallet.reserved) -
+            (this.publicMinuteAccess ? minuteWallet!.sandbox : 0));
         if (reservedMilliseconds<=0 && this.publicPaidAccess) {
           const cash=await lockPaidWallet(sql,account,true,fundingEnvironment);
           if (cash.fundedAvailable<this.minimumPaidSessionNanoUSD) throw new ServiceError('insufficient_credit',402);
