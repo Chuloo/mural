@@ -58,7 +58,7 @@ class CoreTest {
         root["preferences"]=kotlinx.serialization.json.JsonObject(prefs)
         val migrated=ArchiveCodec.decode(kotlinx.serialization.json.JsonObject(root).toString())
         assertEquals("nb",migrated.preferences.learningLanguageID)
-        assertEquals(listOf("nb|radio|radio"),migrated.preferences.hiddenWords)
+        assertEquals(listOf("nb|radio"),migrated.preferences.hiddenWords)
         val incoming=Archive(sessions= mutableListOf(evidence(language="es")),preferences=Preferences(meaningLanguage="English"))
         val merged=ArchiveCodec.merge(original,incoming)
         assertEquals("Spanish",merged.preferences.meaningLanguage)

@@ -25,8 +25,8 @@
     "nextGoal": "Compare two meals you cooked.",
     "capabilities": ["Describes past weekend activities"],
     "words": [
-      {"id": "en|cook|to prepare food by heating it", "lemma": "cook", "meaning": "to prepare food by heating it", "form": "cooked", "example": "I cooked rice", "bars": 2, "understandingCount": 0, "independentCount": 2, "lastSeen": 810659400.0, "dueAt": 811005000.0},
-      {"id": "en|grandmother|the mother of your parent", "lemma": "grandmother", "meaning": "the mother of your parent", "form": "grandmother", "example": "my grandmother", "bars": 2, "understandingCount": 0, "independentCount": 2, "lastSeen": 810659400.0, "dueAt": 811005000.0}
+      {"id": "en|cook", "lemma": "cook", "meaning": "to prepare food by heating it", "form": "cooked", "example": "I cooked rice", "bars": 2, "understandingCount": 0, "independentCount": 2, "lastSeen": 810659400.0, "dueAt": 811005000.0},
+      {"id": "en|grandmother", "lemma": "grandmother", "meaning": "the mother of your parent", "form": "grandmother", "example": "my grandmother", "bars": 2, "understandingCount": 0, "independentCount": 2, "lastSeen": 810659400.0, "dueAt": 811005000.0}
     ]
   }
 }
