@@ -26,14 +26,14 @@ final class MuralUITests: XCTestCase {
         reveal(picker, in: app)
         picker.tap()
         let choice = app.buttons["onboarding-language-\(id)"]
+        let menu = app.collectionViews.firstMatch
         for _ in 0..<6 {
             if choice.exists && choice.isHittable { break }
-            let visible = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND identifier != %@",
-                "onboarding-language-", "onboarding-language-picker")).allElementsBoundByIndex.filter { $0.isHittable }
-            guard let last = visible.last else { break }
-            last.swipeUp()
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            menu.swipeUp()
         }
         XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        XCTAssertTrue(choice.isHittable)
         choice.tap()
     }
 
@@ -80,16 +80,7 @@ final class MuralUITests: XCTestCase {
         app.launch()
         let picker = app.buttons["onboarding-language-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        reveal(picker, in: app)
-        picker.tap()
-        let choice = app.buttons["onboarding-language-zh"]
-        for _ in 0..<6 {
-            if choice.isHittable { break }
-            app.collectionViews.firstMatch.swipeUp()
-        }
-        XCTAssertTrue(choice.waitForExistence(timeout: 5))
-        XCTAssertTrue(choice.isHittable)
-        choice.tap()
+        selectOnboardingLanguage("zh", in: app)
         XCTAssertTrue(picker.exists)
         XCTAssertTrue(app.buttons["onboarding-continue"].isHittable)
         app.buttons["onboarding-continue"].tap()

@@ -3,6 +3,33 @@ import StoreKit
 @testable import MuralCore
 
 final class MinutePurchaseTests: XCTestCase {
+    func testAppleProofStaysOnConfiguredOriginAndNeverReachesOAuth() throws {
+        let origin = try XCTUnwrap(URL(string: "https://api.mural.chat"))
+        XCTAssertTrue(ApplePurchaseScope.permitsProof(to: URL(string: "https://api.mural.chat/v1/minutes"), origin: origin))
+        for destination in ["https://oauth2.googleapis.com/token", "https://sandbox-api.mural.chat/v1/minutes",
+                            "http://api.mural.chat/v1/minutes", "https://api.mural.chat:8443/v1/minutes",
+                            "https://api.mural.chat.attacker.invalid/v1/minutes", "https://user@api.mural.chat/v1/minutes",
+                            "https://api.mural.chat/healthz", "https://api.mural.chat/v1/../token"] {
+            XCTAssertFalse(ApplePurchaseScope.permitsProof(to: URL(string: destination), origin: origin), destination)
+        }
+        XCTAssertFalse(ApplePurchaseScope.permitsProof(to: nil, origin: origin))
+    }
+    func testAppleScopeRejectsUnsignedXcodeEnvironment() throws {
+        XCTAssertEqual(try ApplePurchaseScope.environment(.production), "live")
+        XCTAssertEqual(try ApplePurchaseScope.environment(.sandbox), "test")
+        XCTAssertThrowsError(try ApplePurchaseScope.environment(.xcode))
+        XCTAssertThrowsError(try ApplePurchaseScope.environment(AppStore.Environment(rawValue: "unknown")))
+    }
+    func testFundingRequestsRequireProofButAccountSignInCanRecoverWithoutIt() {
+        for path in ["/v1/wallet", "/v1/guest/minutes", "/v1/minutes", "/v1/minutes/products",
+                     "/v1/minutes/orders", "/v1/minutes/apple/recover", "/v1/live/capabilities",
+                     "/v1/live/sessions", "/v1/live/sessions/example/helpers"] {
+            XCTAssertTrue(ApplePurchaseScope.requiresProof(path: path), path)
+        }
+        for path in ["/v1/auth/challenge", "/v1/auth/exchange", "/v1/auth/sign-out", "/v1/account"] {
+            XCTAssertFalse(ApplePurchaseScope.requiresProof(path: path), path)
+        }
+    }
     func testSharedMinutesPresentationFixtures() throws {
         struct Fixture: Decodable { let name: String; let text: String; let presentation: MuralMinutesPresentation }
         let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../shared/fixtures/cross-platform/minutes-presentation.json")
@@ -76,6 +103,22 @@ final class MinutePurchaseTests: XCTestCase {
             XCTAssertThrowsError(try attempt.preparingCheckout(for: originalOffer, quantity: 2))
             XCTAssertThrowsError(try attempt.preparingCheckout(for: offer(["scheduleVersion": "us-v2"]), quantity: 1))
         }
+    }
+    func testPreparingCheckoutCannotReuseTermsAcrossAppleEnvironments() throws {
+        let test = try offer(), live = try offer(["environment": "live"])
+        var original = try ApplePurchaseAttempt(accountID: UUID(), offer: test, quantity: 1)
+        original.orderID = UUID()
+        let replacement = try original.preparingCheckout(for: live, quantity: 1)
+        XCTAssertNotEqual(original.key, replacement.key)
+        XCTAssertNil(replacement.orderID)
+        original.phase = .submitted
+        XCTAssertThrowsError(try original.preparingCheckout(for: live, quantity: 1))
+        var oldSnapshot = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+        var terms = try XCTUnwrap(oldSnapshot["offer"] as? [String: Any])
+        terms.removeValue(forKey: "environment"); oldSnapshot["offer"] = terms
+        let restored = try JSONDecoder().decode(ApplePurchaseAttempt.self, from: JSONSerialization.data(withJSONObject: oldSnapshot))
+        XCTAssertEqual(restored.orderID, original.orderID)
+        XCTAssertFalse(restored.canResumeCheckout)
     }
     @MainActor func testStoreKitRejectionClearsSubmittedAttemptAcrossRestart() async throws {
         let rejected: [Error] = [Product.PurchaseError.productUnavailable, Product.PurchaseError.purchaseNotAllowed,

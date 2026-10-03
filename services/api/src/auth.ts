@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { transaction, type Database } from './db.js';
 import { ServiceError } from './errors.js';
-import { lockWallet } from './ledger.js';
+import { appendEntry,lockWallet } from './ledger.js';
 import type { PoolClient } from 'pg';
 import { appendMinuteEntry, captureWelcomeOffer } from './minutes.js';
 
@@ -162,8 +162,14 @@ export async function deleteAccount(db: Database, account: string, appleRevoker?
     const wallet = await lockWallet(sql, account, true);
     if (authorization) await assertSession(sql, account, authorization);
     const pending = (await sql.query("SELECT id FROM checkout_orders WHERE account_id=$1 AND state='created' LIMIT 1", [account])).rowCount;
+    const verifiedAppleTestOnly=wallet.cashProvenanceVerified && (await sql.query(`SELECT 1 FROM ai_value_purchase_transactions
+      WHERE account_id=$1 AND provider='apple' AND environment='test' AND state='purchased' AND granted_nano>0
+      AND NOT EXISTS(SELECT 1 FROM ledger l WHERE l.account_id=$1 AND l.kind='purchase' AND l.sandbox_delta_nano>0
+        AND l.reference NOT LIKE 'ai-purchase:%')
+      AND NOT EXISTS(SELECT 1 FROM ai_value_purchase_transactions p WHERE p.account_id=$1 AND p.environment='test' AND p.provider<>'apple') LIMIT 1`,[account])).rowCount;
     // The foundation has no refund/checkout-expiry workflow yet. Do not orphan paid value.
-    if (pending || wallet.balance !== 0n || wallet.reserved !== 0n) throw new ServiceError('unresolved_billing', 409);
+    if (pending || wallet.balance-wallet.sandboxBalance !== 0n || wallet.reserved !== 0n ||
+      (wallet.sandboxBalance!==0n && !verifiedAppleTestOnly)) throw new ServiceError('unresolved_billing', 409);
     const minutes = (await sql.query('SELECT balance_ms,reserved_ms FROM minute_wallets WHERE account_id=$1', [account])).rows[0];
     const minutePurchase = (await sql.query("SELECT 1 FROM minute_entries WHERE account_id=$1 AND kind='purchase' LIMIT 1", [account])).rowCount;
     // The account lock serializes deletion with order creation, fulfillment and refund recovery.
@@ -175,7 +181,7 @@ export async function deleteAccount(db: Database, account: string, appleRevoker?
         EXISTS(SELECT 1 FROM minute_provider_receipts r WHERE r.order_id=o.id))) OR p.state='pending'
         OR p.recovered_ms<LEAST(p.reversal_target_ms,p.granted_ms)) LIMIT 1`, [account, now, playNotificationsOperational])).rowCount;
     const unresolvedValueOrder = (await sql.query(`SELECT 1 FROM minute_purchase_orders o
-      LEFT JOIN ai_value_purchase_transactions p ON p.order_id=o.id WHERE o.account_id=$1 AND o.entitlement_kind='ai_value'
+      LEFT JOIN ai_value_purchase_transactions p ON p.order_id=o.id WHERE o.account_id=$1 AND (o.environment='live' OR o.provider<>'apple') AND o.entitlement_kind='ai_value'
       AND ((p.order_id IS NULL AND (((o.provider='play' AND NOT $3::boolean) OR o.created_at>$2::timestamptz-interval '24 hours') OR
         EXISTS(SELECT 1 FROM minute_provider_receipts r WHERE r.order_id=o.id))) OR p.state='pending') LIMIT 1`, [account, now, playNotificationsOperational])).rowCount;
     if (unresolvedMinuteOrder || unresolvedValueOrder || Number(minutes?.reserved_ms ?? 0) > 0 || (minutePurchase && Number(minutes?.balance_ms ?? 0) > 0))
@@ -185,6 +191,9 @@ export async function deleteAccount(db: Database, account: string, appleRevoker?
       if (!appleRevoker || !authorizationCode) throw new ServiceError('apple_revocation_not_configured', 503);
       await appleRevoker.revoke(account, authorizationCode, apple.subject);
     }
+    // Unused verified sandbox value is free test credit, not customer cash.
+    // Keep orders/receipts on the tombstone for late notifications and refunds.
+    if(wallet.sandboxBalance>0n)await appendEntry(sql,account,`sandbox-deletion:${account}`,'reversal',-wallet.sandboxBalance,0n,null,-wallet.sandboxBalance);
     await sql.query('DELETE FROM identities WHERE account_id=$1', [account]);
     await sql.query('DELETE FROM auth_sessions WHERE account_id=$1', [account]);
     // Unused promotional time is forfeited on deletion; it must not trap a free account.

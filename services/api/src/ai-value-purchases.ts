@@ -5,13 +5,14 @@ import { ServiceError } from './errors.js';
 import { storeRegionCode, validateStoreMarketPrice, type StoreMarketPrice } from './store-markets.js';
 import { quoteAITopUp, estimatedConversationMilliseconds, type ProcessingCost } from './ai-top-up-pricing.js';
 import { type MinutePurchases, type MinutePurchaseStatus, type MinutePurchaseVerifier, type PurchaseProvider,
-  type PurchaseScope, type VerifiedMinutePurchase } from './minute-purchases.js';
+  type PurchaseScope, type PurchaseEnvironment, type VerifiedMinutePurchase } from './minute-purchases.js';
 
 const uuid = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const money = (value: unknown, positive=false): value is number => typeof value==='number' && Number.isSafeInteger(value) && value>=(positive?1:0) && value<=100_000_000;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const scopeKey = (scope: PurchaseScope) => JSON.stringify([scope.provider,scope.environment,scope.merchant]);
+const verifierKey = (provider:PurchaseProvider,environment:PurchaseEnvironment) => `${provider}:${environment}`;
 const productKey = (scope: PurchaseScope, sku: string) => JSON.stringify([scopeKey(scope),sku]);
 function scopeValid(scope: PurchaseScope) {
   return scope && ['stripe','play','apple'].includes(scope.provider) && ['test','live'].includes(scope.environment) &&
@@ -206,21 +207,21 @@ function evidenceValid(e:VerifiedMinutePurchase,scope:PurchaseScope) {
 /** Optional catalog. All real entitlements come from server-verified provider evidence. */
 export class AIValuePurchases {
   readonly #catalog=new Map<string,Readonly<AIValueProduct>>();
-  readonly #verifiers=new Map<PurchaseProvider,MinutePurchaseVerifier>();
+  readonly #verifiers=new Map<string,MinutePurchaseVerifier>();
   readonly #salesEnabled:boolean;
   readonly #quantityEnabled:ReadonlySet<PurchaseProvider>;
   constructor(readonly db:Database, options:{catalog?:readonly AIValueProduct[];verifiers?:readonly MinutePurchaseVerifier[];salesEnabled?:boolean;quantityEnabled?:readonly PurchaseProvider[]}={}) {
     this.#salesEnabled=options.salesEnabled===true;
     this.#quantityEnabled=new Set(options.quantityEnabled??[]);
     for (const verifier of options.verifiers??[]) {
-      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifier.provider)) throw new ServiceError('invalid_purchase_verifier');
-      this.#verifiers.set(verifier.provider,Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
+      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifierKey(verifier.provider,verifier.environment))) throw new ServiceError('invalid_purchase_verifier');
+      this.#verifiers.set(verifierKey(verifier.provider,verifier.environment),Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
     }
     const bindings=new Set<string>(),playMarkets=new Map<string,Readonly<AIValueProduct>[]>();
     if((options.catalog?.length??0)>4096) throw new ServiceError('invalid_ai_value_catalog');
     for (const candidate of options.catalog??[]) {
       const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,product.quote.play?.regionCode??product.currency]);
-      const verifier=this.#verifiers.get(product.provider);
+      const verifier=this.#verifiers.get(verifierKey(product.provider,product.environment));
       if (this.#catalog.has(key) || bindings.has(binding) || !verifier || scopeKey(product)!==scopeKey(verifier)) throw new ServiceError('invalid_ai_value_catalog');
       this.#catalog.set(key,product);bindings.add(binding);
       if(product.provider==='play') {
@@ -230,15 +231,20 @@ export class AIValuePurchases {
       }
     }
   }
-  maximumQuantity(provider:PurchaseProvider):number {return provider!=='play' && this.#quantityEnabled.has(provider)?10:1;}
-  products(provider:PurchaseProvider):readonly Readonly<AIValueProduct>[] {
-    return this.#salesEnabled?[...this.#catalog.values()].filter(product=>product.provider===provider):[];
+  #verifier(provider:PurchaseProvider,environment?:PurchaseEnvironment) {
+    if(environment)return this.#verifiers.get(verifierKey(provider,environment));
+    const candidates=[...this.#verifiers.values()].filter(v=>v.provider===provider);
+    return candidates.length===1?candidates[0]:this.#verifiers.get(verifierKey(provider,'live'));
   }
-  async createOrder(accountID:string,provider:PurchaseProvider,sku:string,idempotencyKey:string,quantity=1,appleSelection?:{storefront:string;scheduleVersion:string},playSelection?:{regionCode:string;scheduleVersion:string}):Promise<AIValueOrder> {
+  maximumQuantity(provider:PurchaseProvider):number {return provider!=='play' && this.#quantityEnabled.has(provider)?10:1;}
+  products(provider:PurchaseProvider,environment?:PurchaseEnvironment):readonly Readonly<AIValueProduct>[] {
+    return this.#salesEnabled?[...this.#catalog.values()].filter(product=>product.provider===provider && (environment===undefined || product.environment===environment)):[];
+  }
+  async createOrder(accountID:string,provider:PurchaseProvider,sku:string,idempotencyKey:string,quantity=1,appleSelection?:{storefront:string;scheduleVersion:string},playSelection?:{regionCode:string;scheduleVersion:string},environment?:PurchaseEnvironment):Promise<AIValueOrder> {
     if (!this.#salesEnabled) throw new ServiceError('ai_value_purchases_unavailable',503);
     if (!uuid.test(accountID) || typeof sku!=='string' || typeof idempotencyKey!=='string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) throw new ServiceError('invalid_ai_value_order');
     if (!Number.isInteger(quantity) || quantity<1 || quantity>10 || (provider==='play' && quantity!==1)) throw new ServiceError('invalid_purchase_quantity');
-    const verifier=this.#verifiers.get(provider); if (!verifier) throw new ServiceError('ai_value_purchases_unavailable',503);
+    const verifier=this.#verifier(provider,environment); if (!verifier) throw new ServiceError('ai_value_purchases_unavailable',503);
     return transaction(this.db,async sql=>{
       const wallet=await lockWallet(sql,accountID,true);
       if ((await sql.query('SELECT is_guest FROM accounts WHERE id=$1',[accountID])).rows[0].is_guest) throw new ServiceError('purchase_requires_account',403);
@@ -284,14 +290,14 @@ export class AIValuePurchases {
     return purchaseStatus(orderID,found.order_id?found:undefined);
   }
   async reconcile(provider:PurchaseProvider,input:unknown):Promise<AIValuePurchaseStatus> {
-    const verifier=this.#verifiers.get(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
+    const verifier=this.#verifier(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
     let verified:VerifiedMinutePurchase;
     try {verified=await verifier.verify(input);}catch {throw new ServiceError('purchase_verification_failed',502);}
     return this.applyVerifiedEvidence(provider,verified);
   }
   /** Server-internal: callers must use the configured provider verifier or shared fulfillment router. */
   async applyVerifiedEvidence(provider:PurchaseProvider,verified:VerifiedMinutePurchase):Promise<AIValuePurchaseStatus> {
-    const verifier=this.#verifiers.get(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
+    const verifier=this.#verifier(provider,verified.environment);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
     evidenceValid(verified,verifier);
     if(provider==='apple' && (!Number.isSafeInteger(verified.providerRevision) || verified.providerRevision!<=0 ||
       !Number.isInteger(verified.refundedPartsPer100000) || verified.refundedPartsPer100000!<0 || verified.refundedPartsPer100000!>100000 ||
@@ -364,15 +370,26 @@ export class AIValuePurchases {
 
 /** Webhook, Play recovery and durable worker share one authoritative verification before dispatch. */
 export class PurchaseFulfillmentRouter {
-  readonly #verifiers=new Map<PurchaseProvider,MinutePurchaseVerifier>();
+  readonly #verifiers=new Map<string,MinutePurchaseVerifier>();
   constructor(readonly db:Database,readonly minutes:MinutePurchases,readonly ai:AIValuePurchases,verifiers:readonly MinutePurchaseVerifier[]) {
     for (const verifier of verifiers) {
-      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifier.provider)) throw new ServiceError('invalid_purchase_verifier');
-      this.#verifiers.set(verifier.provider,Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
+      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifierKey(verifier.provider,verifier.environment))) throw new ServiceError('invalid_purchase_verifier');
+      this.#verifiers.set(verifierKey(verifier.provider,verifier.environment),Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
     }
   }
   async reconcile(provider:PurchaseProvider,input:unknown):Promise<MinutePurchaseStatus|AIValuePurchaseStatus> {
-    const verifier=this.#verifiers.get(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
+    const request=input && typeof input==='object'?input as Record<string,unknown>:undefined;
+    let environment=request?.environment;
+    if(typeof request?.orderID==='string') {
+      const order=(await this.db.query('SELECT provider,environment FROM minute_purchase_orders WHERE id=$1',[request.orderID])).rows[0];
+      if(order?.provider!==provider || (environment!==undefined && environment!==order.environment))
+        throw new ServiceError('purchase_verification_failed',502);
+      environment=order.environment;
+    }
+    const candidates=[...this.#verifiers.values()].filter(v=>v.provider===provider);
+    const verifier=typeof environment==='string'?this.#verifiers.get(verifierKey(provider,environment as PurchaseEnvironment)):
+      candidates.length===1?candidates[0]:undefined;
+    if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
     let evidence:VerifiedMinutePurchase;
     try {evidence=await verifier.verify(input);}catch {throw new ServiceError('purchase_verification_failed',502);}
     evidenceValid(evidence,verifier);

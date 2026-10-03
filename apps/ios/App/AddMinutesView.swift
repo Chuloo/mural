@@ -14,6 +14,11 @@ struct AddMinutesView: View {
             VStack(alignment: .leading, spacing: 22) {
                 Text("Choose a one-time pack. Conversation time is approximate and varies with use.")
                     .font(.subheadline).foregroundStyle(MuralColor.secondary)
+                if purchases.testPurchases {
+                    Text("Test purchase. You won’t be charged. Test minutes are separate from your paid balance.")
+                        .font(.footnote).foregroundStyle(MuralColor.secondary)
+                        .accessibilityIdentifier("minute-sandbox-note")
+                }
                 VStack(spacing: 10) {
                     ForEach(purchases.offers) { item in
                         Button { selected = item.sku } label: {

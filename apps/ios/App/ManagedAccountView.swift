@@ -43,7 +43,7 @@ struct ManagedAccountView: View {
                 } else if store.session != nil {
                     if coordinator.conversationProvider == .hosted {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Mural minutes").font(.headline)
+                            Text(AppleMinutePurchases.shared.testPurchases ? "Mural test minutes" : "Mural minutes").font(.headline)
                             if let balance = store.hostedBalance {
                                 Text(balance.displayText)
                                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))

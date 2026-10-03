@@ -1,9 +1,33 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp, type Services } from '../src/app.js';
 import { connectDatabase, type Database } from '../src/db.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { SandboxPayments } from '../src/payments.js';
+import { appleAppTransactionHeader } from '../src/apple-purchase-scope.js';
+
+test('anonymous Apple catalog limits proof work by socket network and resets at the window boundary', async () => {
+  let now = Date.now(), proofs = 0;
+  const clock = mock.method(Date, 'now', () => now);
+  const db = { query: async () => { throw new Error('Catalog must not authenticate or query a database.'); } } as unknown as Database;
+  const app = createApp({ db, auth: {}, minuteCommerce: {
+    aiPurchases: { products: () => [], maximumQuantity: () => 1 },
+    appleScopes: { verify: async () => { proofs++; return 'test'; } },
+  } as unknown as Services['minuteCommerce'] });
+  const request = (index: number) => ({ url: '/v1/minutes/products?provider=apple&storefront=USA',
+    headers: { [appleAppTransactionHeader]: `synthetic-proof-${index}`, 'x-forwarded-for': `203.0.113.${index % 250 + 1}` } });
+  try {
+    for (let i = 0; i < 120; i++) assert.equal((await app.inject(request(i))).statusCode, 200);
+    assert.equal(proofs, 120);
+    const denied = await app.inject(request(120));
+    assert.equal(denied.statusCode, 429); assert.equal(denied.headers['retry-after'], '60'); assert.equal(proofs, 120);
+    now += 59_999;
+    const stillDenied = await app.inject(request(121));
+    assert.equal(stillDenied.statusCode, 429); assert.equal(stillDenied.headers['retry-after'], '1'); assert.equal(proofs, 120);
+    now++;
+    assert.equal((await app.inject(request(122))).statusCode, 200); assert.equal(proofs, 121);
+  } finally { await app.close(); clock.mock.restore(); }
+});
 
 test('close intents reject excess requests before authentication and provider work', async () => {
   for (const trustedProxy of [false, true]) {

@@ -15,7 +15,9 @@
         "/opt/mural/deploy/compose"
       ],
       "database": "mural",
-      "expectedProviders": []
+      "expectedProviders": [
+        "play"
+      ]
     },
     {
       "name": "sandbox",

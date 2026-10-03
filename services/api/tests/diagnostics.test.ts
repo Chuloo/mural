@@ -13,7 +13,7 @@ test('all API failures have references without logging private bodies, query str
   const app = createApp({ db: {} as Database, auth: {}, diagnostics });
   try {
     const response = await app.inject({ method: 'POST', url: '/v1/auth/challenge?privateQuery=secret',
-      headers: { authorization: 'Bearer secret-token', 'x-request-id': 'private-identity' },
+      headers: { authorization: 'Bearer secret-token', 'x-request-id': 'private-identity', 'x-mural-apple-app-transaction':'private.signed.secret-proof' },
       payload: { privateTranscript: 'private-words' } });
     assert.equal(response.statusCode, 503);
     const failure = records.find(record => record.event === 'request_failed')!;

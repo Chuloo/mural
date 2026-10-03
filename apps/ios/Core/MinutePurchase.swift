@@ -115,8 +115,10 @@ public struct MinuteOfferSnapshot: Codable, Equatable, Sendable {
     public let currency: String
     public let unitTotalMinor: Int
     public let estimatedMilliseconds: Int
+    public let environment: String?
     public init(_ offer: MinuteOffer) {
         sku = offer.sku; productID = offer.providerProduct; storefront = offer.storefront; scheduleVersion = offer.scheduleVersion
         currency = offer.currency; unitTotalMinor = offer.totalMinor; estimatedMilliseconds = offer.estimatedMilliseconds
+        environment = offer.environment
     }
 }

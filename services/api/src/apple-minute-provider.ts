@@ -1,4 +1,4 @@
-import { AppStoreServerAPIClient, SignedDataVerifier, Environment, type JWSTransactionDecodedPayload,
+import { AppStoreServerAPIClient, SignedDataVerifier, Environment, type AppTransaction, type JWSTransactionDecodedPayload,
   type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library';
 import type { Database } from './db.js';
 import { ServiceError } from './errors.js';
@@ -12,6 +12,7 @@ export interface AppleMinuteConfig {
   purchasesEnabled?: boolean;
 }
 export interface AppleMinuteTransport {
+  appTransaction?(signed: string): Promise<AppTransaction>;
   transaction(signed: string): Promise<JWSTransactionDecodedPayload>;
   notification(signed: string): Promise<ResponseBodyV2DecodedPayload>;
   latest(transactionID: string): Promise<string>;
@@ -48,6 +49,7 @@ export class AppleSDKMinuteTransport implements AppleMinuteTransport {
     this.#api=new BoundedAppleAPIClient(config,mode);
   }
   transaction(signed:string) {return this.#verifier.verifyAndDecodeTransaction(signed);}
+  appTransaction(signed:string) {return this.#verifier.verifyAndDecodeAppTransaction(signed);}
   notification(signed:string) {return this.#verifier.verifyAndDecodeNotification(signed);}
   async latest(id:string) {
     const response=await this.#api.getTransactionInfo(id);
@@ -99,6 +101,16 @@ export class AppleMinuteProvider implements MinuteDeliveryAdapter {
   constructor(readonly db:Database,readonly vault:MinuteReceiptVault,readonly config:AppleMinuteConfig,
     readonly transport:AppleMinuteTransport=new AppleSDKMinuteTransport(config)) {
     environment(config);this.environment=config.environment;this.merchant=config.bundleID;
+  }
+  /** Select a funding scope only after Apple's signature and app identity verify. */
+  async appTransactionScope(signed:string):Promise<PurchaseEnvironment> {
+    if (!signedData(signed) || !this.transport.appTransaction) throw invalid();
+    let value:AppTransaction;
+    try {value=await this.transport.appTransaction(signed);}catch {throw invalid();}
+    if (value.bundleId!==this.merchant || value.receiptType!==environment(this.config) ||
+      (value.appAppleId!==undefined && value.appAppleId!==this.config.appAppleID) ||
+      !validDate(value.receiptCreationDate) || value.receiptCreationDate>Date.now()+300_000) throw invalid();
+    return this.environment;
   }
   async prepare(accountID:string,orderID:string) {
     if(!this.config.purchasesEnabled) throw new ServiceError('minute_purchases_unavailable',503);
@@ -159,15 +171,27 @@ export class AppleMinuteProvider implements MinuteDeliveryAdapter {
   /** Acknowledge only after the verified notification and receipt have durable retry state. */
   async notify(signed:string):Promise<void> {
     if(!signedData(signed)) throw invalid();
-    const notification=await this.transport.notification(signed);
+    let notification:ResponseBodyV2DecodedPayload;
+    try {notification=await this.transport.notification(signed);}catch {throw invalid();}
     if(!notification.notificationUUID || !orderIDPattern.test(notification.notificationUUID) || notification.version!=='2.0' ||
       !validDate(notification.signedDate) || notification.signedDate>Date.now()+300_000) throw invalid();
     const type=notification.notificationType;
     if(type==='TEST') return;
     if(!['ONE_TIME_CHARGE','REFUND','REFUND_REVERSED','REFUND_DECLINED','CONSUMPTION_REQUEST'].includes(type??'') || !notification.data?.signedTransactionInfo) throw invalid();
-    const {value,order}=await this.#bound(notification.data.signedTransactionInfo,undefined,undefined,false);
     if(notification.data.bundleId!==this.merchant || notification.data.environment!==environment(this.config) ||
       notification.data.appAppleId!==this.config.appAppleID) throw invalid();
+    let transaction:Awaited<ReturnType<AppleMinuteProvider['transport']['transaction']>>;
+    let order:any;
+    try {
+      const result=await this.#bound(notification.data.signedTransactionInfo,undefined,undefined,false);
+      transaction=result.value;order=result.order;
+    } catch(error) {
+      // Sandbox history can include orders belonging to the older isolated test
+      // server. Apple's verified app/environment never grants an unmapped order.
+      if(this.environment==='test' && error instanceof ServiceError && error.code==='purchase_not_found')return;
+      throw error;
+    }
+    const value=transaction;
     await this.vault.save(order.id,this,value.transactionId!);
     const evidenceHash=providerHash(signed);
     await this.db.query(`INSERT INTO apple_purchase_notifications(notification_id,order_id,notification_type,signed_date,evidence_hash)
