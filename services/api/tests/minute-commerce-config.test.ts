@@ -262,6 +262,7 @@ test('live Apple configuration explicitly enables a separate sandbox verifier, c
     const service=(await configuredMinuteCommerce(f.db,f.env,dependencies))!;
     assert.equal(service.apple?.environment,'live');assert.equal(service.appleSandbox?.environment,'test');
     assert.equal(service.appleScopes?.provider('test'),service.appleSandbox);
+    assert.equal(service.appleScopes?.historyAdmissionRequired,true);
     assert.deepEqual(service.aiPurchases.products('apple','test'),[products[1]]);
     assert.equal(service.aiPurchases.maximumQuantity('apple'),10);assert.equal(service.runner.additionalAppleHistories.length,1);
     assert.equal(f.network,0);await service.runner.stop();

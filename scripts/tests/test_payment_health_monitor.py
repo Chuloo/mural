@@ -63,6 +63,32 @@ class PaymentHealthMonitorTests(unittest.TestCase):
         self.assertEqual(monitor.inspect_snapshot(snapshot, ["apple", "play"]),
                          [{"kind": "provider_history_stalled", "reference": monitor.reference("apple")}])
 
+    def test_scope_monitor_requires_completed_history_for_exact_environment_and_merchant(self):
+        snapshot = self.snapshot()
+        scopes = [{"provider": "apple", "environment": "live", "merchant": "chat.mural.ios"}]
+        snapshot["cursors"] = [{"provider": "apple", "environment": "test", "merchant": "chat.mural.ios", "age_seconds": 0, "completed_age_seconds": 60},
+                               {"provider": "apple", "environment": "live", "merchant": "foreign.app", "age_seconds": 0, "completed_age_seconds": 60}]
+        expected = [{"kind": "provider_history_stalled", "reference": monitor.reference("apple:live:chat.mural.ios")}]
+        self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), expected)
+        snapshot["cursors"].append({"provider": "apple", "environment": "live", "merchant": "chat.mural.ios", "age_seconds": 0, "completed_age_seconds": None})
+        self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), expected)
+        for age in [-1, 3600, 7200]:
+            snapshot["cursors"][-1]["completed_age_seconds"] = age
+            self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), expected)
+        snapshot["cursors"][-1]["completed_age_seconds"] = 3599
+        self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), [])
+
+    def test_pending_live_scope_automatically_starts_monitoring_after_first_completion(self):
+        snapshot = self.snapshot()
+        scopes = [{"provider": "apple", "environment": "live", "merchant": "chat.mural.ios", "pendingUntilFirstCompletion": True}]
+        self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), [])
+        snapshot["cursors"] = [{"provider": "apple", "environment": "live", "merchant": "chat.mural.ios", "age_seconds": 0, "completed_age_seconds": None}]
+        self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), [])
+        snapshot["cursors"][0]["completed_age_seconds"] = 60
+        self.assertEqual(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes), [])
+        snapshot["cursors"][0]["completed_age_seconds"] = 3600
+        self.assertEqual(len(monitor.inspect_snapshot(snapshot, expected_history_scopes=scopes)), 1)
+
     def test_deduplication_recovery_and_daily_reminder(self):
         alerts = [{"kind": "settlement_overdue", "reference": "abc"}]
         previous = {"sentAt": 100000, "alerts": alerts}
@@ -107,6 +133,8 @@ class PaymentHealthMonitorTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][-2:], ["-f", "-"])
             self.assertEqual(run.call_args.kwargs["timeout"], 45)
             self.assertNotIn("shell", run.call_args.kwargs)
+            target["expectedHistoryScopes"] = [{"provider": "apple", "environment": "live", "merchant": "chat.mural.ios"}]
+            self.assertEqual(len(monitor.collect(target)), 1)
 
     def test_config_rejects_public_credentials_and_plaintext_smtp(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -118,6 +146,15 @@ class PaymentHealthMonitorTests(unittest.TestCase):
                 monitor.load_config(path)
             path.chmod(0o600)
             self.assertEqual(monitor.load_config(path), config)
+            scope = {"provider": "apple", "environment": "live", "merchant": "chat.mural.ios", "pendingUntilFirstCompletion": True}
+            config["targets"][0]["expectedHistoryScopes"] = [scope]
+            path.write_text(json.dumps(config));self.assertEqual(monitor.load_config(path), config)
+            for bad in [{**scope, "environment": "Sandbox"}, {**scope, "merchant": ""}, {**scope, "pendingUntilFirstCompletion": "true"}, {**scope, "unexpected": True}]:
+                config["targets"][0]["expectedHistoryScopes"] = [bad];path.write_text(json.dumps(config))
+                with self.assertRaises(ValueError):monitor.load_config(path)
+            config["targets"][0]["expectedHistoryScopes"] = [scope, scope];path.write_text(json.dumps(config))
+            with self.assertRaises(ValueError):monitor.load_config(path)
+            config["targets"][0]["expectedHistoryScopes"] = [scope]
             config["smtp"] = {"tls": "none"}
             path.write_text(json.dumps(config))
             with self.assertRaises(ValueError):

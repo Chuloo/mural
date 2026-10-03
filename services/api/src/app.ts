@@ -300,7 +300,10 @@ export function createApp(services: Services) {
     const provider = (request.query as Record<string, unknown>).provider;
     if (provider !== 'stripe' && provider !== 'play' && provider !== 'apple') throw new ServiceError('invalid_purchase_provider');
     if (services.minuteCommerce?.aiPurchases) {
-      let products = services.minuteCommerce.aiPurchases.products(provider,provider==='apple'?await fundingScope(request,true):undefined);
+      const appleEnvironment=provider==='apple'?await fundingScope(request,true):undefined;
+      let products = provider==='apple' && appleEnvironment && services.minuteCommerce.appleScopes?.historyAdmissionRequired &&
+        !await services.minuteCommerce.appleScopes.admissionReady(appleEnvironment)?[]:
+        services.minuteCommerce.aiPurchases.products(provider,appleEnvironment);
       if(provider==='play') {
         const selected=(request.query as Record<string,unknown>).regionCode;
         if(selected!==undefined) {
@@ -340,6 +343,7 @@ export function createApp(services: Services) {
     if (!commerce || !commerce[provider]) throw new ServiceError('minute_purchases_unavailable', 503);
     const quantity=body.quantity===undefined?1:body.quantity;
     const appleEnvironment=provider==='apple'?await fundingScope(request,true):undefined;
+    if(appleEnvironment && commerce.appleScopes?.historyAdmissionRequired)await commerce.appleScopes.requireAdmission(appleEnvironment);
     if (typeof quantity!=='number' || !Number.isInteger(quantity) || quantity<1 || quantity>10 || (provider==='play' && quantity!==1)) throw new ServiceError('invalid_purchase_quantity');
     if (!commerce.aiPurchases && quantity!==1) throw new ServiceError('invalid_purchase_quantity');
     const order = commerce.aiPurchases ? await commerce.aiPurchases.createOrder(account, provider, stringField(body, 'sku', 128), key, quantity,provider==='apple'?{storefront:stringField(body,'storefront',3),scheduleVersion:stringField(body,'scheduleVersion',200)}:undefined,

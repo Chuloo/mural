@@ -36,9 +36,11 @@ SELECT json_build_object(
    FROM hosted_sessions WHERE state<>'closed'
  ) t),'[]'),
  'cursors',coalesce((SELECT json_agg(t) FROM (
-   SELECT 'apple' AS provider,extract(epoch FROM now()-updated_at)::bigint AS age_seconds
+   SELECT 'apple' AS provider,environment,merchant,extract(epoch FROM now()-updated_at)::bigint AS age_seconds,
+     floor(extract(epoch FROM now())-completed_through_ms/1000.0)::bigint AS completed_age_seconds
    FROM apple_notification_cursors
-   UNION ALL SELECT 'play',extract(epoch FROM now()-updated_at)::bigint FROM minute_play_void_cursors
+   UNION ALL SELECT 'play',environment,merchant,extract(epoch FROM now()-updated_at)::bigint,
+     floor(extract(epoch FROM now())-completed_through_ms/1000.0)::bigint FROM minute_play_void_cursors
  ) t),'[]'));
 COMMIT;
 """
@@ -49,7 +51,7 @@ def reference(value):
     return hashlib.sha256(str(value).encode()).hexdigest()[:12]
 
 
-def inspect_snapshot(snapshot, expected_providers=()):
+def inspect_snapshot(snapshot, expected_providers=(), expected_history_scopes=()):
     alerts = []
 
     def add(kind, row):
@@ -77,6 +79,15 @@ def inspect_snapshot(snapshot, expected_providers=()):
         rows = [r for r in snapshot["cursors"] if r["provider"] == provider]
         if not rows or any(r["age_seconds"] >= 3600 for r in rows):
             add("provider_history_stalled", {"id": provider})
+    for scope in expected_history_scopes:
+        rows = [row for row in snapshot["cursors"] if all(row.get(key) == scope[key]
+                for key in ("provider", "environment", "merchant"))]
+        completed = [row["completed_age_seconds"] for row in rows
+                     if row.get("completed_age_seconds") is not None]
+        if not completed and scope.get("pendingUntilFirstCompletion", False):
+            continue
+        if not completed or any(age < 0 or age >= 3600 for age in completed):
+            add("provider_history_stalled", {"id": ":".join(scope[key] for key in ("provider", "environment", "merchant"))})
     return sorted(alerts, key=lambda row: (row["kind"], row["reference"]))
 
 
@@ -86,7 +97,7 @@ def collect(target):
     # A command string (-c) may expose only the final COMMIT result on older psql.
     # A script preserves the SELECT output and still closes the read-only transaction.
     result = subprocess.run(command, input=SNAPSHOT_SQL, capture_output=True, text=True, timeout=45, check=True)
-    return inspect_snapshot(json.loads(result.stdout), target.get("expectedProviders", []))
+    return inspect_snapshot(json.loads(result.stdout), target.get("expectedProviders", []), target.get("expectedHistoryScopes", []))
 
 
 def notice_due(alerts, previous, now):
@@ -156,6 +167,22 @@ def load_config(path):
             raise ValueError("invalid_compose_command")
         if not set(target.get("expectedProviders", [])).issubset({"apple", "play"}):
             raise ValueError("invalid_expected_provider")
+        scopes = target.get("expectedHistoryScopes", [])
+        if not isinstance(scopes, list):
+            raise ValueError("invalid_expected_history_scope")
+        seen_scopes = set()
+        for scope in scopes:
+            if (not isinstance(scope, dict) or set(scope) - {"provider", "environment", "merchant", "pendingUntilFirstCompletion"}
+                    or scope.get("provider") not in {"apple", "play"}
+                    or scope.get("environment") not in {"live", "test"}
+                    or not isinstance(scope.get("merchant"), str)
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}", scope["merchant"])
+                    or not isinstance(scope.get("pendingUntilFirstCompletion", False), bool)):
+                raise ValueError("invalid_expected_history_scope")
+            key = tuple(scope[field] for field in ("provider", "environment", "merchant"))
+            if key in seen_scopes:
+                raise ValueError("duplicate_expected_history_scope")
+            seen_scopes.add(key)
     if "smtp" in config:
         smtp = config["smtp"]
         if smtp.get("tls") not in ("implicit", "starttls"):
