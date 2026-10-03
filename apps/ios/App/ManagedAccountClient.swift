@@ -43,6 +43,7 @@ final class ManagedAccountHTTP: NSObject, URLSessionTaskDelegate, @unchecked Sen
         completionHandler(nil)
     }
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let request = try await AppleStorePurchaseContext.shared.attachingProof(to: request)
         let session = makeSession()
         defer { session.invalidateAndCancel() }
         do {

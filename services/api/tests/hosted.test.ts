@@ -38,7 +38,7 @@ async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBud
     await transaction(db, sql => appendMinuteEntry(sql, account, `minute-seed:${account}`, 'gift', minuteAllowance, 0));
   }
   const sockets = new Map<string, WebSocket>();
-  let creates = 0, hangups = 0, closes = 0, respondToClose = false, rejectCreate = false, cancelBeforeProvider = false, seconds = 0, now = Date.now(), setupDelay = 0;
+  let creates = 0, attaches = 0, hangups = 0, closes = 0, respondToClose = false, rejectCreate = false, rejectAttach = false, cancelBeforeProvider = false, seconds = 0, now = Date.now(), setupDelay = 0;
   let rejectionStatus = 502, malformedSuccess = false, dropCreate = false;
   const diagnostics: unknown[] = [];
   const lifecycle: DiagnosticRecord[] = [];
@@ -60,7 +60,9 @@ async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBud
       if (respondToClose) for (const socket of sockets.values()) socket.send(JSON.stringify({ type: 'session.closed', usage: { seconds } }));
     } else { response.writeHead(404); response.end(); }
   });
-  const websocket = new WebSocketServer({ server });
+  const websocket = new WebSocketServer({ server, verifyClient(_info, complete) {
+    attaches++; complete(!rejectAttach, 404);
+  } });
   websocket.on('connection', (socket, request) => {
     assert.equal(request.headers.authorization, 'Bearer test-no-real-provider-key');
     const id = decodeURIComponent(request.url!.split('/')[4]!); sockets.set(id, socket);
@@ -91,9 +93,10 @@ async function fixture(cap = 2_000_000_000n, minuteAllowance?: number, helperBud
     helpers: helperAdmission, now: () => now, closeGraceMilliseconds: 20 });
   await controller.start();
   return { db, account, payloads, diagnostics, lifecycle, provider, get controller() { return controller; },
-    get creates() { return creates; }, get hangups() { return hangups; }, get closes() { return closes; },
+    get creates() { return creates; }, get attaches() { return attaches; }, get hangups() { return hangups; }, get closes() { return closes; },
     set closeReplies(value: boolean) { respondToClose = value; }, set seconds(value: number) { seconds = value; },
     set rejectCreate(value: boolean) { rejectCreate = value; },
+    set rejectAttach(value: boolean) { rejectAttach = value; },
     set rejectionStatus(value: number) { rejectionStatus = value; },
     set malformedSuccess(value: boolean) { malformedSuccess = value; },
     set dropCreate(value: boolean) { dropCreate = value; },
@@ -257,10 +260,39 @@ integration('sideband loss never accepts client usage or releases the reservatio
     f.disconnect(live.providerSessionID);
     await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'incomplete');
     assert.equal((await f.wallet()).reserved_nano, '500000000');
-    await f.controller.tick();
+    f.advance(10_000); await f.controller.tick();
     f.send(live.providerSessionID, { type: 'session.closed', usage: { seconds: 1 } });
     await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
     assert.equal((await f.controller.status(f.account, live.sessionID)).chargedNanoUSD, '12500000');
+  } finally { await f.cleanup(); }
+});
+integration('expired sideband recovery backs off failed attaches, keeps the hold, and settles once when final usage arrives', async () => {
+  const f = await fixture(2_000_000_000n, 600_000);
+  try {
+    const live = await f.controller.create(f.account, 'backoff-original-call', 'v=0', 'es-ES');
+    f.rejectAttach = true; f.disconnect(live.providerSessionID);
+    await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'incomplete' && f.hangups === 1);
+    let expectedAttaches = 1, expectedHangups = 1;
+    for (const wait of [10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000]) {
+      f.advance(wait - 1); await f.controller.tick();
+      assert.equal(f.attaches, expectedAttaches); assert.equal(f.hangups, expectedHangups);
+      f.advance(1); await f.controller.tick();
+      expectedAttaches++; expectedHangups++;
+      await until(() => f.hangups === expectedHangups);
+      assert.equal(f.attaches, expectedAttaches);
+      for (let index = 0; index < 3; index++) await f.controller.tick();
+      assert.equal(f.attaches, expectedAttaches); assert.equal(f.hangups, expectedHangups);
+      const row = (await f.db.query('SELECT observed_ms,charged_ms,provider_cost_nano FROM hosted_sessions WHERE id=$1', [live.sessionID])).rows[0];
+      assert.deepEqual(row, { observed_ms: '0', charged_ms: null, provider_cost_nano: null });
+      assert.deepEqual(await f.minutes(), { balance_ms: '600000', reserved_ms: '600000' });
+      assert.equal(f.creates, 1);
+    }
+    f.rejectAttach = false; f.seconds = 42; f.closeReplies = true;
+    f.advance(300_000); await f.controller.tick();
+    await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
+    assert.deepEqual(await f.minutes(), { balance_ms: '558000', reserved_ms: '0' });
+    assert.equal((await f.db.query("SELECT count(*) FROM minute_entries WHERE kind='settle' AND account_id=$1", [f.account])).rows[0].count, '1');
+    assert.equal(f.creates, 1);
   } finally { await f.cleanup(); }
 });
 integration('operator allowlist and lifetime funding cap are enforced before a provider create', async () => {
@@ -297,7 +329,7 @@ integration('regressing final usage does not settle or refund a hold; trusted re
     f.send(live.providerSessionID, { type: 'session.closed', usage: { seconds: 20 } });
     await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'incomplete');
     assert.equal((await f.wallet()).reserved_nano, '500000000');
-    await f.controller.tick();
+    f.advance(10_000); await f.controller.tick();
     f.send(live.providerSessionID, { type: 'session.closed', usage: { seconds: 35 } });
     await until(async () => (await f.controller.status(f.account, live.sessionID)).state === 'closed');
     assert.equal((await f.controller.status(f.account, live.sessionID)).chargedNanoUSD, '29166667');

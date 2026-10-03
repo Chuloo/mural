@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, readFile, chmod, symlink, link, rm } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, generateKeyPairSync } from 'node:crypto';
-import { makeAIValueProduct, makeRegionalPlayAIValueProduct } from '../src/ai-value-purchases.js';
+import { makeAIValueProduct, makeRegionalPlayAIValueProduct, makeAppleAIValueProduct } from '../src/ai-value-purchases.js';
 import { configuredMinuteCommerce } from '../src/minute-commerce-config.js';
 
 const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
@@ -236,4 +236,38 @@ test('protected regional catalog supports more than 100 countries and validates 
     f.manifest.play.currencyExponents={jpy:2};await f.file('COMMERCE_CONFIG_FILE',f.manifest);
     await assert.rejects(configuredMinuteCommerce(f.db,f.env,f.dependencies),configError);
   } finally {await f.clean();}
+});
+
+
+test('live Apple configuration explicitly enables a separate sandbox verifier, catalog and history cursor',async()=>{
+  const f=await fixture();
+  try {
+    f.manifest.environment='live';delete f.manifest.stripe;delete f.env.MURAL_MINUTE_STRIPE_CREDENTIALS_FILE;
+    f.manifest.apple={bundleID:'chat.mural.ios',appAppleID:6816001011,sandboxEnabled:true};
+    f.env.MURAL_MINUTE_ALLOW_LIVE='true';f.env.MURAL_MINUTE_SALES_ENABLED='true';
+    f.env.MURAL_MINUTE_APPLE_QUANTITY_ENABLED='true';
+    await f.file('COMMERCE_CONFIG_FILE',f.manifest);
+    const signingKey=generateKeyPairSync('ec',{namedCurve:'prime256v1'}).privateKey.export({type:'pkcs8',format:'pem'}).toString();
+    await f.file('APPLE_CREDENTIALS_FILE',{signingKey,keyID:'TESTKEY123',issuerID:'12345678-1234-1234-1234-123456789012',rootCertificates:[Buffer.from('synthetic-root').toString('base64')]});
+    const products=(['live','test'] as const).map(environment=>makeAppleAIValueProduct({provider:'apple',environment,merchant:'chat.mural.ios',sku:'small-us-v1',
+      providerProduct:'chat.mural.ios.minutes.small.v1',aiValueMinor:369,policyVersion:1,serviceFeeBasisPoints:1500,
+      estimate:{nanoUSDPerMinute:'100000000',rateVersion:'test-estimate'},apple:{storefront:'USA',currency:'usd',currencyExponent:2,
+        unitTotalMinor:700,scheduleVersion:'test-schedule',commissionBasisPoints:3000,taxMinor:0,commissionMinor:210,
+        proceedsMinor:490,proceedsUSDMinor:490,residualUSDMinor:65}}));
+    await f.file('CATALOG_FILE',{version:2,products});await f.approve();
+    f.rows=[{encryption_key_id:'current',provider:'apple',environment:'test',merchant:'chat.mural.ios'}];
+    const transport={transaction:async()=>{throw new Error('No purchase calls at startup');},notification:async()=>{throw new Error('No notifications at startup');},
+      latest:async()=>{throw new Error('No API calls at startup');},history:async()=>({notifications:[]})};
+    const dependencies={...f.dependencies,appleTransport:transport,appleSandboxTransport:transport};
+    const service=(await configuredMinuteCommerce(f.db,f.env,dependencies))!;
+    assert.equal(service.apple?.environment,'live');assert.equal(service.appleSandbox?.environment,'test');
+    assert.equal(service.appleScopes?.provider('test'),service.appleSandbox);
+    assert.deepEqual(service.aiPurchases.products('apple','test'),[products[1]]);
+    assert.equal(service.aiPurchases.maximumQuantity('apple'),10);assert.equal(service.runner.additionalAppleHistories.length,1);
+    assert.equal(f.network,0);await service.runner.stop();
+    delete f.manifest.apple.sandboxEnabled;await f.file('COMMERCE_CONFIG_FILE',f.manifest);
+    await assert.rejects(configuredMinuteCommerce(f.db,f.env,{...f.dependencies,appleTransport:transport}),configError);
+    f.manifest.apple.sandboxEnabled='true';await f.file('COMMERCE_CONFIG_FILE',f.manifest);
+    await assert.rejects(configuredMinuteCommerce(f.db,f.env,dependencies),configError);
+  }finally{await f.clean();}
 });

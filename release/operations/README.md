@@ -26,7 +26,7 @@ To find an alert's record, hash the order/session UUID with SHA-256 and compare 
 1. Install `scripts/payment_health_monitor.py` as `/opt/mural/operations/payment_health_monitor.py` and copy the two systemd files into `/etc/systemd/system/`.
 2. Use the approved Resend service and a sending-only key restricted to the verified Hackmamba subdomain. Set `smtp.resend.com`, port `587`, `starttls`, and username `resend`; the deployment host can reach port 587, while port 465 timed out during review. Use an address on the verified subdomain as sender and keep `hi@hackmamba.io` as recipient. [Resend SMTP settings](https://resend.com/changelog/smtp-service).
 3. Store the configuration at `/opt/mural/operations/payment-monitor.json`, owned by root with mode `0600`. Use a verified sender and the existing mail provider's restricted SMTP credentials. The example contains placeholders, not working credentials. TLS with certificate validation is mandatory: `starttls` or `implicit`.
-4. Include only configured provider histories in `expectedProviders`. Production Apple and Play are currently disabled, so neither is expected there. Sandbox Apple is enabled.
+4. Include every enabled provider history in `expectedProviders`. Production Play is enabled: use `["play"]` until Apple is activated, then `["play", "apple"]`. Sandbox Apple is enabled; include Play there too if its void-history worker is enabled. Confirm the deployed adapters and cursor rows rather than inferring enablement from a catalog entry.
 5. Run the monitor with `--dry-run` and review the sanitized output. This mode sends no email and changes no monitor state.
 6. Run with `--test-email`. SMTP acceptance is not inbox delivery: confirm receipt at hi@hackmamba.io before marking delivery verified.
 7. Enable the timer only after the test succeeds. Inspect `systemctl status mural-payment-monitor.timer` and the service journal. Alert content is deliberately absent from the journal.
@@ -34,8 +34,12 @@ To find an alert's record, hash the order/session UUID with SHA-256 and compare 
 
 Configuration and mail credentials stay outside Git. Installing this separate inspector does not restart the API or alter its deployment configuration. To roll back, disable the timer and remove its two unit files; preserve monitor state for incident review.
 
-## Known records at installation
+## Current operating findings
 
-Read-only inspection on 28 September found 21 unresolved production minute-funded conversations created September 14–16. Their final usage remains unverified. Preserve these records and reservations until provider evidence supports settlement. One production Stripe checkout from September 27 is still pending with zero grant; it has not failed payment delivery. The current sandbox has no unfinished delivery jobs or unsettled conversations.
+The 21 September 14–16 unresolved conversations were closed on September 30 with an approved Mural-funded adjustment. No customer minutes were deducted. Provider usage remains unconfirmed in the retained audit evidence.
 
-These are operating findings, not authorization to fabricate usage, issue credits or refund live purchases.
+Read-only inspection on October 3 found three newer production conversations marked `incomplete` with `sideband_lost`. Their open minute reservations total **19 minutes 17 seconds**. Final voice cost and customer charge remain unconfirmed; all 39 associated helper requests are settled. See [the settlement investigation](../../verification/ios-payments-implementation/settlement-review-2026-10-03.md) for sanitized record references and recovery requirements.
+
+The production Play void-history cursor is present and advancing, but the deployed monitor configuration omits it from `expectedProviders`. Updating the example in Git does not update the protected server configuration. During deployment, preserve the existing SMTP settings and add Play; add Apple when its history worker is enabled. Re-run `--dry-run` and confirm each provider cursor is fresh.
+
+Keep unresolved reservations and provider evidence until a trusted final usage event or an explicitly approved support adjustment closes them. A retry or monitoring fix does not establish final usage and does not authorize customer charges or balance changes.

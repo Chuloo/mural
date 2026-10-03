@@ -91,7 +91,8 @@ export class MinuteCommerceRunner {
   constructor(readonly vault: Pick<MinuteReceiptVault, 'scheduleReconciliation'>,
     readonly worker: Pick<MinuteDeliveryWorker, 'runBatch'>, readonly voids?: PlayVoidReconciler,
     options: CommerceRunnerOptions = {}, readonly appleHistory?: AppleHistoryReconciler,
-    readonly playNotifications?: Pick<PlayRtdnSubscriber, 'poll' | 'isOperational'>) {
+    readonly playNotifications?: Pick<PlayRtdnSubscriber, 'poll' | 'isOperational'>,
+    readonly additionalAppleHistories:readonly AppleHistoryReconciler[] = []) {
     this.#interval = options.intervalMilliseconds ?? 60_000;
     this.#deliveryLimit = options.deliveryLimit ?? 5;
     this.#reconciliationLimit = options.reconciliationLimit ?? 100;
@@ -133,9 +134,11 @@ export class MinuteCommerceRunner {
       try { if (!(await this.voids.page()).more) break; }
       catch { this.#failure('play_void_reconciliation_failed'); break; }
     }
-    for(let index=0;this.appleHistory && index<this.#voidPages && !this.#stopped;index++){
-      try {if(!(await this.appleHistory.page()).more)break;}
-      catch {this.#failure('apple_history_reconciliation_failed');break;}
+    for(const history of [...(this.appleHistory?[this.appleHistory]:[]),...this.additionalAppleHistories]) {
+      for(let index=0;index<this.#voidPages && !this.#stopped;index++){
+        try {if(!(await history.page()).more)break;}
+        catch {this.#failure('apple_history_reconciliation_failed');break;}
+      }
     }
   }
   start(): void {
