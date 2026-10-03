@@ -301,9 +301,10 @@ export function createApp(services: Services) {
     if (provider !== 'stripe' && provider !== 'play' && provider !== 'apple') throw new ServiceError('invalid_purchase_provider');
     if (services.minuteCommerce?.aiPurchases) {
       const appleEnvironment=provider==='apple'?await fundingScope(request,true):undefined;
-      let products = provider==='apple' && appleEnvironment && services.minuteCommerce.appleScopes?.historyAdmissionRequired &&
-        !await services.minuteCommerce.appleScopes.admissionReady(appleEnvironment)?[]:
-        services.minuteCommerce.aiPurchases.products(provider,appleEnvironment);
+      let admissionReady=true;
+      if(provider==='apple' && appleEnvironment && services.minuteCommerce.appleScopes?.historyAdmissionRequired)
+        admissionReady=await services.minuteCommerce.appleScopes.admissionReady(appleEnvironment);
+      let products = admissionReady?services.minuteCommerce.aiPurchases.products(provider,appleEnvironment):[];
       if(provider==='play') {
         const selected=(request.query as Record<string,unknown>).regionCode;
         if(selected!==undefined) {
@@ -318,8 +319,12 @@ export function createApp(services: Services) {
       }
       if(provider==='apple') {
         const storefront=(request.query as Record<string,unknown>).storefront;
-        if(typeof storefront!=='string' || !['USA','NOR'].includes(storefront)) return {available:false,maximumQuantity:1,products:[]};
+        if(storefront!=='USA' && storefront!=='NOR') {
+          diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront:'unsupported',admissionReady,offerCount:0});
+          return {available:false,maximumQuantity:1,products:[]};
+        }
         products=products.filter(p=>p.quote.apple?.storefront===storefront);
+        diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront,admissionReady,offerCount:products.length});
         return {available:products.length>0,maximumQuantity:services.minuteCommerce.aiPurchases.maximumQuantity(provider),
           products:products.map(p=>({sku:p.sku,providerProduct:p.providerProduct,currency:p.currency,totalMinor:p.totalMinor,
             currencyExponent:p.quote.apple!.currencyExponent,estimatedMilliseconds:p.estimatedMilliseconds,

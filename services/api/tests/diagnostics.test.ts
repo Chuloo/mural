@@ -74,6 +74,27 @@ test('database categories are useful without retaining SQL, identities, messages
   assert.doesNotMatch(JSON.stringify(records), /secret|private|SQL|example/);
 });
 
+test('Apple catalog diagnostics allow only bounded metadata on their own event', () => {
+  const records: DiagnosticRecord[] = [];
+  const diagnostics = new Diagnostics(record => { records.push(record); });
+  const fields = { environment: 'test', storefront: 'NOR', admissionReady: true, offerCount: 3 } as const;
+  diagnostics.record('apple_catalog', { ...fields, proof: 'private-proof', accountID: 'private-account' } as any);
+  assert.deepEqual(records[0], { timestamp: records[0]!.timestamp, level: 'info', event: 'apple_catalog', ...fields });
+  for (const offerCount of [-1, 21, 1.5, Infinity, '3']) {
+    diagnostics.record('apple_catalog', { environment: 'private-environment', storefront: 'private-storefront',
+      admissionReady: 'private-readiness', offerCount } as any);
+    assert.deepEqual(records.at(-1), { timestamp: records.at(-1)!.timestamp, level: 'info', event: 'apple_catalog' });
+  }
+  diagnostics.record('request_completed', fields);
+  assert.deepEqual(records.at(-1), { timestamp: records.at(-1)!.timestamp, level: 'info', event: 'request_completed' });
+  for (const offerCount of [0, 20]) {
+    const boundary = { environment: 'live', storefront: 'USA', admissionReady: false, offerCount } as const;
+    diagnostics.record('apple_catalog', boundary);
+    assert.deepEqual(records.at(-1), { timestamp: records.at(-1)!.timestamp, level: 'info', event: 'apple_catalog', ...boundary });
+  }
+  assert.doesNotMatch(JSON.stringify(records), /private/);
+});
+
 test('provider rejection records status and request ID once without retaining response content or retrying', async () => {
   const records: DiagnosticRecord[] = []; let requests = 0;
   const transport = new OpenAIHostedResponses('x'.repeat(32), async () => {
