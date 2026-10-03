@@ -33,11 +33,17 @@ Payment monitor targets can set `expectedHistoryScopes` to require exact provide
 | `GET /v1/minutes/products?provider=apple&storefront=…` | Returns offers for the verified proof environment. Authentication is not required. In dual mode, absent proof fails closed. |
 | `POST /v1/minutes/orders` with Apple provider | Requires proof in dual mode; saves the selected environment before StoreKit purchase. |
 | Apple delivery and recovery | Require proof in dual mode and verify the transaction with the matching Apple API. The receipt must match its immutable order and authenticated owner. |
-| `GET /v1/minutes`, `GET /v1/wallet` | Display funds and holds for the verified proof environment. Without proof, the deployment default applies. |
-| `POST /v1/live/sessions` | Selects paid funds using verified proof and snapshots that environment before provider creation. Without proof, the deployment default applies. |
+| `GET /v1/minutes`, `GET /v1/wallet` | Display funds and holds for the verified proof environment. Public sandbox minute balances exclude the production free allowance. Without proof, the deployment default applies. |
+| `POST /v1/live/sessions` | Public sandbox requests require sandbox paid funds and snapshot that environment before provider creation. Production free time cannot fund them. Without proof, the deployment default applies. |
 | Hosted helper requests, settlement and recovery | Use the environment already saved on the session/reservation. Later requests cannot change its funding source. |
 
 Other clients retain production defaults on the public deployment. TestFlight and App Review sandbox proof selects test credit without changing the existing hosted limits or adding a lifetime cap.
+
+## Starting a public sandbox test
+
+A new TestFlight or App Review test account has zero sandbox paid minutes on the public API. Verified sandbox purchase delivery adds value to the signed-in account. Existing production free time and paid value remain in their original balances. Sandbox voice and helper usage debit only sandbox paid value; balance reads still report pending settlement when an underlying free reservation or unresolved conversation requires it.
+
+Credits on an older isolated sandbox server stay in that server's database and retain its legacy allowance behavior. This public payment test does not import those credits or issue a new free grant. Apple sandbox purchases have no customer charge; their verified value funds the public sandbox test.
 
 ## Accounting and recovery
 
