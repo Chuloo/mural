@@ -317,7 +317,7 @@ integration('a refused helper answer still settles its verified provider cost ex
     assert.equal((await f.balance()).balanceNanoUSD,'1999934100');assert.equal(f.attempts,1);await f.invariant();
   }finally{await f.close();}
 });
-integration('the restricted runtime settles paid helpers while provenance and funding history stay protected',async()=>{
+for (const legacyColumnGrants of [false,true]) integration(`the restricted runtime removes legacy ${legacyColumnGrants?'table and column':'table'} updates and preserves paid call settlement`,async()=>{
   const f=await fixture(),role=`paid_runtime_${randomUUID().replaceAll('-','')}`;
   await db!.query(`CREATE ROLE ${role};GRANT USAGE ON SCHEMA ${schema} TO ${role};
     GRANT SELECT,UPDATE ON accounts TO ${role};GRANT SELECT,INSERT,UPDATE ON hosted_sessions TO ${role};
@@ -325,9 +325,22 @@ integration('the restricted runtime settles paid helpers while provenance and fu
     GRANT UPDATE(balance_ms,reserved_ms,sandbox_balance_ms) ON minute_wallets TO ${role};
     GRANT SELECT ON minute_purchase_transactions TO ${role};
     GRANT UPDATE ON wallets TO ${role}`);
+  if(legacyColumnGrants) await db!.query(`GRANT SELECT,INSERT,UPDATE ON reservations TO ${role};
+    GRANT UPDATE(id,account_id,reserved_nano,rate_version,funding_environment) ON reservations TO ${role};
+    GRANT UPDATE(account_id,funding_mode,limit_ms,helper_closed_at,funding_environment) ON hosted_sessions TO ${role}`);
+  assert.equal((await db!.query("SELECT has_table_privilege($1,'hosted_sessions','UPDATE') AS allowed",[role])).rows[0].allowed,true);
+  if(legacyColumnGrants) assert.equal((await db!.query("SELECT has_table_privilege($1,'reservations','UPDATE') AS allowed",[role])).rows[0].allowed,true);
   for(const file of ['minute-runtime-grants.sql','hosted-helper-runtime-grants.sql','actual-value-runtime-grants.sql','hosted-close-runtime-grants.sql']) {
     const grants=await readFile(new URL(`../operations/${file}`,import.meta.url),'utf8');await db!.query(grants.replaceAll('mural_runtime',role));
   }
+  const privileges=(await db!.query(`SELECT c.relname,a.attname,has_column_privilege($1,c.oid,a.attnum,'UPDATE') AS allowed
+    FROM pg_class c JOIN pg_attribute a ON a.attrelid=c.oid
+    WHERE c.oid IN ('reservations'::regclass,'hosted_sessions'::regclass) AND a.attnum>0 AND NOT a.attisdropped`,[role])).rows;
+  const mutable:Record<string,string[]>={reservations:['state','actual_nano'],hosted_sessions:['provider_session_id','state','deadline',
+    'close_requested_at','observed_ms','provider_cost_nano','charged_nano','funding_exposure_nano','close_reason','charged_ms',
+    'provider_attempted_at','provider_rejection_status','provider_rejection_request_id']};
+  for(const row of privileges) assert.equal(row.allowed,mutable[row.relname]!.includes(row.attname),`${row.relname}.${row.attname}`);
+  for(const table of Object.keys(mutable)) assert.equal((await db!.query('SELECT has_table_privilege($1,$2,\'UPDATE\') AS allowed',[role,table])).rows[0].allowed,false);
   const runtimeURL=new URL(databaseURL!);runtimeURL.searchParams.set('options',`-c search_path=${schema} -c role=${role}`);
   const runtime=connectDatabase(runtimeURL.toString());
   let hosted:HostedVoice|undefined;
@@ -349,12 +362,22 @@ integration('the restricted runtime settles paid helpers while provenance and fu
     const session=await hosted.create(f.account,randomUUID(),'v=0\r\npaid-runtime','es-ES',undefined,60_000);
     const request=input();await gateway.request(f.account,session.sessionID,request);await f.invariant();
     await assert.rejects(runtime.query('UPDATE wallets SET cash_provenance_verified=true'),/permission denied/);
-    await assert.rejects(runtime.query("UPDATE hosted_sessions SET funding_mode='legacy'"),/immutable/);
-    await assert.rejects(runtime.query('UPDATE hosted_sessions SET limit_ms=120000'),/immutable/);
-    await assert.rejects(runtime.query('UPDATE hosted_sessions SET account_id=$1',[randomUUID()]),/immutable/);
+    await assert.rejects(runtime.query("UPDATE hosted_sessions SET funding_mode='legacy'"),{code:'42501'});
+    await assert.rejects(runtime.query('UPDATE hosted_sessions SET limit_ms=120000'),{code:'42501'});
+    await assert.rejects(runtime.query('UPDATE hosted_sessions SET account_id=$1',[randomUUID()]),{code:'42501'});
+    await assert.rejects(runtime.query('UPDATE hosted_sessions SET funding_environment=funding_environment'),{code:'42501'});
+    await assert.rejects(runtime.query('UPDATE hosted_sessions SET helper_closed_at=helper_closed_at'),{code:'42501'});
+    await assert.rejects(runtime.query('UPDATE reservations SET funding_environment=funding_environment'),{code:'42501'});
+    await assert.rejects(runtime.query('UPDATE reservations SET reserved_nano=reserved_nano'),{code:'42501'});
     await assert.rejects(runtime.query('UPDATE hosted_helper_requests SET cash_reservation_id=NULL'),/permission denied/);
     await assert.rejects(runtime.query('UPDATE hosted_helper_sessions SET cash_funded=false'),/permission denied/);
+    await f.emit(session,10);await hosted.close(f.account,session.sessionID);
+    assert.equal((await hosted.status(f.account,session.sessionID)).state,'closing');
     await f.emit(session,15,true);await f.expire(session.sessionID,gateway);await f.invariant();
+    const settled=(await db!.query('SELECT h.state,h.provider_cost_nano,h.charged_nano,r.state AS reservation_state,r.actual_nano FROM hosted_sessions h JOIN reservations r ON r.id=h.reservation_id WHERE h.id=$1',[session.sessionID])).rows[0];
+    assert.equal(settled.state,'closed');assert.equal(settled.reservation_state,'settled');
+    assert.equal(settled.charged_nano,settled.provider_cost_nano);assert.equal(settled.actual_nano,settled.charged_nano);
+    assert.equal((await f.balance()).reservedNanoUSD,'0');
   }finally {await hosted?.stop();await runtime.end();await f.close();await db!.query(`DROP OWNED BY ${role};DROP ROLE ${role}`);}
 });
 integration('a legacy cash experiment quarantines only its owner before a later public paid deployment',async()=>{

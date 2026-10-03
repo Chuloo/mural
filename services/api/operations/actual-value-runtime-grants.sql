@@ -11,7 +11,23 @@ REVOKE UPDATE ON wallets FROM mural_runtime;
 GRANT UPDATE(balance_nano,reserved_nano,sandbox_balance_nano) ON wallets TO mural_runtime;
 REVOKE UPDATE(cash_provenance_verified) ON wallets FROM mural_runtime;
 GRANT INSERT ON ledger,reservations TO mural_runtime;
+-- Column revocation cannot override a legacy table-wide UPDATE grant.
+-- Reset both grant levels before allowing only lifecycle and settlement writes.
+REVOKE UPDATE ON reservations,hosted_sessions FROM mural_runtime;
+DO $runtime_grants$
+DECLARE target regclass; columns text;
+BEGIN
+  FOR target IN SELECT unnest(ARRAY['reservations'::regclass,'hosted_sessions'::regclass]) LOOP
+    SELECT string_agg(quote_ident(attname),',' ORDER BY attnum) INTO columns
+      FROM pg_attribute WHERE attrelid=target AND attnum>0 AND NOT attisdropped;
+    EXECUTE format('REVOKE UPDATE (%s) ON %s FROM mural_runtime',columns,target);
+  END LOOP;
+END;
+$runtime_grants$;
 GRANT UPDATE(state,actual_nano) ON reservations TO mural_runtime;
+GRANT UPDATE(provider_session_id,state,deadline,close_requested_at,observed_ms,provider_cost_nano,
+  charged_nano,funding_exposure_nano,close_reason,charged_ms,provider_attempted_at,
+  provider_rejection_status,provider_rejection_request_id) ON hosted_sessions TO mural_runtime;
 REVOKE UPDATE,DELETE ON ledger FROM mural_runtime;
 
 REVOKE ALL ON ai_value_purchase_quotes,ai_value_purchase_transactions,hosted_cash_reconciliation FROM mural_runtime;
