@@ -14,7 +14,7 @@ import re
 KOTLIN_DEST = 'apps/android/app/src/main/java/chat/mural/core/Languages.kt'
 # Fields whose value is a nested structure (array/dict), extracted separately from the
 # simple quoted-string fields.
-STRUCTURED_FIELDS = ('teachingFocus', 'themeOverrides')
+STRUCTURED_FIELDS = ('lemmaPrefixes', 'teachingFocus', 'themeOverrides')
 
 
 def quoted(text):
@@ -95,7 +95,7 @@ def generate(core):
              '''data class LanguageModule(
     val id: String, val name: String, val nativeName: String, val variety: String, val locale: String,
     val greeting: String, val greetingWord: String, val speechGuidance: String, val writingGuidance: String,
-    val lemmaGuidance: String, val teachingFocus: List<String>, val topicPlaceholder: String,
+    val lemmaGuidance: String, val lemmaPrefixes: List<String> = emptyList(), val teachingFocus: List<String>, val topicPlaceholder: String,
     val lookupUnavailableReply: String, val themeOverrides: Map<String, ConversationTheme> = emptyMap()
 ) {
     val themes get() = Themes.shared.map { themeOverrides[it.id] ?: it }
@@ -119,6 +119,11 @@ def generate(core):
             if not match:
                 raise SystemExit(f'LanguageModule field {key} not found in {path}. Add it or update {KOTLIN_DEST}.')
             args.append(f'        {key} = {quoted(json.loads(match.group(1)))}')
+        if 'lemmaPrefixes' in known_fields:
+            prefixes_match = re.search(r'\blemmaPrefixes:\s*\[(.*?)\]', text, re.S)
+            if not prefixes_match:
+                raise SystemExit(f'LanguageModule field lemmaPrefixes not found in {path}. Add it or update {KOTLIN_DEST}.')
+            args.append('        lemmaPrefixes = listOf(' + ', '.join(map(quoted, swift_strings(prefixes_match.group(1)))) + ')')
         focus_match = re.search(r'teachingFocus:\s*\[(.*?)\]', text, re.S)
         focuses = swift_strings(focus_match.group(1)) if focus_match else []
         if len(focuses) != 6:

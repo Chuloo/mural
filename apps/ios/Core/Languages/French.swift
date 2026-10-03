@@ -7,6 +7,7 @@ extension LanguageModule {
         speechGuidance: "Use clear, natural metropolitan French pronunciation. Use tu in a friendly conversation and vous when the situation calls for formality or plural address. Accept valid regional accents, vocabulary and grammar from across the French-speaking world. Do not treat regional variation, informal omission of ne or a non-native accent alone as an error. Do not imitate a regional caricature.",
         writingGuidance: "Use standard French spelling, accents, apostrophes and punctuation. Preserve accents on capital letters. Match the register to the situation and accept valid regional usage from the learner.",
         lemmaGuidance: "Give nouns with a singular article that makes gender clear where possible and verbs in the infinitive, for example une maison, un ami and parler. Keep pronominal verbs such as se souvenir distinct. Preserve accents and meaningful elisions.",
+        lemmaPrefixes: ["le", "la", "les", "l'", "l’", "un", "une", "des", "du", "de la"],
         teachingFocus: [
             "Greetings, introductions and useful everyday chunks such as je m'appelle and je voudrais.",
             "Everyday questions, grammatical gender, present tense and common negation in conversation.",

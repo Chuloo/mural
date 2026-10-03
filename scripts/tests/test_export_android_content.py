@@ -109,6 +109,33 @@ class ExportAndroidContentTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, 'six teachingFocus'):
                 eac.generate(core)
 
+    def test_lemma_prefixes_are_exported_when_the_struct_declares_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = write_core(pathlib.Path(tmp), ['Norwegian', 'Mandarin'],
+                               extra_by_name={'Norwegian': 'lemmaPrefixes: ["en", "l\'", "å"],\n        ',
+                                              'Mandarin': 'lemmaPrefixes: [],\n        '})
+            registry = core / 'Languages/LanguageModule.swift'
+            registry.write_text(registry.read_text().replace(
+                '    public let lemmaGuidance: String\n', '    public let lemmaGuidance: String\n    public let lemmaPrefixes: [String]\n'))
+            result = eac.generate(core)
+            self.assertIn('val lemmaPrefixes: List<String> = emptyList()', result)
+            self.assertIn('lemmaPrefixes = listOf("en", "l\'", "å")', result)
+            self.assertIn('lemmaPrefixes = listOf()', result)
+
+    def test_missing_lemma_prefixes_fails_when_the_struct_declares_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = write_core(pathlib.Path(tmp), ['Norwegian'])
+            registry = core / 'Languages/LanguageModule.swift'
+            registry.write_text(registry.read_text().replace(
+                '    public let lemmaGuidance: String\n', '    public let lemmaGuidance: String\n    public let lemmaPrefixes: [String]\n'))
+            with self.assertRaisesRegex(SystemExit, 'lemmaPrefixes not found'):
+                eac.generate(core)
+
+    def test_lemma_prefixes_are_omitted_when_the_struct_lacks_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = eac.generate(write_core(pathlib.Path(tmp), ['Norwegian']))
+            self.assertNotIn('lemmaPrefixes = ', result)
+
     def test_discovers_modules_in_registry_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             core = write_core(pathlib.Path(tmp), ['Zulu', 'Alpha'])
