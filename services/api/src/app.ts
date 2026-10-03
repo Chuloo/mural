@@ -27,6 +27,10 @@ import { HOSTED_HELPER_BODY_LIMIT, type HostedHelpers } from './hosted-helpers.j
 import { Diagnostics, errorReference } from './diagnostics.js';
 import { startupDiagnostic, type StartupDiagnostic } from './startup-diagnostics.js';
 
+declare module 'fastify' {
+  interface FastifyContextConfig { rateLimit?: { max: number; timeWindow: number } }
+}
+
 export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthConfig; payments?: SandboxPayments; attestor?: TrialAttestor; minuteAttestor?: MinuteAttestor; guestMinuteAttestor?: GuestMinuteAttestor; appleRevoker?: AppleRevoker; hosted?: HostedVoice; accessRequests?: AccessRequests; aiReports?: AIReports;
   onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
@@ -37,6 +41,7 @@ export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthC
 const accountPaths = new Set(['/v1/auth/challenge', '/v1/auth/exchange', '/v1/auth/sign-out', '/v1/account', '/v1/wallet', '/v1/minutes/welcome', '/v1/minutes/link-guest',
   '/v1/account/connect-google',
   '/v1/minutes/orders', '/v1/minutes/orders/by-key/:key', '/v1/minutes/orders/:id', '/v1/minutes/orders/:id/play', '/v1/minutes/play/recover','/v1/minutes/orders/:id/apple','/v1/minutes/apple/recover']);
+const paymentReadOptions = { config: { rateLimit: { max: 120, timeWindow: 60_000 } } };
 const objectBody = (request: FastifyRequest): Record<string, unknown> => {
   if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body) || Buffer.isBuffer(request.body)) throw new ServiceError('invalid_request');
   return request.body as Record<string, unknown>;
@@ -96,10 +101,35 @@ export function createApp(services: Services) {
     try { done(null, JSON.parse(body.toString())); } catch { done(new ServiceError('invalid_json')); }
   });
   const windows = new Map<string, { until: number; count: number }>();
+  const limitNetworkRequest = (request: FastifyRequest, reply: { header(name: string, value: string): unknown },
+    limit: { max: number; timeWindow: number }) => {
+    let networkKey = request.ip;
+    const proxy = services.accounts?.admission.config ?? services.accessRequests?.config;
+    if (proxy) {
+      let network: string;
+      try { network = trustedClientNetwork(request.headers, request.raw.socket.remoteAddress ?? request.ip, proxy.proxyToken); }
+      catch { throw new ServiceError('trusted_proxy_required', 503); }
+      networkKey = createHmac('sha256', Buffer.from(proxy.hmacKey, 'hex')).update(network).digest('hex');
+    }
+    const now = Date.now();
+    if (windows.size > 10_000) for (const [key, value] of windows) if (value.until <= now) windows.delete(key);
+    let slot = windows.get(networkKey);
+    if (!slot || slot.until <= now) {
+      if (windows.size >= 20_000) throw new ServiceError('rate_limit', 429);
+      slot = { until: now + limit.timeWindow, count: 0 }; windows.set(networkKey, slot);
+    }
+    if (++slot.count > limit.max) {
+      reply.header('Retry-After', String(Math.max(1, Math.ceil((slot.until - now) / 1000))));
+      throw new ServiceError('rate_limit', 429);
+    }
+  };
   app.addHook('onRequest', async (request, reply) => {
     reply.header('Cache-Control', 'no-store').header('X-Content-Type-Options', 'nosniff');
     // Fastify decodes static route names. Security checks must use the matched route too.
     const path = request.routeOptions.url ?? request.url.split('?')[0]!;
+    const routeLimit = request.routeOptions.config.rateLimit;
+    // Explicit payment-read limits run before database admission, authentication or Apple certificate work.
+    if (routeLimit) limitNetworkRequest(request, reply, routeLimit);
     if (path === '/v1/guest/minutes' && services.guestMinuteAttestor?.requiresTrustedAdmission) {
       if (!services.accounts) throw new ServiceError('guest_minutes_unavailable', 503);
       try { await services.accounts.admission.enter('guest', request.headers, request.raw.socket.remoteAddress ?? request.ip); }
@@ -122,22 +152,7 @@ export function createApp(services: Services) {
     }
     // This endpoint has separate durable admission limits; Caddy's shared address is not its visitor identity.
     if (path === ACCESS_REQUEST_PATH || path === AI_REPORT_PATH || path === '/healthz') return;
-    let networkKey = request.ip;
-    const proxy = services.accounts?.admission.config ?? services.accessRequests?.config;
-    if (proxy) {
-      let network: string;
-      try { network = trustedClientNetwork(request.headers, request.raw.socket.remoteAddress ?? request.ip, proxy.proxyToken); }
-      catch { throw new ServiceError('trusted_proxy_required', 503); }
-      networkKey = createHmac('sha256', Buffer.from(proxy.hmacKey, 'hex')).update(network).digest('hex');
-    }
-    const now = Date.now();
-    if (windows.size > 10_000) for (const [key, value] of windows) if (value.until < now) windows.delete(key);
-    let slot = windows.get(networkKey);
-    if (!slot || slot.until < now) {
-      if (windows.size >= 20_000) throw new ServiceError('rate_limit', 429);
-      slot = { until: now + 60_000, count: 0 }; windows.set(networkKey, slot);
-    }
-    if (++slot.count > 120) throw new ServiceError('rate_limit', 429);
+    if (!routeLimit) limitNetworkRequest(request, reply, paymentReadOptions.config.rateLimit);
   });
   app.setErrorHandler((error, request, reply) => {
     const purchaseReconciliation = error && typeof error === 'object' && 'code' in error && 'message' in error && error.code === 'P0001' &&
@@ -249,7 +264,7 @@ export function createApp(services: Services) {
       googleChallengeID:uuid(stringField(body,'googleChallengeID',36)).toLowerCase(),googleToken:stringField(body,'googleToken',16384)
     },services.auth,services.accounts?.identityVerifier);
   });
-  app.get('/v1/minutes', async request => conversationBalance(db, await authenticate(db, request.headers.authorization, true),
+  app.get('/v1/minutes', paymentReadOptions, async request => conversationBalance(db, await authenticate(db, request.headers.authorization, true),
     services.hosted?.publicMinuteAccess===true, services.hosted?.publicPaidAccess ? { enabled: true,
       estimatedNanoUSDPerMinute: services.hosted.estimatedNanoUSDPerMinute, minimumSessionNanoUSD: services.hosted.minimumPaidSessionNanoUSD } : undefined,
     await fundingScope(request)));
@@ -281,7 +296,7 @@ export function createApp(services: Services) {
       throw error;
     }
   });
-  app.get('/v1/minutes/products', async request => {
+  app.get('/v1/minutes/products', paymentReadOptions, async request => {
     const provider = (request.query as Record<string, unknown>).provider;
     if (provider !== 'stripe' && provider !== 'play' && provider !== 'apple') throw new ServiceError('invalid_purchase_provider');
     if (services.minuteCommerce?.aiPurchases) {
@@ -400,7 +415,7 @@ export function createApp(services: Services) {
       throw new ServiceError('invalid_request');
     return (services.minuteCommerce.fulfillment ?? services.minuteCommerce.purchases).reconcile('play', { kind: 'recovery', accountID: account, purchaseToken: body.purchaseToken });
   });
-  app.get('/v1/wallet', async request => {
+  app.get('/v1/wallet', paymentReadOptions, async request => {
     const account=await authenticate(db,request.headers.authorization,true);
     const wallet=await paidAIBalance(db,account,await fundingScope(request),false);
     return {currency:'USD',balanceNanoUSD:wallet.balanceNanoUSD,reservedNanoUSD:wallet.reservedNanoUSD,

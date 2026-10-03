@@ -14,7 +14,7 @@ The Talk screen retains its minimal layout and native continuation sheet. Purcha
 
 | Check | Result |
 | --- | --- |
-| API and PostgreSQL suite | 446 passed; zero failures or skips |
+| API and PostgreSQL suite | 448 passed; zero failures or skips, including enforced payment-read request limits |
 | Swift core | 175 passed |
 | Repository contracts | 71 passed |
 | Payment monitor | 13 passed |
@@ -24,6 +24,8 @@ The Talk screen retains its minimal layout and native continuation sheet. Purcha
 | Privacy manifests | App and WebRTC manifests present in the exported IPA |
 
 The original UI failure artifact is retained. Its accessibility hierarchy showed that the test's swipe selected Greek rather than scrolling the native menu. The corrected test scrolls the menu container; app code and the signed archive were unchanged.
+
+GitHub analysis identified that the custom global request limits were not modeled for three payment reads. Those routes now declare limits that the existing trusted-network hook enforces before Apple verification or database work. Twelve focused HTTP and payment tests passed. The secret scan's URL-suffix false positive is allowlisted only for the exact test file and exact harmless suffix; the full local history scan passes.
 
 IPA SHA-256: `577653a43af55efa342d404219ae3bcc19012087c186e3d15d675263c7ad00dd`.
 

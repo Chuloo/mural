@@ -125,6 +125,36 @@ integration('public API requires Apple proof, isolates same-SKU catalog/order sc
   }finally{await f.cleanup();}
 });
 
+integration('payment reads share trusted-network limits before Apple verification and database authentication',async()=>{
+  const f=await fixture();try{
+    let scopeChecks=0,authChecks=0;
+    const verify=f.scopes.verify.bind(f.scopes),query=f.db.query.bind(f.db);
+    f.scopes.verify=async proof=>{scopeChecks++;return verify(proof);};
+    f.db.query=((...args:unknown[])=>{
+      if(typeof args[0]==='string'&&args[0].includes('FROM auth_sessions'))authChecks++;
+      return (query as (...args:unknown[])=>unknown)(...args);
+    }) as typeof f.db.query;
+    const routes=['/v1/minutes','/v1/minutes/products?provider=apple&storefront=USA','/v1/wallet'];
+    const encoded=['/v1/%6dinutes','/v1/minutes/%70roducts?provider=apple&storefront=USA','/v1/%77allet'];
+    for(let i=0;i<120;i++){
+      const response=await f.app.inject({url:routes[i%3]!,headers:{...f.headers('test'),'x-forwarded-for':`203.0.113.${i+1}`}});
+      assert.equal(response.statusCode,200,response.body);
+    }
+    assert.equal(scopeChecks,120);assert.equal(authChecks,80);
+    for(const url of [...routes,...encoded]){
+      const response=await f.app.inject({url,headers:{...f.headers('test'),[appleAppTransactionHeader]:'unverified-new-proof',
+        authorization:`Bearer ${randomBytes(32).toString('base64url')}`,'x-forwarded-for':'198.51.100.200'}});
+      assert.equal(response.statusCode,429,response.body);assert.deepEqual(response.json(),{error:{code:'rate_limit'}});
+      assert.ok(Number(response.headers['retry-after'])>=1&&Number(response.headers['retry-after'])<=60);
+    }
+    assert.equal(scopeChecks,120);assert.equal(authChecks,80);
+    const forged=await f.app.inject({url:routes[1]!,headers:{...f.headers('test'),'x-mural-proxy-token':'wrong','x-mural-client-ip':'192.0.2.114'}});
+    assert.equal(forged.statusCode,503);assert.equal(scopeChecks,120);assert.equal(authChecks,80);
+    const other=await f.app.inject({url:routes[2]!,headers:{...f.headers('test'),'x-mural-client-ip':'192.0.2.114'}});
+    assert.equal(other.statusCode,200,other.body);assert.equal(scopeChecks,121);assert.equal(authChecks,81);
+  }finally{await f.cleanup();}
+});
+
 integration('verified TestFlight purchases fund public hosted calls/helpers without using or converting real paid value',async()=>{
   const f=await fixture();try{
     const {order,value}=await f.order('test');await f.fulfillment.reconcile('apple',{kind:'client',environment:'test',accountID:f.account,orderID:order.orderID,transactionID:value.transactionId});
