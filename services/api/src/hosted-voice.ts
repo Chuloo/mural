@@ -7,7 +7,7 @@ import { ServiceError } from './errors.js';
 import { VoiceMeter } from './meter.js';
 import { cost, RATE_VERSION, TRIAL_MS } from './pricing.js';
 import { LiveCreateFailure, LiveCreateRejectedError, supportsLanguage, parseLiveContext, type LiveProvider, type Sideband, type VoiceUsage } from './live-provider.js';
-import { appendMinuteEntry, lockMinuteWallet } from './minutes.js';
+import { appendMinuteEntry, lockMinuteWallet, MINIMUM_PUBLIC_FREE_SESSION_MS } from './minutes.js';
 import { recoverMinutePurchaseShortfalls } from './minute-purchases.js';
 import type { PurchaseEnvironment } from './minute-purchases.js';
 import { hostedHelperExposure, type HostedHelpers } from './hosted-helpers.js';
@@ -63,6 +63,8 @@ export class HostedVoice {
   get available() { return this.accepting; }
   get minuteFunded() { return this.config.billingUnit === 'milliseconds'; }
   get publicMinuteAccess() { return this.config.publicMinuteAccess === true; }
+  /** Public account spending excludes synthetic credit; private test allowlists retain their boundary. */
+  get realFundedAccess() { return this.publicMinuteAccess && !this.config.restrictToAllowlist; }
   get publicPaidAccess() { return this.config.publicPaidAccess === true; }
   get estimatedNanoUSDPerMinute() { return 50_000_000n+(this.config.helpers?.paidFundingPolicy?.helperBudgetNanoPerMinute ?? 0n); }
   get minimumPaidSessionNanoUSD() { return this.paidHold(15_000).total; }
@@ -122,7 +124,7 @@ export class HostedVoice {
     let deadline = new Date(this.now() + reservedMilliseconds);
     await transaction(this.db, async sql => {
       await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
-      const fundingEnvironment:PurchaseEnvironment=requestedFundingEnvironment??
+      const fundingEnvironment:PurchaseEnvironment=this.realFundedAccess?'live':requestedFundingEnvironment??
         (await sql.query('SELECT environment FROM deployment_environment WHERE singleton')).rows[0].environment;
       const minuteWallet = minutes ? await lockMinuteWallet(sql, account) : undefined;
       let wallet = minuteWallet ?? await lockWallet(sql, account, true);
@@ -140,20 +142,20 @@ export class HostedVoice {
       const exposure = this.publicMinuteAccess ? 0n : BigInt((await sql.query('SELECT COALESCE(sum(funding_exposure_nano),0) AS total FROM hosted_sessions')).rows[0].total) +
         await hostedHelperExposure(sql);
       if (minutes) {
-        if (this.publicMinuteAccess && requestedFundingEnvironment!=='test' && !minuteWallet!.sandboxReconciled)
+        if (this.publicMinuteAccess && !minuteWallet!.sandboxReconciled)
           throw new ServiceError('minute_balance_reconciliation_required',409);
-        // Explicit verified sandbox scope cannot reserve production free time.
-        // Historical callers without a scope keep their existing funding order.
-        reservedMilliseconds = this.publicMinuteAccess && requestedFundingEnvironment==='test' ? 0 :
-          Math.min(TRIAL_MS,requestedMilliseconds ?? TRIAL_MS, Number(wallet.balance) - Number(wallet.reserved) -
+        // Reconciled free grants are usable independently of StoreKit. Unreviewed
+        // legacy minute value never backs a public provider attempt.
+        reservedMilliseconds = Math.min(TRIAL_MS,requestedMilliseconds ?? TRIAL_MS, Number(wallet.balance) - Number(wallet.reserved) -
             (this.publicMinuteAccess ? minuteWallet!.sandbox : 0));
-        if (reservedMilliseconds<=0 && this.publicPaidAccess) {
+        const minimumFree = this.publicMinuteAccess ? MINIMUM_PUBLIC_FREE_SESSION_MS : 1;
+        if (reservedMilliseconds<minimumFree && this.publicPaidAccess) {
           const cash=await lockPaidWallet(sql,account,true,fundingEnvironment);
           if (cash.fundedAvailable<this.minimumPaidSessionNanoUSD) throw new ServiceError('insufficient_credit',402);
           let low=15_000,high=requestedMilliseconds ?? 900_000;
           while (low<high) { const middle=Math.ceil((low+high)/2); if (this.paidHold(middle).total<=cash.fundedAvailable) low=middle; else high=middle-1; }
           reservedMilliseconds=low; paidReserve=this.paidHold(low); paid=true; minutes=false; wallet=cash;
-        } else if (reservedMilliseconds <= 0) throw new ServiceError('insufficient_minutes', 402);
+        } else if (reservedMilliseconds < minimumFree) throw new ServiceError('insufficient_minutes', 402);
       }
       if (minutes) {
         const funding = voiceCost(Math.max(15_000, reservedMilliseconds));

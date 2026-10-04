@@ -21,6 +21,13 @@ regexTarget = "secret"
 regexes = ['''^8443/v1/minutes$''']
 
 [[rules.allowlists]]
+description = "Reviewed alternate-port purchase rejection test URL; 8443/v1/minutes/orders is a URL suffix, not a credential."
+condition = "AND"
+paths = ['''^apps/ios/Tests/ApplePurchaseRequestTests\.swift$''']
+regexTarget = "secret"
+regexes = ['''^8443/v1/minutes/orders$''']
+
+[[rules.allowlists]]
 description = "Reviewed SHA-256 of migration 004 in the Apple upgrade fixture; not a credential."
 condition = "AND"
 paths = ['''^services/api/tests/apple-regional-catalog\.test\.ts$''']

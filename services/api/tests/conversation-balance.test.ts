@@ -93,17 +93,17 @@ test('guest balance does not require a cash wallet or expose paid admission', { 
     assert.equal(balance.availableMilliseconds, 600_000);
     assert.ok(!('paid' in balance));
     const sandbox = await conversationBalance(db,account,true,policy,'test');
-    assert.equal(sandbox.balanceMilliseconds,0);assert.equal(sandbox.reservedMilliseconds,0);assert.equal(sandbox.availableMilliseconds,0);
-    assert.equal(sandbox.presentation.totalDisplayMilliseconds,0);assert.equal(sandbox.presentation.availabilityReason,'insufficient_remaining_time');
+    assert.equal(sandbox.balanceMilliseconds,600_000);assert.equal(sandbox.reservedMilliseconds,0);assert.equal(sandbox.availableMilliseconds,600_000);
+    assert.equal(sandbox.presentation.totalDisplayMilliseconds,600_000);assert.equal(sandbox.presentation.availabilityReason,'ready');
     assert.ok(!('paid' in sandbox));
     await reserveMinutes(db,account,'guest-unresolved-free',60_000);
     const settling = await conversationBalance(db,account,true,policy,'test');
-    assert.equal(settling.availableMilliseconds,0);assert.equal(settling.presentation.settlementState,'pending');
+    assert.equal(settling.availableMilliseconds,540_000);assert.equal(settling.presentation.settlementState,'pending');
     assert.equal(settling.presentation.availabilityReason,'settling');
   } finally { await db.query(`DROP SCHEMA ${schema} CASCADE`); await db.end(); }
 });
 
-test('sandbox balance excludes free time while mixed cash reservations and legacy views retain their scopes',{skip:!databaseURL},async()=>{
+test('public balance uses real funds regardless requested scope while restricted views retain their scopes',{skip:!databaseURL},async()=>{
   const schema=`scoped_balance_${randomUUID().replaceAll('-','')}`,url=new URL(databaseURL!);
   url.searchParams.set('options',`-c search_path=${schema}`);
   const db=connectDatabase(url.toString());await db.query(`CREATE SCHEMA ${schema}`);
@@ -121,10 +121,10 @@ test('sandbox balance excludes free time while mixed cash reservations and legac
     });
     await reserveMinutes(db,account,'unresolved-free-hold',50_000);
     const testView=await conversationBalance(db,account,true,policy,'test');
-    assert.deepEqual([testView.balanceMilliseconds,testView.reservedMilliseconds,testView.availableMilliseconds],[0,0,0]);
-    assert.equal(testView.presentation.freeAvailableMilliseconds,0);assert.equal(testView.presentation.totalDisplayMilliseconds,2_640_000);
-    assert.equal(testView.paid?.balanceNanoUSD,'5000000000');assert.equal(testView.paid?.reservedNanoUSD,'600000000');
-    assert.equal(testView.paid?.availableNanoUSD,'4400000000');assert.equal(testView.presentation.settlementState,'pending');
+    assert.deepEqual([testView.balanceMilliseconds,testView.reservedMilliseconds,testView.availableMilliseconds],[193_000,50_000,143_000]);
+    assert.equal(testView.presentation.freeAvailableMilliseconds,143_000);assert.equal(testView.presentation.totalDisplayMilliseconds,1_103_000);
+    assert.equal(testView.paid?.balanceNanoUSD,'2000000000');assert.equal(testView.paid?.reservedNanoUSD,'400000000');
+    assert.equal(testView.paid?.availableNanoUSD,'1600000000');assert.equal(testView.presentation.settlementState,'pending');
     for(const environment of [undefined,'live'] as const){
       const live=await conversationBalance(db,account,true,policy,environment);
       assert.equal(live.availableMilliseconds,143_000);assert.equal(live.reservedMilliseconds,50_000);
