@@ -139,7 +139,7 @@ integration('isolated sandbox allowlist blocks provider calls even with public p
 });
 
 integration('isolated sandbox spending debits test provenance and cannot change an occupied database to live',async()=>{
-  const f=await fixture({sandbox:true});try {
+  const f=await fixture({sandbox:true,restricted:true,allowAccount:true,cap:1_500_000_000n});try {
     assert.equal((await f.balance()).availableNanoUSD,'2000000000');
     await assert.rejects(db!.query("UPDATE deployment_environment SET environment='live'"));
     const session=await f.create(60_000);await f.emit(session,20,true);await f.expire(session.sessionID);

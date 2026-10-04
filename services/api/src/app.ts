@@ -267,7 +267,7 @@ export function createApp(services: Services) {
   app.get('/v1/minutes', paymentReadOptions, async request => conversationBalance(db, await authenticate(db, request.headers.authorization, true),
     services.hosted?.publicMinuteAccess===true, services.hosted?.publicPaidAccess ? { enabled: true,
       estimatedNanoUSDPerMinute: services.hosted.estimatedNanoUSDPerMinute, minimumSessionNanoUSD: services.hosted.minimumPaidSessionNanoUSD } : undefined,
-    await fundingScope(request)));
+    services.hosted?.realFundedAccess ? 'live' : await fundingScope(request),services.hosted?.realFundedAccess===true));
   app.post('/v1/guest/minutes', { bodyLimit: 1024 }, async request => {
     const proof = objectBody(request);
     try { return { available: true, ...await startGuestMinutes(db, proof, services.guestMinuteAttestor ?? new UnconfiguredGuestMinuteAttestor()) }; }
@@ -426,7 +426,7 @@ export function createApp(services: Services) {
   });
   app.get('/v1/wallet', paymentReadOptions, async request => {
     const account=await authenticate(db,request.headers.authorization,true);
-    const wallet=await paidAIBalance(db,account,await fundingScope(request),false);
+    const wallet=await paidAIBalance(db,account,services.hosted?.realFundedAccess ? 'live' : await fundingScope(request),false);
     return {currency:'USD',balanceNanoUSD:wallet.balanceNanoUSD,reservedNanoUSD:wallet.reservedNanoUSD,
       availableNanoUSD:wallet.availableNanoUSD};
   });
@@ -476,7 +476,8 @@ export function createApp(services: Services) {
     const key = request.headers['idempotency-key'];
     if (typeof key !== 'string') throw new ServiceError('idempotency_key_required');
     return services.hosted.create(account, key, stringField(body, 'sdp', 65_536), stringField(body, 'language', 10),
-      { instructions: body.instructions, history: body.history }, body.requestedMilliseconds as number | undefined,await fundingScope(request));
+      { instructions: body.instructions, history: body.history }, body.requestedMilliseconds as number | undefined,
+      services.hosted.realFundedAccess ? 'live' : await fundingScope(request));
   });
   app.get('/v1/live/sessions/:id', async request => {
     if (!services.hosted) throw new ServiceError('hosted_voice_not_ready', 503);
