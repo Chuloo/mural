@@ -109,14 +109,16 @@ test('website configuration is default-off and protected files reject links and 
     await chmod(path,0o600);await symlink(path,link);await assert.rejects(readProtectedWebPurchaseConfig(link));
   }finally{await rm(directory,{recursive:true});}
 });
-test('Resend verification messages use fixed authenticated endpoint and stable idempotency without code in subject',async()=>{
+test('Resend verification messages are plain text with fixed endpoint, stable idempotency and no code in subject',async()=>{
   const id=randomUUID(),message={challengeID:id,email:'relay@private.icloud.com',code:'001234'};const calls:any[]=[];
   const sender=new ResendPurchaseEmails(config,async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify({id:randomUUID()}));});
   await sender.send(message);await sender.send(message);
   assert.equal(calls[0].url,'https://api.resend.com/emails');assert.equal(calls[0].options.redirect,'error');
   assert.equal(calls[0].options.headers['Idempotency-Key'],calls[1].options.headers['Idempotency-Key']);
   const body=JSON.parse(calls[0].options.body);assert.deepEqual(body.to,[message.email]);assert.equal(body.reply_to,config.replyTo);
-  assert.ok(body.text.includes('001234'));assert.ok(body.html.includes('001234'));assert.ok(!body.subject.includes('001234'));
+  assert.ok(body.text.includes('001234'));assert.equal(Object.hasOwn(body,'html'),false);assert.ok(!body.subject.includes('001234'));
+  assert.ok(body.text.includes('expires in 10 minutes and works once'));assert.ok(body.text.includes('only gives access to checkout'));
+  assert.deepEqual(Object.keys(purchaseEmailContent('001234')).sort(),['subject','text']);
   assert.throws(()=>purchaseEmailContent('<script>'));
   for(const status of [400,401,422,429,500])await assert.rejects(new ResendPurchaseEmails(config,async()=>new Response('secret raw body',{status})).send(message),
     new RegExp(status===429||status>=500?'purchase_email_retry':'purchase_email_rejected'));
