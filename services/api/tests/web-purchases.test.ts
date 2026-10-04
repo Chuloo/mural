@@ -14,7 +14,7 @@ import { migrate } from '../src/migrate.js';
 import { Diagnostics } from '../src/diagnostics.js';
 import { ServiceError } from '../src/errors.js';
 import { WebPurchases } from '../src/web-purchases.js';
-import { webPurchaseConfig, validateWebPurchaseConfig } from '../src/web-purchase-config.js';
+import { webPurchaseConfig, validateWebPurchaseConfig, readProtectedWebPurchaseConfig } from '../src/web-purchase-config.js';
 import { purchaseEmailContent, ResendPurchaseEmails, type PurchaseEmail } from '../src/web-purchase-email.js';
 import { AIValuePurchases, makeAIValueProduct, PurchaseFulfillmentRouter } from '../src/ai-value-purchases.js';
 import { MinutePurchases } from '../src/minute-purchases.js';
@@ -103,9 +103,10 @@ test('website configuration is default-off and protected files reject links and 
   const directory=await mkdtemp(join(tmpdir(),'mural-web-config-')),path=join(directory,'protected.json'),link=join(directory,'link.json');
   try {
     await writeFile(path,JSON.stringify(config),{mode:0o600});
-    assert.deepEqual(await webPurchaseConfig({WEB_PURCHASES_ENABLED:'true',WEB_PURCHASES_CREDENTIALS_FILE:path}),config);
-    await chmod(path,0o644);await assert.rejects(webPurchaseConfig({WEB_PURCHASES_ENABLED:'true',WEB_PURCHASES_CREDENTIALS_FILE:path}));
-    await chmod(path,0o600);await symlink(path,link);await assert.rejects(webPurchaseConfig({WEB_PURCHASES_ENABLED:'true',WEB_PURCHASES_CREDENTIALS_FILE:link}));
+    assert.deepEqual(await readProtectedWebPurchaseConfig(path),config);
+    await assert.rejects(webPurchaseConfig({WEB_PURCHASES_ENABLED:'true',WEB_PURCHASES_CREDENTIALS_FILE:path}),/reviewed commerce mount/);
+    await chmod(path,0o644);await assert.rejects(readProtectedWebPurchaseConfig(path));
+    await chmod(path,0o600);await symlink(path,link);await assert.rejects(readProtectedWebPurchaseConfig(link));
   }finally{await rm(directory,{recursive:true});}
 });
 test('Resend verification messages use fixed authenticated endpoint and stable idempotency without code in subject',async()=>{
@@ -282,6 +283,21 @@ integration('CORS, proxy, body and disabled gates reject before send or checkout
     const forged=await f.app.inject({method:'POST',url:'/v1/web-purchases/challenges',headers:{...headers,'x-mural-proxy-token':'wrong'},payload:{email:'x@example.test'}});assert.equal(forged.statusCode,503);
     const bad=await f.app.inject({method:'POST',url:'/v1/web-purchases/challenges',headers:{...headers,'content-type':'text/plain'},payload:'secret'});assert.equal(bad.statusCode,415);
     assert.equal(f.messages.length,0);assert.equal(f.transport.calls.length,0);assert.ok(!JSON.stringify(f.records).includes(config.apiKey));
+  }finally{await f.cleanup();}
+});
+integration('web reads and encoded aliases share an early network limit before token authentication',async()=>{
+  const f=await fixture();try{
+    const email='short-window@example.test';await f.account(email);const session=await f.verify(email),authorization=`Bearer ${session.token}`;
+    let authentications=0;const original=f.access.authenticate.bind(f.access);
+    f.access.authenticate=async value=>{authentications++;return original(value);};
+    for(let i=0;i<120;i++)assert.equal((await f.app.inject({method:'GET',url:'/v1/web-purchases/session',headers:{...headers,authorization}})).statusCode,200);
+    for(const path of ['/session','/%73ession','/products']){
+      const denied=await f.app.inject({method:'GET',url:'/v1/web-purchases'+path,headers:{...headers,authorization}});
+      assert.equal(denied.statusCode,429);assert.equal(denied.json().error.code,'rate_limit');
+    }
+    assert.equal(authentications,120);
+    assert.equal((await f.app.inject({method:'GET',url:'/v1/web-purchases/session',headers:{...headers,authorization,'x-mural-client-ip':'192.0.2.43'}})).statusCode,200);
+    assert.equal(authentications,121);
   }finally{await f.cleanup();}
 });
 integration('web checkout uses verified account and durable quote; only signed Stripe confirmation credits once and refunds reverse',async()=>{

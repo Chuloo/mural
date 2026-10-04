@@ -24,7 +24,13 @@ export async function webPurchaseConfig(env: NodeJS.ProcessEnv): Promise<WebPurc
   if (env.WEB_PURCHASES_ENABLED !== undefined && !['true','false'].includes(env.WEB_PURCHASES_ENABLED))
     throw new Error('Invalid website purchase gate.');
   if (env.WEB_PURCHASES_ENABLED !== 'true') return undefined;
-  const path = env.WEB_PURCHASES_CREDENTIALS_FILE;
+  if (env.WEB_PURCHASES_CREDENTIALS_FILE !== '/run/mural-commerce/web-purchases.json')
+    throw new Error('Website purchase credentials require the reviewed commerce mount.');
+  return readProtectedWebPurchaseConfig('/run/mural-commerce/web-purchases.json');
+}
+
+/** The runtime entry point supplies only the fixed, reviewed mount path above. */
+export async function readProtectedWebPurchaseConfig(path: string): Promise<WebPurchaseConfig> {
   if (!path || !isAbsolute(path) || path.length > 1024) throw new Error('Missing protected website purchase configuration.');
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {

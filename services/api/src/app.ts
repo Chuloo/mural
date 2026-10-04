@@ -227,7 +227,7 @@ export function createApp(services: Services) {
     if (request.method === 'POST' && request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
       throw new ServiceError('invalid_content_type',415);
   };
-  const webOptions = { ...paymentReadOptions,bodyLimit:1024,onRequest:webGuard };
+  const webOptions = { config:{rateLimit:{max:120,timeWindow:60_000}},bodyLimit:1024,onRequest:webGuard };
   for (const suffix of ['/challenges','/verify','/products','/orders','/orders/by-key/:key','/orders/:id','/session'])
     app.options(`${WEB_PURCHASE_PATH}${suffix}`,webOptions,async () => ({}));
   app.post(`${WEB_PURCHASE_PATH}/challenges`,webOptions,async (request,reply) =>
