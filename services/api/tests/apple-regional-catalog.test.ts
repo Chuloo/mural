@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes,randomUUID} from 'node:crypto';
-import {readFile,readdir} from 'node:fs/promises';
+import {createHash,randomBytes,randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {Environment,type JWSTransactionDecodedPayload} from '@apple/app-store-server-library';
 import {AIValuePurchases,makeAppleAIValueProduct,makeRegionalAppleAIValueProduct,PurchaseFulfillmentRouter} from '../src/ai-value-purchases.js';
 import {appleDecimalMinor,type RegionalApplePriceSnapshot} from '../src/apple-market-prices.js';
@@ -126,14 +126,53 @@ test('global Apple catalog selects exact storefront and verified scope without e
   } finally {await app.close();}
 });
 
+
+// Pin the production032 migration history used by the upgrade fixture.
+const prior033Migrations=[
+  ['001_billing.sql','3ed5ab59cbd61a2b996540043bf4b5743b6eb2bb787e40f2a72428e4c2b1a008'],
+  ['002_checkout_attempts.sql','b046fe364b1426f14d7ce6af6a9ac06df4e4e107573c4adfa31d8de0a3c36cb1'],
+  ['003_hosted_sessions.sql','9abe3bb73c69d9d3401c8520ed3ed53c6a8f727e7aae3cbe9e79f8b0ed00f442'],
+  ['004_access_requests.sql','29f8815a4043150ca552d7956228fc4dabb0db46e7b17d4e5dcb977cfafcfb43'],
+  ['005_account_readiness.sql','050aafb80d00594d47b064aa93b571c10569601cb1c79cd32e4e4d651d4ef0b9'],
+  ['006_conversation_minutes.sql','f690c8610dc6637cc90b936d3a043e545eea90fb865db09cd6d3dec4e28ebf84'],
+  ['007_welcome_funding.sql','980e0fdaabee99ffd0db4154935876b8a22a48c45a61f2370113df84e6b17dbd'],
+  ['008_minute_purchases.sql','a2fd720bc9ad8b517b18abc2b544e50982914e028c926b0477bbc2d96b4f6091'],
+  ['009_minute_provider_delivery.sql','688d72cbb250c252a3c9054e190cafe7f1107425cf681483971db96ecfefef6e'],
+  ['010_ai_feedback.sql','46d76c214f63591df49bcd223e5da25491b67dfc7cc3a02f145e01af8e74bedc'],
+  ['011_hosted_conversation_minutes.sql','67a9044379834d4b0d76d0e121250e66bf50bc5f3d31ae747c53460ebe0db209'],
+  ['012_hosted_helpers.sql','6e81c46015e2c7541c14f996c1e546d176a50f71ca043008d99adf4410b03fdb'],
+  ['013_minute_play_void_cursor.sql','ea7863cc8c811753cf32dcac5f28e1dec5140fc56a332b45a379e30344657e8f'],
+  ['014_hosted_minimum_and_earned_helpers.sql','b991af298617c793e3e2ae98581f8a769217d6cb7095647829aba5963579bd7e'],
+  ['015_public_guest_minutes.sql','9fd0e8e2c55ca08a92639c44c03dceeddbab121ad41a52fee3e3bd8269b2bcb9'],
+  ['016_ai_pricing_policy.sql','2c737a85f84505708cf88c3d8a6cfd4db744f79472aadf7cd66a138a8aadd9f1'],
+  ['017_ai_value_purchases.sql','ba1c7faf3ba0b6ce4d7344e5bf9bcb0095a3bbd3738d797e5c582849b42ce0cb'],
+  ['018_hosted_actual_ai_value.sql','8c09186ad3178202095d40114af0245441daeaae18d13bcbcdba9c37f22a7365'],
+  ['019_live_create_rejection.sql','25de70120fbd2e04e41962e2e81d664a9bb8305a8bc593dedf46604fba15b5c3'],
+  ['020_hosted_startup_recoveries.sql','061a72850033374ecafbf4cfbd8e47bdfd819e6d0f1fe5257e5f70aac8a23a23'],
+  ['021_stripe_managed_payments.sql','3b63383e8695d6f6291a1c26ba9305c4d947913f0f59ae92496358adfdabfa13'],
+  ['022_stripe_provider_amount_bounds.sql','ae32fd53907278ba7cdc5f8300140898c9eae55f9d8f06d563a77d9cac4039fb'],
+  ['023_deferred_guest_links.sql','00604ae0b9a0595e671abffdcbff5271fdd457600b966c3abda2c2f2cf922fb7'],
+  ['024_purchase_quantity.sql','79e230892fc9a2ceb6b243468f1af59833af9fda8d8a2e2c8b71ea586dfa08b8'],
+  ['025_apple_purchases.sql','3e6afd301f6524d5538de9a4fde494ed5b2fbb944af1fd67feb3eae6a4ea26f9'],
+  ['026_minutes_presentation.sql','1f6a192adadc1ea8ecd6ba77b994774b09e02820717152500f2b2da7b7deccc6'],
+  ['027_hosted_close_intents.sql','bba592a3490be4f7098965ed3d52f6004c70dcf9acebfa5a98f25a7a07f99676'],
+  ['028_deployment_environment.sql','a997e470e64c0379bf74fa1bd192974dfcad9f05f7ab5bcf290015b53e1cd56d'],
+  ['029_apple_notification_cursor.sql','fc54c449f8d8e931aacb28cae557ed6455ebe270bab6b2d45ad6601a3300ebd4'],
+  ['030_apple_refund_declined.sql','87b406ae887f77081db24f960610987ffe13c422003bd4b43248b9568e59af5d'],
+  ['031_play_regional_quotes.sql','a6a83dc58650b14c32968dfa7df23736825e04d40baea3dd63b74e21a5b65aa7'],
+  ['032_apple_funding_scope.sql','835d12fd91756c018d70fb6403a14ab3c82cf5b1f7991289217530a3ca5f8a53'],
+] as const;
+
 async function fixture(p=product(),mode:'live'|'test'='live',before033=false) {
   const schema=`apple_regional_${randomUUID().replaceAll('-','')}`,url=new URL(databaseURL!);url.searchParams.set('options',`-c search_path=${schema}`);
   const db=connectDatabase(url.toString());await db.query(`CREATE SCHEMA ${schema}`);
   if(before033) await transaction(db,async sql=>{
     await sql.query('CREATE TABLE schema_migrations(name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())');
     const directory=new URL('../migrations/',import.meta.url);
-    for(const file of (await readdir(directory)).filter(f=>f.endsWith('.sql')&&f<'033').sort()) {
-      await sql.query(await readFile(new URL(file,directory),'utf8'));
+    for(const [file,expectedSHA256] of prior033Migrations) {
+      const migration=await readFile(new URL(file,directory),'utf8');
+      assert.equal(createHash('sha256').update(migration).digest('hex'),expectedSHA256,'Historical migration fixture must match its reviewed source');
+      await sql.query(migration);
       await sql.query('INSERT INTO schema_migrations(name) VALUES($1)',[file]);
     }
   });else await migrate(db);

@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {parseApplePricingCSV,reviewedAppleMarkets,type AppleStorefrontReview,type ApplePricingExport} from '../src/apple-pricing-export.js';
 import {type RegionalApplePriceSnapshot} from '../src/apple-market-prices.js';
 import {makeRegionalAppleCatalog,type AppleMinutePack} from '../src/apple-regional-catalog.js';
@@ -63,4 +65,14 @@ test('the frozen Apple country review enables162 of175 countries using the fresh
   const mocked=exports();
   for(const pack of packs) {mocked[pack].csv=header+actual.storefronts.map(r=>`${quote(r.name)},USD,7.0,5.95,Y\r\n`).join('');mocked[pack].csvSHA256=hash(mocked[pack].csv);}
   assert.equal(reviewedAppleMarkets(actual,mocked).enabledRegionCodes.length,162);
+});
+test('the offline Apple generator rejects path arguments before reading or writing export files',()=>{
+  const tool=fileURLToPath(new URL('../../../release/apple/generate-regional-apple-catalog.mts',import.meta.url));
+  const cwd=fileURLToPath(new URL('../',import.meta.url));
+  for(const args of [['../outside'],['/private/tmp/foreign'],['safe/../../foreign'],[''],['a'.repeat(91)],['valid-version','extra-path']]) {
+    const result=spawnSync(process.execPath,['--import','tsx',tool,...args],{cwd,encoding:'utf8',timeout:10_000});
+    assert.equal(result.error,undefined);assert.equal(result.status,1);
+    assert.match(result.stderr,/Invalid schedule version|Only a schedule version argument is accepted/);
+    assert.equal(result.stdout,'');
+  }
 });

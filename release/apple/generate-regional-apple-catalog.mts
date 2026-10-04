@@ -6,8 +6,11 @@ import {makeRegionalAppleCatalog,type AppleMinutePack} from '../../services/api/
 import {reviewedAppleMarkets,type AppleStorefrontReview,type ApplePricingExport} from '../../services/api/src/apple-pricing-export.js';
 
 // Offline candidate generator. Store availability and production activation are separate release actions.
-const [directoryArg,scheduleVersion='asc-20261004-v1']=process.argv.slice(2);
-const directory=directoryArg?resolve(directoryArg):new URL('../private/apple-pricing-20261004/',import.meta.url).pathname;
+const args=process.argv.slice(2);
+assert(args.length<=1,'Only a schedule version argument is accepted');
+const [scheduleVersion='asc-20261004-v1']=args;
+assert.match(scheduleVersion,/^[A-Za-z0-9][A-Za-z0-9._:-]{0,89}$/,'Invalid schedule version');
+const directory=new URL('../private/apple-pricing-20261004/',import.meta.url).pathname;
 const sha=(data:string|Buffer)=>createHash('sha256').update(data).digest('hex');
 const review=JSON.parse(readFileSync(new URL('./apple-storefronts.json',import.meta.url),'utf8')) as AppleStorefrontReview;
 const manifest=JSON.parse(readFileSync(resolve(directory,'export-manifest.json'),'utf8'));
