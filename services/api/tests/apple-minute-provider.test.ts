@@ -64,9 +64,12 @@ integration('late Apple notifications reconcile and refund a retained deleted ac
 });
 test('Apple milliunits convert exactly',()=>{
   assert.equal(appleMinorUnits(14000,2),1400);assert.equal(appleMinorUnits(3300000,0),3300);assert.equal(appleMinorUnits(1234,3),1234);
+  assert.equal(appleMinorUnits(3990000000,2),399000000);assert.equal(appleMinorUnits(10000000000,2),1000000000);
+  assert.throws(()=>appleMinorUnits(10000000010,2));
   for(const [amount,exponent] of [[1,2],[0,2],[-1,2],[1.5,2],[Number.MAX_SAFE_INTEGER,2],[1000,4]])assert.throws(()=>appleMinorUnits(amount!,exponent!));
 });
 test('Apple sandbox unit-price compatibility never relaxes live total-price verification',()=>{
+  assert.equal(applePriceMatches(2000000000,2,10,2000000000,'test'),false);
   for(const quantity of [1,2,10]) {
     assert.equal(applePriceMatches(7000*quantity,2,quantity,700*quantity,'live'),true);
     assert.equal(applePriceMatches(7000,2,quantity,700*quantity,'test'),true);

@@ -319,12 +319,12 @@ export function createApp(services: Services) {
       }
       if(provider==='apple') {
         const storefront=(request.query as Record<string,unknown>).storefront;
-        if(storefront!=='USA' && storefront!=='NOR') {
+        if(typeof storefront!=='string' || !/^[A-Z]{3}$/.test(storefront)) {
           diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront:'unsupported',admissionReady,offerCount:0});
           return {available:false,maximumQuantity:1,products:[]};
         }
         products=products.filter(p=>p.quote.apple?.storefront===storefront);
-        diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront,admissionReady,offerCount:products.length});
+        diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront:products.length?storefront:'unsupported',admissionReady,offerCount:products.length});
         return {available:products.length>0,maximumQuantity:services.minuteCommerce.aiPurchases.maximumQuantity(provider),
           products:products.map(p=>({sku:p.sku,providerProduct:p.providerProduct,currency:p.currency,totalMinor:p.totalMinor,
             currencyExponent:p.quote.apple!.currencyExponent,estimatedMilliseconds:p.estimatedMilliseconds,

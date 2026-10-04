@@ -60,7 +60,7 @@ test('Apple catalog logs one verified scope, readiness and filtered count while 
         const catalogs = f.records.filter(record => record.event === 'apple_catalog');
         assert.equal(catalogs.length, 1);
         assert.deepEqual(catalogs[0], { timestamp: catalogs[0]!.timestamp, level: 'info', event: 'apple_catalog',
-          reference: catalogs[0]!.reference, environment, storefront: storefront === 'private-country' ? 'unsupported' : storefront,
+          reference: catalogs[0]!.reference, environment, storefront: count ? storefront : 'unsupported',
           admissionReady, offerCount: count });
         assert.match(catalogs[0]!.reference!, /^[a-f0-9]{12}$/);
         assert.equal(catalogs[0]!.reference, f.records.find(record => record.event === 'request_completed')!.reference);
