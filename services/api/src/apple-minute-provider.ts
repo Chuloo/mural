@@ -5,6 +5,7 @@ import { ServiceError } from './errors.js';
 import type { PurchaseEnvironment, VerifiedMinutePurchase } from './minute-purchases.js';
 import { loadProviderOrder, MinuteReceiptVault, orderIDPattern, providerHash, type MinuteDeliveryAdapter } from './minute-provider-delivery.js';
 import appleFetch from 'node-fetch';
+import {appleMaximumOrderMinor} from './apple-market-prices.js';
 
 export interface AppleMinuteConfig {
   bundleID: string; appAppleID: number; environment: PurchaseEnvironment; allowLive?: boolean;
@@ -68,12 +69,12 @@ export class AppleSDKMinuteTransport implements AppleMinuteTransport {
 export function appleMinorUnits(price:number,exponent:number):number {
   if (!Number.isSafeInteger(price) || price<=0 || !Number.isInteger(exponent) || exponent<0 || exponent>3) throw invalid();
   const numerator=BigInt(price)*10n**BigInt(exponent);
-  if (numerator%1000n!==0n || numerator/1000n>100_000_000n) throw invalid();
+  if (numerator%1000n!==0n || numerator/1000n>BigInt(appleMaximumOrderMinor)) throw invalid();
   return Number(numerator/1000n);
 }
 export function applePriceMatches(price:number,exponent:number,quantity:number,totalMinor:number,mode:PurchaseEnvironment):boolean {
   const amount=appleMinorUnits(price,exponent);
-  if(!Number.isSafeInteger(quantity) || quantity<1 || quantity>10 || !Number.isSafeInteger(totalMinor) || totalMinor<=0) return false;
+  if(!Number.isSafeInteger(quantity) || quantity<1 || quantity>10 || !Number.isSafeInteger(totalMinor) || totalMinor<=0 || totalMinor>appleMaximumOrderMinor) return false;
   // Apple's documented JWS price is the total. Real sandbox multi-quantity
   // transactions also return the unit price (verified US quantity 2, Sep 2026).
   // Accept that exact quantity-adjusted value only in the isolated test scope.

@@ -8,7 +8,7 @@ export type DiagnosticEvent = 'request_completed' | 'request_failed' | 'provider
 export interface DiagnosticFields {
   operation?: string; reference?: string; sessionReference?: string;
   status?: number; durationMilliseconds?: number; providerStatus?: number; providerRequestID?: string;
-  environment?: 'test' | 'live'; storefront?: 'USA' | 'NOR' | 'unsupported'; admissionReady?: boolean; offerCount?: number;
+  environment?: 'test' | 'live'; storefront?: string; admissionReady?: boolean; offerCount?: number;
 }
 export interface DiagnosticRecord extends DiagnosticFields {
   timestamp: string; level: 'info' | 'warn' | 'error'; event: DiagnosticEvent; reason?: string; source?: string;
@@ -53,7 +53,7 @@ export class Diagnostics {
     if (fields.providerRequestID && /^[A-Za-z0-9_-]{1,128}$/.test(fields.providerRequestID)) record.providerRequestID = fields.providerRequestID;
     if (event === 'apple_catalog') {
       if (fields.environment === 'test' || fields.environment === 'live') record.environment = fields.environment;
-      if (fields.storefront === 'USA' || fields.storefront === 'NOR' || fields.storefront === 'unsupported') record.storefront = fields.storefront;
+      if (fields.storefront === 'unsupported' || (typeof fields.storefront==='string' && /^[A-Z]{3}$/.test(fields.storefront))) record.storefront = fields.storefront;
       if (typeof fields.admissionReady === 'boolean') record.admissionReady = fields.admissionReady;
       if (Number.isInteger(fields.offerCount) && fields.offerCount! >= 0 && fields.offerCount! <= 20) record.offerCount = fields.offerCount;
     }
