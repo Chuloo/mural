@@ -197,7 +197,8 @@ for(const storefront of ['USA','NOR'] as const) integration(`migration033 preser
     const quotes=(await f.db.query('SELECT * FROM ai_value_purchase_quotes WHERE order_id=$1',[order.orderID])).rows;
     const original=(await f.db.query('SELECT * FROM minute_purchase_orders WHERE id=$1',[order.orderID])).rows;
     await migrate(f.db);await migrate(f.db);
-    assert.equal((await f.db.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'33');
+    assert.equal((await f.db.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'34');
+    assert.equal((await f.db.query("SELECT name FROM schema_migrations WHERE name='033_apple_regional_quotes.sql'")).rows[0].name,'033_apple_regional_quotes.sql');
     assert.deepEqual((await f.db.query('SELECT * FROM ai_value_purchase_quotes WHERE order_id=$1',[order.orderID])).rows,quotes);
     assert.deepEqual((await f.db.query('SELECT * FROM minute_purchase_orders WHERE id=$1',[order.orderID])).rows,original);
     const replacement=new AIValuePurchases(f.db,{catalog:[product()],verifiers:[f.apple],salesEnabled:true,quantityEnabled:['apple']});

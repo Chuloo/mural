@@ -26,12 +26,14 @@ import type { PlayRtdnSubscriber } from './google-play-rtdn.js';
 import { HOSTED_HELPER_BODY_LIMIT, type HostedHelpers } from './hosted-helpers.js';
 import { Diagnostics, errorReference } from './diagnostics.js';
 import { startupDiagnostic, type StartupDiagnostic } from './startup-diagnostics.js';
+import { WEB_PURCHASE_PATH, type WebPurchases } from './web-purchases.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig { rateLimit?: { max: number; timeWindow: number } }
 }
 
 export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthConfig; payments?: SandboxPayments; attestor?: TrialAttestor; minuteAttestor?: MinuteAttestor; guestMinuteAttestor?: GuestMinuteAttestor; appleRevoker?: AppleRevoker; hosted?: HostedVoice; accessRequests?: AccessRequests; aiReports?: AIReports;
+  webPurchases?: WebPurchases;
   onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
   minuteCommerce?: { purchases: MinutePurchases; aiPurchases?: AIValuePurchases; fulfillment?: PurchaseFulfillmentRouter;
@@ -194,6 +196,82 @@ export function createApp(services: Services) {
     searchPerCallNanoUSD: '10000000', paymentFees: 'quoted separately at checkout', hostedVoiceAvailable: featureState().hostedVoice,
     consumerUnit: 'prepaid-ai-value', consumerBillingBasis: 'actual-ai-usage', freeAllowanceUnit:'conversation-minutes',
     paidMinuteEstimatesOnly:true,minutePacks: [], minutePurchasesAvailable: false }));
+  const webCommerce = () => {
+    const commerce = services.minuteCommerce;
+    if (!services.webPurchases || !commerce?.aiPurchases || commerce.stripe?.environment !== 'live')
+      throw new ServiceError('web_purchases_unavailable',503);
+    return { access:services.webPurchases,purchases:commerce.aiPurchases,stripe:commerce.stripe };
+  };
+  const webGuard = async (request: FastifyRequest, reply: import('fastify').FastifyReply) => {
+    const { access } = webCommerce(), origin = access.allowedOrigin(request.headers.origin);
+    reply.header('Access-Control-Allow-Origin',origin).header('Vary','Origin');
+    if (request.method === 'OPTIONS') {
+      const method = request.headers['access-control-request-method'], requested = request.headers['access-control-request-headers'];
+      const path = request.routeOptions.url ?? '';
+      const methods = path.endsWith('/session') ? ['GET','DELETE'] :
+        path.endsWith('/challenges') || path.endsWith('/verify') || path.endsWith('/orders') ? ['POST'] : ['GET'];
+      if (typeof method !== 'string' || !methods.includes(method) || (requested !== undefined &&
+        (typeof requested !== 'string' || requested.toLowerCase().split(',').some(header =>
+          !['content-type','authorization','idempotency-key'].includes(header.trim()))))) throw new ServiceError('invalid_preflight');
+      return reply.header('Access-Control-Allow-Methods',methods.join(', '))
+        .header('Access-Control-Allow-Headers','Content-Type, Authorization, Idempotency-Key')
+        .header('Access-Control-Max-Age','600').code(204).send();
+    }
+    const path = request.routeOptions.url ?? '', address = access.clientAddress(request.headers,request.raw.socket.remoteAddress ?? request.ip);
+    if (path.endsWith('/challenges') || path.endsWith('/verify'))
+      await access.enter(path.endsWith('/challenges')?'challenge':'verify',address);
+    else {
+      if (!services.accounts) throw new ServiceError('web_purchases_unavailable',503);
+      await services.accounts.admission.enter('account',request.headers,request.raw.socket.remoteAddress ?? request.ip);
+    }
+    if (request.method === 'POST' && request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
+      throw new ServiceError('invalid_content_type',415);
+  };
+  const webOptions = { ...paymentReadOptions,bodyLimit:1024,onRequest:webGuard };
+  for (const suffix of ['/challenges','/verify','/products','/orders','/orders/by-key/:key','/orders/:id','/session'])
+    app.options(`${WEB_PURCHASE_PATH}${suffix}`,webOptions,async () => ({}));
+  app.post(`${WEB_PURCHASE_PATH}/challenges`,webOptions,async (request,reply) =>
+    reply.code(202).send(await webCommerce().access.challenge(request.body)));
+  app.post(`${WEB_PURCHASE_PATH}/verify`,webOptions,async request => webCommerce().access.verify(request.body));
+  app.get(`${WEB_PURCHASE_PATH}/session`,webOptions,async request => {
+    const identity = await webCommerce().access.authenticate(request.headers.authorization); return { email:identity.email };
+  });
+  app.delete(`${WEB_PURCHASE_PATH}/session`,webOptions,async request => {
+    await webCommerce().access.revoke(request.headers.authorization); return { signedOut:true };
+  });
+  app.get(`${WEB_PURCHASE_PATH}/products`,webOptions,async request => {
+    const { access,purchases } = webCommerce(); await access.authenticate(request.headers.authorization);
+    const products = purchases.products('stripe','live');
+    return { available:products.length>0,maximumQuantity:purchases.maximumQuantity('stripe'),billingBasis:'actual-ai-usage',
+      products:products.map(({merchant:_merchant,provider:_provider,...product}) => product) };
+  });
+  const ownedWebOrder = async (account: string,id: string) => {
+    const row = (await db.query(`SELECT o.id,o.sku,o.quantity,o.currency,o.total_minor,q.ai_value_nano
+      FROM minute_purchase_orders o JOIN ai_value_purchase_quotes q ON q.order_id=o.id WHERE o.id=$1 AND o.account_id=$2
+      AND o.provider='stripe' AND o.environment='live' AND o.entitlement_kind='ai_value'`,[uuid(id),account])).rows[0];
+    if (!row) throw new ServiceError('purchase_not_found',404);
+    return { ...await webCommerce().purchases.status(account,id),order:{sku:row.sku,quantity:Number(row.quantity),
+      currency:row.currency,totalMinor:Number(row.total_minor),aiValueNanoUSD:String(row.ai_value_nano)} };
+  };
+  app.post(`${WEB_PURCHASE_PATH}/orders`,webOptions,async request => {
+    const { access,purchases,stripe } = webCommerce(), { accountID } = await access.authenticate(request.headers.authorization);
+    const body = objectBody(request);
+    if (Object.keys(body).some(key => !['sku','quantity'].includes(key))) throw new ServiceError('invalid_request');
+    const key = request.headers['idempotency-key']; if (typeof key !== 'string') throw new ServiceError('invalid_ai_value_order');
+    const order = await purchases.createOrder(accountID,'stripe',stringField(body,'sku',200),key,
+      body.quantity === undefined ? 1 : body.quantity as number,undefined,undefined,'live');
+    const payment = await stripe.checkout(accountID,order.orderID);
+    const {merchant:_merchant,provider:_provider,...quoted} = order; return { ...quoted,payment };
+  });
+  app.get(`${WEB_PURCHASE_PATH}/orders/by-key/:key`,webOptions,async request => {
+    const { accountID } = await webCommerce().access.authenticate(request.headers.authorization);
+    const { orderID } = await stripeOrderByKey(db,accountID,(request.params as {key:string}).key);
+    await ownedWebOrder(accountID,orderID); return { orderID };
+  });
+  app.get(`${WEB_PURCHASE_PATH}/orders/:id`,webOptions,async request => {
+    const { accountID } = await webCommerce().access.authenticate(request.headers.authorization);
+    return ownedWebOrder(accountID,(request.params as {id:string}).id);
+  });
   app.route({ method: ['POST', 'OPTIONS'], url: ACCESS_REQUEST_PATH, bodyLimit: 1024,
     onRequest: async (request, reply) => {
       const access = services.accessRequests;
