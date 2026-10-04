@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {makeRegionalAppleCatalog,type AppleMinutePack} from '../../services/api/src/apple-regional-catalog.js';
 import {reviewedAppleMarkets,type AppleStorefrontReview,type ApplePricingExport} from '../../services/api/src/apple-pricing-export.js';
 
@@ -10,7 +11,7 @@ const args=process.argv.slice(2);
 assert(args.length<=1,'Only a schedule version argument is accepted');
 const [scheduleVersion='asc-20261004-v1']=args;
 assert.match(scheduleVersion,/^[A-Za-z0-9][A-Za-z0-9._:-]{0,89}$/,'Invalid schedule version');
-const directory=new URL('../private/apple-pricing-20261004/',import.meta.url).pathname;
+const directory=fileURLToPath(new URL('../private/apple-pricing-20261004/',import.meta.url));
 const sha=(data:string|Buffer)=>createHash('sha256').update(data).digest('hex');
 const review=JSON.parse(readFileSync(new URL('./apple-storefronts.json',import.meta.url),'utf8')) as AppleStorefrontReview;
 const manifest=JSON.parse(readFileSync(resolve(directory,'export-manifest.json'),'utf8'));
