@@ -19,3 +19,10 @@ condition = "AND"
 paths = ['''^apps/ios/Tests/MinutePurchaseTests\.swift$''']
 regexTarget = "secret"
 regexes = ['''^8443/v1/minutes$''']
+
+[[rules.allowlists]]
+description = "Reviewed SHA-256 of migration 004 in the Apple upgrade fixture; not a credential."
+condition = "AND"
+paths = ['''^services/api/tests/apple-regional-catalog\.test\.ts$''']
+regexTarget = "secret"
+regexes = ['''^29f8815a4043150ca552d7956228fc4dabb0db46e7b17d4e5dcb977cfafcfb43$''']
