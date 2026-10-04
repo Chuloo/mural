@@ -143,11 +143,10 @@ final class AppleMinutePurchases {
         }
     }
     private func matches(_ product: Product, _ offer: MinuteOffer) -> Bool {
-        product.type == .consumable && product.priceFormatStyle.currencyCode.lowercased() == offer.currency &&
-        product.price * Decimal(100) == Decimal(offer.totalMinor)
+        product.type == .consumable && offer.matches(price: product.price, currency: product.priceFormatStyle.currencyCode)
     }
     func price(_ offer: MinuteOffer, quantity: Int) -> String {
-        if preview { return (Decimal(offer.totalMinor * quantity) / 100).formatted(.currency(code: "USD")) }
+        if preview { return (try? offer.price(quantity: quantity).formatted(.currency(code: offer.currency.uppercased()))) ?? "" }
         guard let product = products[offer.providerProduct], (1...maximumQuantity).contains(quantity) else { return "" }
         return (product.price * Decimal(quantity)).formatted(product.priceFormatStyle)
     }

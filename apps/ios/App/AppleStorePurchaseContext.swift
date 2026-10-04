@@ -5,10 +5,7 @@ import MuralCore
 /// StoreKit verifies locally; the server independently verifies this signed proof.
 actor AppleStorePurchaseContext {
     static let shared = AppleStorePurchaseContext()
-    struct Proof: Sendable {
-        let environment: String
-        let signedAppTransaction: String
-    }
+    typealias Proof = AppleAppTransactionProof
     private var cached: Proof?
     private var loading: Task<Proof, Error>?
 
@@ -32,19 +29,17 @@ actor AppleStorePurchaseContext {
     }
 
     func attachingProof(to request: URLRequest) async throws -> URLRequest {
-        guard let configuration = ManagedAccountConfiguration.load(),
-              ApplePurchaseScope.permitsProof(to: request.url, origin: configuration.origin),
-              (Bundle.main.object(forInfoDictionaryKey: "MuralApplePurchaseEnvironment") as? String) == "auto"
-        else { return request }
-        do {
-            let proof = try await proof()
-            var request = request
-            request.setValue(proof.signedAppTransaction, forHTTPHeaderField: "X-Mural-Apple-App-Transaction")
-            return request
-        } catch {
-            // A failed sandbox proof must never silently switch spending to the live wallet.
-            guard !ApplePurchaseScope.requiresProof(path: request.url?.path ?? "") else { throw ManagedAccountError.unavailable }
+        try Task.checkCancellation()
+        var request = request
+        request.setValue(nil, forHTTPHeaderField: "X-Mural-Apple-App-Transaction")
+        let automatic = (Bundle.main.object(forInfoDictionaryKey: "MuralApplePurchaseEnvironment") as? String) == "auto"
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "MuralManagedAPIURL") as? String,
+              let origin = URL(string: value) else {
+            if automatic, ApplePurchaseScope.requiresProof(path: request.url?.path ?? "") {
+                throw ManagedAccountError.purchaseVerificationUnavailable
+            }
             return request
         }
+        return try await ApplePurchaseRequest.prepare(request, origin: origin, automatic: automatic) { try await self.proof() }
     }
 }

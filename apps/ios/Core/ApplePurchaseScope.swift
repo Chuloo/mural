@@ -3,8 +3,8 @@ import StoreKit
 
 public enum ApplePurchaseScope {
     public static func requiresProof(path: String) -> Bool {
-        path == "/v1/wallet" || path == "/v1/guest/minutes" || path == "/v1/minutes" ||
-            path.hasPrefix("/v1/minutes/") || path.hasPrefix("/v1/live/")
+        path == "/v1/minutes/products" || path == "/v1/minutes/orders" ||
+            path.hasPrefix("/v1/minutes/orders/") || path == "/v1/minutes/apple/recover"
     }
     public static func environment(_ environment: AppStore.Environment) throws -> String {
         switch environment {
@@ -22,7 +22,8 @@ public enum ApplePurchaseScope {
               target.scheme == "https", expected.scheme == "https",
               target.host == expected.host, target.port == expected.port,
               target.user == nil, target.password == nil,
-              target.path.hasPrefix("/v1/"), !target.path.contains("..") else { return false }
+              target.path.hasPrefix("/v1/"), !target.path.contains(".."),
+              target.fragment == nil else { return false }
         return true
     }
 }

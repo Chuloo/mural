@@ -4,7 +4,7 @@ import CryptoKit
 public enum ManagedIdentityProvider: String, Codable, Hashable, Sendable { case google, apple }
 
 public enum ManagedAccountError: Error, Equatable, Sendable {
-    case unavailable, invalidResponse, invalidCallback, cancelled, secureStorage, transport
+    case unavailable, purchaseVerificationUnavailable, invalidResponse, invalidCallback, cancelled, secureStorage, transport
     case server(String)
 }
 
