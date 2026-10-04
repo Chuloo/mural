@@ -41,3 +41,6 @@ apps/android/local.properties
 apps/android/.idea/
 *.jks
 *.keystore
+
+# Speech saved by scripts/check_custom_endpoint.py
+mural-endpoint-check.wav

@@ -62,6 +62,15 @@ import MuralCore
     private var startAfterConsent = false
     private let api: APIClient
     private let transport = LiveTransport()
+    private let turns = TurnTransport()
+    /// A custom endpoint speaks turn by turn; OpenAI uses realtime voice.
+    @ObservationIgnored private var usesTurns = false
+    private var voice: any VoiceTransport {
+        if usesTurns { return turns }
+        return transport
+    }
+    /// True when personal requests go to the learner's own server, so notices and topic search can follow.
+    var usesCustomEndpoint: Bool { conversationProvider == .personalKey && CustomEndpoint.active != nil }
     private var connectionTask: Task<Void, Never>?
     private var assessmentTask: Task<Void, Never>?
     private var delegationTasks: [String: Task<Void, Never>] = [:]
@@ -127,16 +136,23 @@ import MuralCore
             if self.session?.id == updated.id { self.session = updated }
         }
         store.onSessionInvalidation = { [weak self] id in self?.finalAssessments.cancel(id) }
-        transport.onEvent = { [weak self] in self?.handle($0) }
-        transport.onLevels = { [weak self] input, output in
-            guard let self else { return }
-            self.inputLevel = input; self.outputLevel = output
-            if self.state == .active {
-                if input > 0.03 { self.activity.inputActive(now: self.activityNow) }
-                if output > 0.03 { self.activity.assistantActive(now: self.activityNow) }
+        for voice in [transport, turns] as [any VoiceTransport] {
+            voice.onEvent = { [weak self] in self?.handle($0) }
+            voice.onLevels = { [weak self] input, output in
+                guard let self else { return }
+                self.inputLevel = input; self.outputLevel = output
+                if self.state == .active {
+                    if input > 0.03 { self.activity.inputActive(now: self.activityNow) }
+                    if output > 0.03 { self.activity.assistantActive(now: self.activityNow) }
+                }
             }
+            voice.onFailure = { [weak self] in self?.fail($0) }
         }
-        transport.onFailure = { [weak self] in self?.fail($0) }
+        // One failed turn keeps the conversation open; a rejected key or unknown model ends it.
+        turns.onError = { [weak self] error, fatal in
+            guard let self else { return }
+            if fatal { self.fail(error.localizedDescription) } else { self.notice = error.localizedDescription }
+        }
         transport.onHostedLease = { [weak self] lease in
             guard let self, self.isRunning else { return }
             self.api.hostedLease = lease
@@ -173,7 +189,18 @@ import MuralCore
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--preview") { showSettings = true; return }
         #endif
-        guard conversationProvider != .personalKey || CredentialStore.hasKey else { requestAdvancedFocus = true; showSettings = true; return }
+        // A custom endpoint stands in for OpenAI on the personal-key source, and speaks turn by turn.
+        let endpoint = CustomEndpoint.load()
+        let turnBased = conversationProvider == .personalKey && endpoint.enabled
+        if turnBased {
+            guard endpoint.voiceReady else {
+                error = "Add a transcription model, speech model and voice for your custom endpoint in Settings."
+                requestAdvancedFocus = true; showSettings = true; return
+            }
+        } else {
+            guard conversationProvider != .personalKey || CredentialStore.hasKey else { requestAdvancedFocus = true; showSettings = true; return }
+        }
+        usesTurns = turnBased
         releaseBackgroundWork()
         cancelReset(); meanings.reset()
         error = nil; hostedAccessFailure = nil; notice = nil; lastAssessmentKey = ""
@@ -182,7 +209,7 @@ import MuralCore
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
         if let pendingTopic { record.topics = [pendingTopic] }
         session = record; store.save(record)
-        let generation = record.id
+        let generation = record.id, languageID = record.languageID
         let learner = store.learner
         let continuing = continuationSession
         let continuingOwner = continuationOwner
@@ -196,6 +223,9 @@ import MuralCore
             guard let self else { return }
             var checkingHostedAccess = self.conversationProvider == .hosted
             do {
+                // A cancelled start can run after a newer conversation began; it must not reset that conversation's transport.
+                try Task.checkCancellation()
+                guard self.session?.id == generation else { return }
                 var hosted: HostedConnectRequest?
                 if self.conversationProvider == .hosted {
                     guard let client = HostedClient.shared else { throw HostedError.unavailable }
@@ -221,7 +251,13 @@ import MuralCore
                 }
                 guard self.session?.id == generation, self.state == .connecting else { return }
                 checkingHostedAccess = false
-                try await self.transport.connect(api: self.api, instructions: instructions, history: history, hosted: hosted)
+                if turnBased {
+                    try await self.turns.connect(api: self.api, language: languageID) { [weak self] guidance in
+                        try await self?.spokenReply(sessionID: generation, instructions: instructions, guidance: guidance) ?? ""
+                    }
+                } else {
+                    try await self.transport.connect(api: self.api, instructions: instructions, history: history, hosted: hosted)
+                }
                 self.continuationSession = nil; self.continuationOwner = nil; self.continuationReady = false
                 UserDefaults.standard.removeObject(forKey: self.continuationKey)
             }
@@ -318,13 +354,13 @@ import MuralCore
             session?.themeID = theme?.id; session?.title = theme?.title ?? language.defaultTitle
             // The opening instruction applies a selection made while connecting.
             startingWithHistory = false
-            if state == .active { append("instructions", TeachingPolicy.theme(theme, language: language)) }
+            if state == .active { append("instructions", TeachingPolicy.theme(theme, language: language), respond: true) }
             save()
         }
     }
     func toggleMute() {
         guard state == .active else { return }
-        isMuted.toggle(); transport.mute(isMuted)
+        isMuted.toggle(); voice.mute(isMuted)
     }
     func deleteLearningData() {
         guard !isRunning else { return }
@@ -342,7 +378,7 @@ import MuralCore
         activity.learnerEngaged(now: activityNow); inactivitySeconds = nil
         conversationPace.askForHelp(after: userPassage)
         append("instructions", conversationPace.instruction)
-        append("instructions", TeachingPolicy.help(language: language))
+        append("instructions", TeachingPolicy.help(language: language), respond: true)
         notice = "Mural will make that a little simpler."
     }
     func end(reason: String = "Ended by you") {
@@ -354,7 +390,7 @@ import MuralCore
         durationTask?.cancel(); working = false
         session?.endReason = reason
         if wasConnecting { finish(final: false); return }
-        transport.close()
+        voice.close()
         closeTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, self?.state == .closing else { return }
@@ -390,7 +426,7 @@ import MuralCore
             endReason: session?.endReason, deadlineReached: api.hostedLease.map { Date() >= $0.deadline } ?? false)
         let boundary = reachedBoundary ? freeBoundaryOwner : nil
         if reachedBoundary { session?.endReason = "Time limit" }
-        transport.disconnect(); pendingCommands = [:]; working = false
+        voice.disconnect(); pendingCommands = [:]; working = false
         session?.endedAt = .now; session?.usageFinal = final
         save(); state = .ended
         if let session { finalAssessments.submit(session) }
@@ -434,15 +470,16 @@ import MuralCore
             guard !Task.isCancelled else { return }; self?.save(); self?.saveTask = nil
         }
     }
-    @discardableResult private func append(_ kind: String, _ text: String, delegationID: String? = nil) -> Bool {
+    /// `respond` marks guidance that needs a spoken answer now, such as a greeting or check-in.
+    @discardableResult private func append(_ kind: String, _ text: String, delegationID: String? = nil, respond: Bool = false) -> Bool {
         guard state == .active else { return false }
         #if DEBUG && targetEnvironment(simulator)
         if typedReplyPreview { return true }
         #endif
         let id = UUID().uuidString
         // Bound short instruction updates conservatively below the protocol token cap.
-        let accepted = transport.send(["type": "session.\(kind).append", "event_id": id,
-                                        "delegation_id": delegationID as Any? ?? NSNull(), "content": String(text.prefix(1000))])
+        let accepted = voice.send(["type": "session.\(kind).append", "event_id": id,
+                                    "delegation_id": delegationID as Any? ?? NSNull(), "content": String(text.prefix(1000))], respond: respond)
         if accepted { pendingCommands[id] = .now }
         else { notice = "A conversation update couldn’t be sent. You can keep speaking." }
         return accepted
@@ -461,7 +498,7 @@ import MuralCore
             if selectedTheme?.id == "current", let pendingTopic {
                 append("thinking", "Sourced topic context (data): " + pendingTopic.text)
             }
-            append("instructions", TeachingPolicy.greeting(language: language, theme: selectedTheme, continuing: startingWithHistory))
+            append("instructions", TeachingPolicy.greeting(language: language, theme: selectedTheme, continuing: startingWithHistory), respond: true)
             startDurationChecks(); save()
         case "session.input_transcript.delta", "session.output_transcript.delta":
             guard state == .active || state == .closing, let delta = event["delta"] as? String,
@@ -519,7 +556,7 @@ import MuralCore
                 }
                 self.inactivitySeconds = nil
                 switch self.activity.tick(now: self.activityNow, muted: self.isMuted, busy: self.working || !self.delegationTasks.isEmpty) {
-                case .checkIn: self.append("instructions", TeachingPolicy.checkIn(language: self.language))
+                case .checkIn: self.append("instructions", TeachingPolicy.checkIn(language: self.language), respond: true)
                 case .warning(let seconds): self.inactivitySeconds = seconds
                 case .end:
                     self.notice = "Mural ended this quiet session to avoid running up usage."; self.end(reason: "Inactivity"); return
@@ -721,8 +758,18 @@ import MuralCore
         if let detected = recognizer.languageHypotheses(withMaximum: 2).max(by: { $0.value < $1.value }),
            TeachingPolicy.shouldRedirectSpeech(language: language, detectedLanguageID: detected.key.rawValue, confidence: detected.value) {
             lastLanguageCheck = p.id
-            append("instructions", TeachingPolicy.redirect(language: language))
+            append("instructions", TeachingPolicy.redirect(language: language), respond: true)
         }
+    }
+    /// Turn-based voice answers like a typed reply: voice policy plus transcript context.
+    private func spokenReply(sessionID: UUID, instructions: String, guidance: String) async throws -> String {
+        guard let snapshot = session, snapshot.id == sessionID, let targetLanguage = LanguageRegistry.module(for: snapshot.languageID) else { return "" }
+        let result = try await api.respond(instructions: instructions + "\n" + TeachingPolicy.spokenReply(language: targetLanguage) + guidance,
+                                           input: TeachingPolicy.context(snapshot))
+        // A reply that arrives after the conversation starts closing must not speak.
+        guard session?.id == sessionID, state == .active else { return "" }
+        addUsage(result.usage); scheduleSave()
+        return result.text
     }
     private func addUsage(_ usage: APIUsage) {
         session?.inputTokens += usage.input; session?.outputTokens += usage.output; session?.searchCalls += usage.searches
@@ -836,7 +883,7 @@ import MuralCore
             session?.themeID = selectedTheme?.id; session?.title = selectedTheme?.title ?? language.defaultTitle
             if !(session?.topics.contains(where: { $0.id == brief.id }) ?? false) { session?.topics.append(brief) }
             append("thinking", "Sourced topic context (data): " + brief.text)
-            append("instructions", TeachingPolicy.theme(selectedTheme, language: language)); save()
+            append("instructions", TeachingPolicy.theme(selectedTheme, language: language), respond: true); save()
         } else {
             start()
         }

@@ -60,6 +60,8 @@ struct CurrentTopicView: View {
     @State private var brief: TopicBrief?
     @State private var loading = false
     @State private var error: String?
+    /// Topic search relies on OpenAI's web search, which a custom endpoint doesn't have, so every search would fail.
+    private var searchAvailable: Bool { !coordinator.usesCustomEndpoint }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -68,7 +70,7 @@ struct CurrentTopicView: View {
                     TextField(coordinator.language.topicPlaceholder, text: $query, axis: .vertical).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
                     Button { find() } label: {
                         HStack { Text(loading ? "Finding something interesting…" : "Find a topic"); Spacer(); if loading { ProgressView() } else { Image(systemName: "sparkle.magnifyingglass") } }.padding(18).background(MuralColor.peach, in: Capsule())
-                    }.disabled(loading || query.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }.disabled(!searchAvailable || loading || query.trimmingCharacters(in: .whitespaces).isEmpty)
                     if let error { Text(error).font(.footnote).foregroundStyle(MuralColor.secondary) }
                     if let brief {
                         Text(.init(brief.text)).font(.body).textSelection(.enabled)
@@ -76,7 +78,9 @@ struct CurrentTopicView: View {
                         Button("Talk about this", systemImage: "waveform") { coordinator.discuss(brief); selected(); dismiss() }
                             .font(.headline).padding(18).frame(maxWidth: .infinity).background(MuralColor.orange, in: Capsule())
                     }
-                    Text("Current topics use your API key outside a conversation. Sources stay attached to the topic.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                    Text(searchAvailable ? "Current topics use your API key outside a conversation. Sources stay attached to the topic."
+                         : "Topic search needs OpenAI's web search, which your custom endpoint doesn't offer. Choose a theme instead.")
+                        .font(.footnote).foregroundStyle(MuralColor.secondary)
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -294,8 +298,10 @@ struct SettingsView: View {
     @State private var confirmingPersonalKey = false
     @State private var showingHostedSwitch = false
     @State private var showingAccount = false
+    @State private var endpoint = CustomEndpoint.load()
     private var store: LearningStore { coordinator.store }
-
+    /// Hosted conversations never use the endpoint, however it is configured.
+    private var usesEndpoint: Bool { coordinator.conversationProvider == .personalKey && endpoint.enabled }
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -349,7 +355,8 @@ struct SettingsView: View {
                     }.pickerStyle(.menu).disabled(coordinator.isRunning)
                         .accessibilityIdentifier("settings-conversation-access")
                     if coordinator.conversationProvider == .personalKey {
-                        Text("No Mural minute limit. OpenAI bills your account for usage.")
+                        Text(usesEndpoint ? "No Mural minute limit. Your custom endpoint bills or limits usage."
+                             : "No Mural minute limit. OpenAI bills your account for usage.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     }
                     if hasKey || coordinator.conversationProvider == .personalKey {
@@ -360,6 +367,11 @@ struct SettingsView: View {
                             LabeledContent("API key", value: hasKey ? "Saved on this iPhone" : "Key required")
                         }.accessibilityIdentifier("advanced-api-key")
                     }
+                    NavigationLink {
+                        CustomEndpointView(coordinator: coordinator, saved: $endpoint)
+                    } label: {
+                        LabeledContent("Custom endpoint", value: endpoint.enabled ? endpoint.model : "Off")
+                    }.disabled(coordinator.isRunning).accessibilityIdentifier("custom-endpoint")
                     if let failure = coordinator.personalKeyFailure {
                         Button(failure.kind.settingsTitle) { showingKey = true }
                             .foregroundStyle(MuralColor.secondary)
@@ -368,7 +380,9 @@ struct SettingsView: View {
                     if coordinator.conversationProvider == .personalKey {
                         LabeledContent("Recorded voice time", value: "\(Int(store.sessions.reduce(0) { $0 + $1.voiceSeconds }) / 60) min")
                         LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
-                        Text("Activity recorded on this iPhone; your OpenAI dashboard is authoritative for usage and charges.")
+                        Text(usesEndpoint
+                             ? "Activity recorded on this iPhone; your custom endpoint bills or limits usage, so its own dashboard or logs are authoritative."
+                             : "Activity recorded on this iPhone; your OpenAI dashboard is authoritative for usage and charges.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     }
                 } header: { Text("Advanced") }.id("advanced-section")
@@ -379,7 +393,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settings-privacy-policy")
                     Link("Terms of use", destination: URL(string: "https://mural.chat/terms/")!)
                         .accessibilityIdentifier("settings-terms")
-                    NavigationLink("About Mural") { AboutMuralView() }
+                    NavigationLink("About Mural") { AboutMuralView(usesEndpoint: usesEndpoint) }
                 }
             }
             .scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.ink)
@@ -530,6 +544,81 @@ private struct OpenAIKeyView: View {
     }
 }
 
+private struct CustomEndpointView: View {
+    let coordinator: ConversationCoordinator
+    @Binding var saved: CustomEndpoint
+    @State private var endpoint: CustomEndpoint
+    @State private var key = ""
+    @State private var message: String?
+    init(coordinator: ConversationCoordinator, saved: Binding<CustomEndpoint>) {
+        self.coordinator = coordinator
+        _saved = saved
+        _endpoint = State(initialValue: saved.wrappedValue)
+    }
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Use this endpoint", isOn: $endpoint.enabled).accessibilityIdentifier("endpoint-enabled")
+                TextField("Base URL, e.g. https://example.com/v1", text: $endpoint.baseURL)
+                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("endpoint-url")
+                SecureField(saved.baseURL.isEmpty ? "API key" : "API key (leave empty to keep the saved key)", text: $key)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive()
+                    .accessibilityIdentifier("endpoint-key")
+                Picker("API style", selection: $endpoint.style) {
+                    Text("Chat Completions").tag(EndpointProtocol.chatCompletions)
+                    Text("Responses").tag(EndpointProtocol.responses)
+                }.pickerStyle(.menu)
+                TextField("Chat model", text: $endpoint.model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Toggle("Skip model thinking (faster; vLLM/Qwen only)", isOn: Binding(get: { endpoint.skipThinking == true }, set: { endpoint.skipThinking = $0 }))
+                    .accessibilityIdentifier("endpoint-skip-thinking")
+            } footer: {
+                Text("Use any OpenAI-compatible server instead of OpenAI. Conversations, audio and selected text go to this server, and it bills or limits usage. Web search isn’t available.")
+            }
+            Section {
+                TextField("Transcription model", text: $endpoint.transcriptionModel).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("Speech model", text: $endpoint.speechModel).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("Voice name", text: $endpoint.voice).textInputAutocapitalization(.never).autocorrectionDisabled()
+            } header: { Text("Voice") } footer: { Text("Voice takes turns: speak, pause, then Mural answers.") }
+            Section {
+                Button("Save endpoint", action: save).disabled(coordinator.isRunning).accessibilityIdentifier("endpoint-save")
+                if endpoint != saved || !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Unsaved changes. Tap Save endpoint to use them.").font(.footnote).foregroundStyle(MuralColor.secondary)
+                }
+                if saved != CustomEndpoint() {
+                    Button("Remove endpoint", role: .destructive) {
+                        do { try CustomEndpoint.delete(); endpoint = CustomEndpoint(); saved = endpoint; key = ""; message = "The endpoint has been removed." }
+                        catch { message = error.localizedDescription }
+                    }.disabled(coordinator.isRunning)
+                }
+            }
+            if let message { Section { Text(message).foregroundStyle(MuralColor.secondary) } }
+        }.scrollContentBackground(.hidden).background(MuralColor.cream)
+            .navigationTitle("Custom endpoint").navigationBarTitleDisplayMode(.inline)
+    }
+    private func save() {
+        var clean = endpoint
+        let fields: [WritableKeyPath<CustomEndpoint, String>] = [\.baseURL, \.model, \.transcriptionModel, \.speechModel, \.voice]
+        for field in fields { clean[keyPath: field] = clean[keyPath: field].trimmingCharacters(in: .whitespacesAndNewlines) }
+        let entered = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A key saved without a URL would be hidden from the Remove action.
+        guard clean.baseURL.isEmpty || clean.url != nil, !clean.enabled || clean.textReady, entered.isEmpty || !clean.baseURL.isEmpty else {
+            message = "Enter an https:// base URL and a chat model."; return
+        }
+        do {
+            // A blank key keeps the saved one; the Keychain value never returns to the view.
+            if !entered.isEmpty { try CredentialStore.save(entered, service: CredentialStore.customEndpoint) }
+            try clean.save(); endpoint = clean; saved = clean; key = ""
+            if clean.enabled {
+                coordinator.selectConversationProvider(.personalKey)
+                message = "Endpoint saved. Conversations now use it instead of OpenAI."
+            } else { message = "Endpoint saved." }
+        } catch CredentialStore.KeyError.invalid {
+            message = "Enter the API key without spaces or line breaks."
+        } catch { message = error.localizedDescription }
+    }
+}
+
 private struct HostedAccessSwitchView: View {
     let coordinator: ConversationCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -621,16 +710,23 @@ private struct LearningBackupView: View {
 }
 
 private struct AboutMuralView: View {
+    let usesEndpoint: Bool
     @State private var notices = false
     var body: some View {
         Form {
             Section {
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                Link("AI Data Controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                if !usesEndpoint {
+                    Link("AI Data Controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                }
                 Button("Open-source notices") { notices = true }
             }
             Section {
-                Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.")
+                if !usesEndpoint {
+                    Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.")
+                } else {
+                    Text("Audio and selected text go to your custom endpoint while you practise, under that server’s retention rules. Raw audio is not saved by Mural.")
+                }
             }
         }.scrollContentBackground(.hidden).background(MuralColor.cream).navigationTitle("About Mural")
             .sheet(isPresented: $notices) {
