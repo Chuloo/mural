@@ -90,8 +90,7 @@ final class ManagedAccountStore {
             profile = result
             if let hosted = HostedClient.shared {
                 let owner = HostedOwner(accountID: newSession.accountID, accessToken: newSession.accessToken, expiresAt: newSession.expiresAt)
-                try await GuestAccess.shared.linkIfNeeded(to: owner)
-                let balance = try? await hosted.balance(owner)
+                let balance = try await refreshHostedBalance(hosted, owner: owner)
                 guard gate.accepts(token), session?.accountID == newSession.accountID else { return }
                 acceptBalance(balance, account: newSession.accountID)
             }
@@ -108,12 +107,22 @@ final class ManagedAccountStore {
             profile = result
             if let hosted = HostedClient.shared {
                 let owner = HostedOwner(accountID: session.accountID, accessToken: session.accessToken, expiresAt: session.expiresAt)
-                try await GuestAccess.shared.linkIfNeeded(to: owner)
-                let balance = try? await hosted.balance(owner)
+                let balance = try await refreshHostedBalance(hosted, owner: owner)
                 guard gate.accepts(token), self.session?.accountID == session.accountID else { return }
                 acceptBalance(balance, account: session.accountID)
             }
         }
+    }
+    private func refreshHostedBalance(_ hosted: HostedClient, owner: HostedOwner) async throws -> HostedBalance {
+        do { try await GuestAccess.shared.linkIfNeeded(to: owner) }
+        catch {
+            // GuestAccess keeps its pending link until the server confirms transfer.
+            // A delayed guest transfer must not hide this member's existing credit.
+            if error is CancellationError || error as? ManagedAccountError == .cancelled ||
+                (error as? URLError)?.code == .cancelled { throw ManagedAccountError.cancelled }
+        }
+        try Task.checkCancellation()
+        return try await hosted.balance(owner)
     }
     func connectGoogle() {
         guard !isPreview, !isBusy, let session, let client, let configuration,
@@ -216,6 +225,8 @@ final class ManagedAccountStore {
             "Sign in with Apple is temporarily unavailable. Please try again later."
         case .server("identity_provider_not_configured"), .unavailable:
             "This sign-in option is unavailable. Please try again later."
+        case .purchaseVerificationUnavailable:
+            "Mural couldn’t verify Apple purchases right now. Please try again later."
         case .invalidCallback, .invalidResponse, .server("invalid_challenge"):
             "Sign-in couldn’t be verified. Please start again."
         default: "Mural couldn’t complete that request. Check your connection and try again."
