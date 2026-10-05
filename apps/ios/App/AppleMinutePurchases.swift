@@ -25,6 +25,9 @@ final class AppleMinutePurchases {
     private(set) var recentPurchases: [RecentPurchase] = []
     private(set) var historyMessage: String?
     private(set) var loadingHistory = false
+    // Test tools can inspect this bounded identifier without displaying diagnostics
+    // or recording account, transaction, receipt, or request data.
+    private(set) var catalogDiagnosticIdentifier = "minute-catalog-idle"
     @ObservationIgnored private var products: [String: Product] = [:]
     @ObservationIgnored private var listener: Task<Void, Never>?
     @ObservationIgnored private var delivering = Set<UInt64>()
@@ -109,27 +112,45 @@ final class AppleMinutePurchases {
         #endif
         guard enabled, !busy else { return }
         busy = true; defer { busy = false }
+        catalogDiagnosticIdentifier = "minute-catalog-loading"
+        var stage = "environment"
         do {
             let expectedEnvironment = try await prepareEnvironment()
+            stage = "recovery"
             if let owner = member() { await recoverRecordedOrders(owner: owner) }
+            stage = "storefront"
             guard let storefront = await Storefront.current else { throw ManagedAccountError.unavailable }
+            stage = "catalog"
             let catalog: MinuteCatalog = try await request("/v1/minutes/products", query: [URLQueryItem(name: "provider", value: "apple"),
                 URLQueryItem(name: "storefront", value: storefront.countryCode)])
+            stage = "validation"
             try catalog.validate(storefront: storefront.countryCode)
             guard catalog.products.allSatisfy({ $0.environment == expectedEnvironment }) else { throw ManagedAccountError.invalidResponse }
+            stage = "products"
             let loaded = try await Product.products(for: catalog.products.map(\.providerProduct))
             products = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
+            var missing = 0, wrongType = 0, wrongCurrency = 0, wrongPrice = 0
             offers = catalog.products.filter { offer in
-                guard let product = products[offer.providerProduct] else { return false }
+                guard let product = products[offer.providerProduct] else { missing += 1; return false }
+                if product.type != .consumable { wrongType += 1 }
+                if product.priceFormatStyle.currencyCode.lowercased() != offer.currency { wrongCurrency += 1 }
+                if product.price * Decimal(100) != Decimal(offer.totalMinor) { wrongPrice += 1 }
                 return matches(product, offer)
             }
+            let country = ["USA", "NOR"].contains(storefront.countryCode) ? storefront.countryCode : "unsupported"
+            let count = { (value: Int) in min(20, max(0, value)) }
+            catalogDiagnosticIdentifier = "minute-catalog-\(expectedEnvironment)-\(country)-requested\(count(catalog.products.count))-returned\(count(loaded.count))-accepted\(count(offers.count))-missing\(count(missing))-type\(count(wrongType))-currency\(count(wrongCurrency))-price\(count(wrongPrice))"
+            stage = "attempts"
             maximumQuantity = catalog.maximumQuantity
             let resumable = try member().flatMap { session in try attempts().first { $0.accountID == session.accountID && $0.canResumeCheckout } }
             resumeSKU = resumable?.offer.sku; resumeQuantity = resumable?.quantity ?? 1
             pending = try member().map { session in try attempts().contains { $0.accountID == session.accountID && !$0.canResumeCheckout } } ?? false
             message = offers.isEmpty ? "Minutes aren’t available to buy right now. Please try again later." :
                 pending ? "Your purchase is still being checked. Tap Check purchases to try again." : nil
-        } catch { offers = []; message = "Couldn’t load minutes. Please try again." }
+        } catch {
+            catalogDiagnosticIdentifier = "minute-catalog-failed-\(stage)"
+            offers = []; message = "Couldn’t load minutes. Please try again."
+        }
     }
     func observeStorefrontChanges() async {
         guard enabled, !preview else { return }

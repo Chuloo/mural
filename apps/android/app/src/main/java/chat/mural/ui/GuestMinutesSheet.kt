@@ -1,5 +1,6 @@
 package chat.mural.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,22 @@ import androidx.compose.ui.unit.dp
 import chat.mural.R
 import chat.mural.core.GuestMinuteState
 import chat.mural.core.GuestMinuteStatus
+import chat.mural.core.MINIMUM_FREE_CONVERSATION_MILLISECONDS
+
+@StringRes
+internal fun guestMinutesTitle(state: GuestMinuteState, signedIn: Boolean, checking: Boolean, ready: Boolean,
+                              memberRemaining: Long?): Int = when {
+    ready -> R.string.guest_ready_title
+    state.status == GuestMinuteStatus.LINKING -> R.string.guest_link_title
+    checking -> R.string.guest_checking_title
+    state.status == GuestMinuteStatus.RETRY -> R.string.guest_retry_title
+    state.status == GuestMinuteStatus.SIGN_IN_REQUIRED && !signedIn -> R.string.guest_sign_in_title
+    signedIn && memberRemaining != null && memberRemaining < MINIMUM_FREE_CONVERSATION_MILLISECONDS -> R.string.guest_more_title
+    signedIn -> R.string.guest_retry_title
+    state.status == GuestMinuteStatus.READY && state.remainingMilliseconds < MINIMUM_FREE_CONVERSATION_MILLISECONDS -> R.string.guest_more_title
+    state.status == GuestMinuteStatus.READY -> R.string.guest_retry_title
+    else -> R.string.guest_unavailable_title
+}
 
 /** Access decisions never add content to the conversation canvas or imply a purchase is available. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,18 +45,7 @@ fun GuestMinutesSheet(
     onRetry: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit,
 ) {
     val checking = busy || state.status == GuestMinuteStatus.CHECKING
-    val title = when {
-        ready -> R.string.guest_ready_title
-        state.status == GuestMinuteStatus.LINKING -> R.string.guest_link_title
-        checking -> R.string.guest_checking_title
-        state.status == GuestMinuteStatus.RETRY -> R.string.guest_retry_title
-        state.status == GuestMinuteStatus.SIGN_IN_REQUIRED && !signedIn -> R.string.guest_sign_in_title
-        signedIn && memberRemaining == 0L -> R.string.guest_more_title
-        signedIn -> R.string.guest_retry_title
-        state.status == GuestMinuteStatus.READY && state.remainingMilliseconds == 0L -> R.string.guest_more_title
-        state.status == GuestMinuteStatus.READY -> R.string.guest_retry_title
-        else -> R.string.guest_unavailable_title
-    }
+    val title = guestMinutesTitle(state, signedIn, checking, ready, memberRemaining)
     val detail = when (title) {
         R.string.guest_ready_title -> R.string.guest_ready_detail
         R.string.guest_link_title -> R.string.guest_link_detail

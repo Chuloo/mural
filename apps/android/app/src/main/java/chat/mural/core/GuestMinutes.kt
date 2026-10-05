@@ -150,7 +150,7 @@ class GuestMinuteController(
                 try {
                     val balance = service.balance(existing)
                     ready(existing, balance.availableMilliseconds)
-                    return@withLock balance.availableMilliseconds > 0
+                    return@withLock balance.canStartConversation
                 } catch (failure: AccountFailure.Http) { if (failure.status != 401) throw failure }
             }
             when (val grant = service.start(stored.installationToken)) {
@@ -160,7 +160,8 @@ class GuestMinuteController(
                     stored = stored.copy(session = grant.session)
                     withContext(NonCancellable) { storage.save(stored) }
                     ready(grant.session, grant.remainingMilliseconds)
-                    grant.remainingMilliseconds > 0
+                    MinuteBalance("milliseconds", "connected-conversation-time", grant.remainingMilliseconds, 0,
+                        grant.remainingMilliseconds).canStartConversation
                 }
                 GuestGrant.TemporarilyUnavailable -> { mutableState.value = GuestMinuteState(GuestMinuteStatus.UNAVAILABLE); false }
                 GuestGrant.SignInRequired -> { mutableState.value = GuestMinuteState(GuestMinuteStatus.SIGN_IN_REQUIRED); false }

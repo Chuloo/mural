@@ -18,6 +18,7 @@ class GuestMinuteControllerTest {
     private inner class Service : GuestMinuteService {
         var grant: GuestGrant = GuestGrant.Available(guest, 600_000, false)
         var available = 480_000L
+        var presentation: MuralMinutesPresentation? = null
         var purchased = 1_800_000L
         var starts = 0; var links = 0; var debits = 0
         var failure: Exception? = null
@@ -30,7 +31,7 @@ class GuestMinuteControllerTest {
         }
         override suspend fun balance(session: AccountSession): MinuteBalance {
             failure?.let { throw it }
-            return MinuteBalance("milliseconds", "connected-conversation-time", available, 0, available)
+            return MinuteBalance("milliseconds", "connected-conversation-time", available, 0, available, presentation = presentation)
         }
         override suspend fun link(member: AccountSession, guestAccessToken: String): GuestLinkResult {
             links++; linkedTokens += guestAccessToken; failure?.let { throw it }
@@ -40,6 +41,35 @@ class GuestMinuteControllerTest {
         }
     }
     private fun controller(store: Store, api: Service) = GuestMinuteController(store, api, { "i".repeat(43) }, { now })
+
+    @Test fun retainedAndRenewedGuestRemaindersNeedTheMinimumWithoutLosingTheirIdentity() = runTest {
+        for (remaining in listOf(1L, 14_999L, 15_000L)) {
+            val store = Store(GuestInstallation("i".repeat(43), guest))
+            val api = Service().apply { available = remaining }
+            val subject = controller(store, api)
+            assertEquals(remaining >= 15_000L, subject.acquire())
+            assertEquals(remaining, subject.state.value.remainingMilliseconds)
+            assertEquals(guest, subject.session()); assertEquals(0, api.starts)
+            val renewing = Store(GuestInstallation("i".repeat(43), guest.copy(expiresAtMilliseconds = now - 1)))
+            api.grant = GuestGrant.Available(guest, remaining, true)
+            val renewed = controller(renewing, api)
+            assertEquals(remaining >= 15_000L, renewed.acquire())
+            assertEquals(remaining, renewed.state.value.remainingMilliseconds)
+            assertEquals(guest, renewed.session()); assertEquals(1, api.starts)
+        }
+    }
+
+    @Test fun guestAcquisitionHonorsUnavailablePresentationAndKeepsItsBalance() = runTest {
+        val store = Store(GuestInstallation("i".repeat(43), guest))
+        val api = Service().apply {
+            available = 60_000
+            presentation = MuralMinutesPresentation(1, "2026-10-03T20:00:00Z", "1", available, 0, false, available,
+                "exactFree", null, "service_unavailable", "settled", false)
+        }
+        val subject = controller(store, api)
+        assertFalse(subject.acquire()); assertEquals(60_000L, subject.state.value.remainingMilliseconds)
+        assertEquals(guest, subject.session()); assertEquals(0, api.starts)
+    }
 
     @Test fun unreadableGuestCredentialsDoNotAbortIndependentLearningStartupOrClearPendingOwner() = runTest {
         val saved = GuestInstallation("i".repeat(43), guest, pendingMemberID = member.accountID)

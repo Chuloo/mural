@@ -80,7 +80,9 @@ struct HostedBalance {
     let paidAvailable: Bool
     let hasPaidRemainder: Bool
     let paidReserved: Bool
-    var canStart: Bool { presentation.map { $0.availabilityReason == "ready" } ?? (availableMilliseconds > 0 || paidAvailable) }
+    var hasFreeConversationTime: Bool { HostedFundingAvailability.hasFreeConversationTime(availableMilliseconds) }
+    var canStart: Bool { HostedFundingAvailability.canStart(freeMilliseconds: availableMilliseconds, paidAvailable: paidAvailable,
+                                                          availabilityReason: presentation?.availabilityReason) }
     var totalDisplayMilliseconds: Int? {
         guard let paidEstimatedMilliseconds else { return hasPaidRemainder ? nil : availableMilliseconds }
         let (sum, overflow) = availableMilliseconds.addingReportingOverflow(paidEstimatedMilliseconds)

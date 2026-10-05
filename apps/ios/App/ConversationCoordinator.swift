@@ -212,7 +212,7 @@ import MuralCore
                         throw HostedError.noMinutes
                     }
                     self.freeBoundaryOwner = nil
-                    if balance.availableMilliseconds > 0 && balance.availableMilliseconds < self.store.preferences.sessionMinutes * 60_000 && balance.hasPaidRemainder {
+                    if balance.hasFreeConversationTime && balance.availableMilliseconds < self.store.preferences.sessionMinutes * 60_000 && balance.hasPaidRemainder {
                         self.freeBoundaryOwner = owner
                         self.notice = "Your free minutes come first. This call will pause when they end; you can then continue with your purchased minutes."
                     }
@@ -584,7 +584,7 @@ import MuralCore
         if continuationNeedsMinutes {
             notice = "Your conversation is saved. You don’t have enough minutes to continue. Add minutes in Account when you’re ready."
         } else if continuationReady {
-            notice = balance.availableMilliseconds > 0
+            notice = balance.hasFreeConversationTime
                 ? "Continue this conversation with your remaining minutes. Your free minutes are used first."
                 : "Your free minutes have ended. Continue this conversation with your purchased minutes."
         }
