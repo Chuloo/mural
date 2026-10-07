@@ -66,10 +66,14 @@ struct OnboardingView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 12) {
                 if step == 1 && !typeSize.isAccessibilitySize { consentDetails }
-                Button(step == 0 ? "Continue" : "Agree and continue") { advance() }
-                    .font(.system(.headline, design: .rounded)).multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity).padding(.vertical, 19)
-                    .background(MuralColor.orange, in: Capsule())
+                Button { advance() } label: {
+                    Text(step == 0 ? "Continue" : "Agree and continue")
+                        .font(.system(.headline, design: .rounded)).multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity).padding(.vertical, 19)
+                        .background(MuralColor.orange, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                    .buttonStyle(.plain)
                     .disabled(step == 1 && !adultConfirmed)
                     .accessibilityIdentifier("onboarding-continue")
                 if !typeSize.isAccessibilitySize {

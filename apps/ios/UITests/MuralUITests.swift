@@ -67,6 +67,73 @@ final class MuralUITests: XCTestCase {
 
     func testTagalogOnboarding() { checkNewOnboarding(id: "tl", greeting: "Kumusta!") }
 
+    private func checkOnboardingOrangeEdge(left: Bool, agreement: Bool) {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding"]
+        app.launch()
+        let button = app.buttons["onboarding-continue"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        selectOnboardingLanguage("es", in: app)
+        if agreement {
+            button.tap()
+            XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+            confirmAdult(in: app)
+        }
+        XCTAssertTrue(button.isEnabled)
+        XCTAssertTrue(button.isHittable)
+        let appFrame = app.frame
+        // The visible capsule fills the screen minus the footer's 26-point margins.
+        let x = left ? appFrame.minX + 40 : appFrame.maxX - 40
+        let y = button.frame.midY
+        XCTAssertTrue(appFrame.contains(CGPoint(x: x, y: y)))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "\(agreement ? "Agree" : "Continue") \(left ? "left" : "right") orange edge before tap"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTContext.runActivity(named: "Tap orange edge at (\(x), \(y)); accessibility frame \(button.frame)") { _ in
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: x - appFrame.minX, dy: y - appFrame.minY)).tap()
+        }
+        if agreement {
+            XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5),
+                          "Tapping the visible orange agreement capsule must finish onboarding")
+        } else {
+            XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5),
+                          "Tapping the visible orange Continue capsule must advance to meanings")
+        }
+    }
+
+    func testOnboardingContinueRespondsToLeftOrangeEdge() {
+        checkOnboardingOrangeEdge(left: true, agreement: false)
+    }
+    func testOnboardingContinueRespondsToRightOrangeEdge() {
+        checkOnboardingOrangeEdge(left: false, agreement: false)
+    }
+    func testOnboardingAgreeRespondsToLeftOrangeEdge() {
+        checkOnboardingOrangeEdge(left: true, agreement: true)
+    }
+    func testOnboardingAgreeRespondsToRightOrangeEdge() {
+        checkOnboardingOrangeEdge(left: false, agreement: true)
+    }
+
+    func testOnboardingAgreementRemainsDisabledUntilAdultConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding"]
+        app.launch()
+        let button = app.buttons["onboarding-continue"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        button.tap()
+        XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        XCTAssertFalse(button.isEnabled)
+        button.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["onboarding-meaning-picker"].exists)
+        XCTAssertFalse(button.isEnabled)
+        confirmAdult(in: app)
+        XCTAssertTrue(button.isEnabled)
+        button.tap()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+    }
+
     func testGermanOnboarding() { checkNewOnboarding(id: "de", greeting: "Hallo!") }
     func testItalianOnboarding() { checkNewOnboarding(id: "it", greeting: "Ciao!") }
     func testBrazilianPortugueseOnboarding() { checkNewOnboarding(id: "pt", greeting: "Olá!") }
