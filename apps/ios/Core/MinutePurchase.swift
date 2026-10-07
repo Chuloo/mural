@@ -33,6 +33,8 @@ public enum ApplePurchaseSubmission {
 }
 
 public struct MinuteOffer: Decodable, Equatable, Sendable, Identifiable {
+    private static let maximumUnitTotalMinor = 100_000_000
+    private static let maximumTotalMinor = 1_000_000_000
     public var id: String { sku }
     public let sku: String
     public let providerProduct: String
@@ -45,17 +47,32 @@ public struct MinuteOffer: Decodable, Equatable, Sendable, Identifiable {
     public let storefront: String
     public let environment: String
     public func validate() throws {
-        guard !sku.isEmpty, sku.count <= 128, providerProduct.hasPrefix("chat.mural.ios.minutes."),
-              currencyExponent == 2, (storefront == "USA" && currency == "usd") || (storefront == "NOR" && currency == "nok"),
-              totalMinor > 0, totalMinor <= 10_000_000, estimatedMilliseconds > 0, estimatedMilliseconds <= 1_000_000_000,
+        guard !sku.isEmpty, sku.count <= 128,
+              ["chat.mural.ios.minutes.small.v1", "chat.mural.ios.minutes.medium.v1", "chat.mural.ios.minutes.large.v1"].contains(providerProduct),
+              ApplePurchaseCurrency.validStorefront(storefront),
+              ApplePurchaseCurrency.exponent(for: currency) == currencyExponent,
+              totalMinor > 0, totalMinor <= Self.maximumUnitTotalMinor, estimatedMilliseconds > 0, estimatedMilliseconds <= 1_000_000_000,
               !estimateRateVersion.isEmpty, !scheduleVersion.isEmpty, ["test", "live"].contains(environment)
         else { throw ManagedAccountError.invalidResponse }
     }
     public func total(quantity: Int) throws -> Int {
         try validate()
         guard (1...10).contains(quantity) else { throw ManagedAccountError.invalidResponse }
-        return totalMinor * quantity
+        let (total, overflow) = totalMinor.multipliedReportingOverflow(by: quantity)
+        guard !overflow, total <= Self.maximumTotalMinor else { throw ManagedAccountError.invalidResponse }
+        return total
     }
+    public func price(quantity: Int) throws -> Decimal {
+        let total = try total(quantity: quantity)
+        return Decimal(total) / minorUnitScale
+    }
+    public func matches(price: Decimal, currency: String) -> Bool {
+        guard (try? validate()) != nil, !price.isNaN, price > 0, currency.utf8.count == 3,
+              currency.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0) }),
+              currency.lowercased() == self.currency else { return false }
+        return price * minorUnitScale == Decimal(totalMinor)
+    }
+    private var minorUnitScale: Decimal { Decimal([1, 10, 100, 1_000][currencyExponent]) }
     public func minutes(quantity: Int) throws -> Int {
         _ = try total(quantity: quantity)
         return estimatedMilliseconds * quantity / 60_000
@@ -66,8 +83,10 @@ public struct MinuteCatalog: Decodable, Sendable {
     public let maximumQuantity: Int
     public let products: [MinuteOffer]
     public func validate(storefront: String) throws {
-        guard [1, 10].contains(maximumQuantity), products.count <= 20, available == !products.isEmpty,
+        guard ApplePurchaseCurrency.validStorefront(storefront),
+              [1, 10].contains(maximumQuantity), products.count <= 3, available == !products.isEmpty,
               Set(products.map(\.sku)).count == products.count,
+              Set(products.map(\.providerProduct)).count == products.count,
               products.allSatisfy({ $0.storefront == storefront }) else { throw ManagedAccountError.invalidResponse }
         for offer in products { try offer.validate() }
     }
@@ -116,9 +135,21 @@ public struct MinuteOfferSnapshot: Codable, Equatable, Sendable {
     public let unitTotalMinor: Int
     public let estimatedMilliseconds: Int
     public let environment: String?
+    public let currencyExponent: Int?
     public init(_ offer: MinuteOffer) {
         sku = offer.sku; productID = offer.providerProduct; storefront = offer.storefront; scheduleVersion = offer.scheduleVersion
         currency = offer.currency; unitTotalMinor = offer.totalMinor; estimatedMilliseconds = offer.estimatedMilliseconds
-        environment = offer.environment
+        environment = offer.environment; currencyExponent = offer.currencyExponent
+    }
+    private var effectiveCurrencyExponent: Int? {
+        if let currencyExponent { return currencyExponent }
+        // Before global pricing, validated saved offers were exclusively USA/USD or NOR/NOK.
+        return (storefront == "USA" && currency == "usd") || (storefront == "NOR" && currency == "nok") ? 2 : nil
+    }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.sku == rhs.sku && lhs.productID == rhs.productID && lhs.storefront == rhs.storefront &&
+            lhs.scheduleVersion == rhs.scheduleVersion && lhs.currency == rhs.currency &&
+            lhs.unitTotalMinor == rhs.unitTotalMinor && lhs.estimatedMilliseconds == rhs.estimatedMilliseconds &&
+            lhs.environment == rhs.environment && lhs.effectiveCurrencyExponent == rhs.effectiveCurrencyExponent
     }
 }

@@ -109,6 +109,7 @@ import MuralCore
             ?? (CredentialStore.hasKey ? .personalKey : .hosted)
         #endif
         let api = APIClient(); self.api = api
+        api.canProcessAI = { store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested }
         finalAssessments = FinalAssessmentQueue { snapshot, passage in
             guard store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested else { throw AIProcessingConsent.ConsentError.required }
             return try await Self.assess(api: api, snapshot: snapshot, passage: passage)
@@ -314,7 +315,7 @@ import MuralCore
             return balance
         } catch { return nil }
     }
-    private var hasAIConsent: Bool {
+    var hasAIConsent: Bool {
         store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested
     }
     func acceptAIConsent() {
@@ -322,6 +323,21 @@ import MuralCore
         showAIConsent = false
     }
     func declineAIConsent() { startAfterConsent = false; showAIConsent = false }
+    func withdrawAIConsent() {
+        // Stop sending audio immediately, rather than waiting for a final provider event.
+        store.updatePreferences { $0.aiConsentVersion = nil }
+        startAfterConsent = false; showAIConsent = false
+        languageGeneration = UUID()
+        api.cancelAIRequests()
+        meanings.reset(); finalAssessments.cancelAll()
+        assessmentTask?.cancel()
+        delegationTasks.values.forEach { $0.cancel() }; delegationTasks.removeAll()
+        if isRunning {
+            session?.endReason = "AI processing permission withdrawn"
+            finish(final: false)
+        }
+        error = nil; typedReplyError = nil; notice = nil
+    }
     func resumeAfterAIConsent() {
         guard startAfterConsent else { return }
         startAfterConsent = false
@@ -429,8 +445,10 @@ import MuralCore
         voice.disconnect(); pendingCommands = [:]; working = false
         session?.endedAt = .now; session?.usageFinal = final
         save(); state = .ended
-        if let session { finalAssessments.submit(session) }
-        scheduleTranslation()
+        if hasAIConsent {
+            if let session { finalAssessments.submit(session) }
+            scheduleTranslation()
+        }
         api.endVoiceCredential()
         if let boundary, let session {
             continuationSession = session; continuationOwner = boundary.accountID; continuationReady = false

@@ -3,6 +3,7 @@ import { transaction, type Database } from './db.js';
 import { appendEntry, lockWallet } from './ledger.js';
 import { ServiceError } from './errors.js';
 import { storeRegionCode, validateStoreMarketPrice, type StoreMarketPrice } from './store-markets.js';
+import { appleMaximumOrderMinor, validateRegionalApplePrice, type RegionalApplePriceSnapshot } from './apple-market-prices.js';
 import { quoteAITopUp, estimatedConversationMilliseconds, type ProcessingCost } from './ai-top-up-pricing.js';
 import { type MinutePurchases, type MinutePurchaseStatus, type MinutePurchaseVerifier, type PurchaseProvider,
   type PurchaseScope, type PurchaseEnvironment, type VerifiedMinutePurchase } from './minute-purchases.js';
@@ -10,6 +11,8 @@ import { type MinutePurchases, type MinutePurchaseStatus, type MinutePurchaseVer
 const uuid = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const money = (value: unknown, positive=false): value is number => typeof value==='number' && Number.isSafeInteger(value) && value>=(positive?1:0) && value<=100_000_000;
+const checkoutMoney=(value:unknown,provider:PurchaseProvider,positive=false):value is number=>
+  provider==='apple'?typeof value==='number' && Number.isSafeInteger(value) && value>=(positive?1:0) && value<=appleMaximumOrderMinor:money(value,positive);
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const scopeKey = (scope: PurchaseScope) => JSON.stringify([scope.provider,scope.environment,scope.merchant]);
 const verifierKey = (provider:PurchaseProvider,environment:PurchaseEnvironment) => `${provider}:${environment}`;
@@ -86,15 +89,19 @@ export function makePlayAIValueProduct(input:Omit<AIValueProductInput,'processin
     processingEstimateMinor:fee,processingBufferMinor:p.residualMinor,paymentFeeMinor:fee+p.residualMinor,
     totalMinor:p.unitTotalMinor,play:Object.freeze({...p})})});
 }
-export interface ApplePriceSnapshot {
+export interface LegacyApplePriceSnapshot {
+  pricingBasis?:never;
   storefront:'USA'|'NOR'; currency:string; currencyExponent:number; unitTotalMinor:number;
   scheduleVersion:string; commissionBasisPoints:number; taxMinor:number; commissionMinor:number;
   /** Reviewed local proceeds and FX; residual is explicit and never entitlement. */
   proceedsMinor:number; proceedsUSDMinor:number; residualUSDMinor:number;
 }
+export type ApplePriceSnapshot=LegacyApplePriceSnapshot|RegionalApplePriceSnapshot;
+/** Historical USA/NOR quotes preserve their reviewed proceeds arithmetic. */
 export function makeAppleAIValueProduct(input:Omit<AIValueProductInput,'currency'|'currencyExponent'|'exchangeRate'|'processing'> & {apple:ApplePriceSnapshot}):Readonly<AIValueProduct> {
+  if(input.apple?.pricingBasis==='fixed-usd-allocation') return makeRegionalAppleAIValueProduct({...input,apple:input.apple});
   const a=input.apple;
-  if(input.provider!=='apple' || !a || !['USA','NOR'].includes(a.storefront) ||
+  if(input.provider!=='apple' || !a || a.pricingBasis!==undefined || !['USA','NOR'].includes(a.storefront) ||
     a.currency!==(a.storefront==='USA'?'usd':'nok') || a.currencyExponent!==2 || !identifier.test(a.scheduleVersion) ||
     ![a.unitTotalMinor,a.taxMinor,a.commissionMinor,a.proceedsMinor,a.proceedsUSDMinor,a.residualUSDMinor].every(v=>money(v)) ||
     a.unitTotalMinor<=0 || a.proceedsMinor<=0 || a.proceedsUSDMinor<=0 || !Number.isInteger(a.commissionBasisPoints) ||
@@ -107,6 +114,16 @@ export function makeAppleAIValueProduct(input:Omit<AIValueProductInput,'currency
     throw new ServiceError('invalid_ai_value_product');
   return Object.freeze({...base,currency:a.currency,totalMinor:a.unitTotalMinor,quote:Object.freeze({...base.quote,apple:Object.freeze({...a})})});
 }
+/** Local Apple checkout prices never change the fixed USD credit or imply a payout exchange rate. */
+export function makeRegionalAppleAIValueProduct(input:Omit<AIValueProductInput,'currency'|'currencyExponent'|'exchangeRate'|'processing'> & {apple:RegionalApplePriceSnapshot}):Readonly<AIValueProduct> {
+  if(input.provider!=='apple') throw new ServiceError('invalid_ai_value_product');
+  validateRegionalApplePrice(input.apple);
+  const base=makeAIValueProduct({...input,currency:'usd',currencyExponent:2,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0},
+    exchangeRate:{numerator:'1',denominator:'1',version:input.apple.scheduleVersion}});
+  return Object.freeze({...base,currency:input.apple.currency,totalMinor:input.apple.unitTotalMinor,
+    quote:Object.freeze({...base.quote,apple:Object.freeze({...input.apple,source:Object.freeze({...input.apple.source})})})});
+}
 export interface AIValueOrder extends AIValueProduct { readonly orderID: string; readonly quantity: number; readonly unitTotalMinor: number }
 
 export function quantityQuote(product: AIValueProduct, quantity: number) {
@@ -114,7 +131,7 @@ export function quantityQuote(product: AIValueProduct, quantity: number) {
     throw new ServiceError('invalid_purchase_quantity');
   const allocation=BigInt(product.aiValueNanoUSD)*BigInt(quantity),q=product.quote;
   const totalMinor=product.totalMinor*quantity;
-  if (!money(totalMinor,true) || allocation>1_000_000_000_000_000n) throw new ServiceError('invalid_purchase_quantity');
+  if (!checkoutMoney(totalMinor,product.provider,true) || allocation>1_000_000_000_000_000n) throw new ServiceError('invalid_purchase_quantity');
   return {...product,quantity,unitTotalMinor:product.totalMinor,totalMinor,aiValueNanoUSD:allocation.toString(),
     estimatedMilliseconds:estimatedConversationMilliseconds(allocation,BigInt(q.estimatedNanoUSDPerMinute)),
     quote:{...q,aiValueMinor:q.aiValueMinor*quantity,serviceFeeMinor:q.serviceFeeMinor*quantity,
@@ -162,7 +179,8 @@ function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
       estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},play:q.play}):product.provider==='play' && q.play && q.play.pricingBasis===undefined?makePlayAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
       serviceFeeBasisPoints:q.serviceFeeBasisPoints,exchangeRate:{numerator:q.exchangeRateNumerator,denominator:q.exchangeRateDenominator,
         version:q.exchangeRateVersion},estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},
-      play:q.play}):product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      play:q.play}):product.provider==='apple' && q.apple?.pricingBasis==='fixed-usd-allocation'?makeRegionalAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      serviceFeeBasisPoints:q.serviceFeeBasisPoints,estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},apple:q.apple}):product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
       serviceFeeBasisPoints:q.serviceFeeBasisPoints,estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},apple:q.apple!}):makeAIValueProduct({...product,currencyExponent:q.currencyExponent,aiValueMinor:q.aiValueMinor,
       policyVersion:q.policyVersion,serviceFeeBasisPoints:q.serviceFeeBasisPoints,
       processing:{rateBasisPoints:q.processingRateBasisPoints,fixedMinor:q.processingFixedMinor,bufferBasisPoints:q.processingBufferBasisPoints},
@@ -200,7 +218,7 @@ function evidenceValid(e:VerifiedMinutePurchase,scope:PurchaseScope) {
   if (!scopeValid(e) || scopeKey(e)!==scopeKey(scope) || !uuid.test(e.orderID) ||
     typeof e.transactionID!=='string' || !/^[\x21-\x7e]{1,4096}$/.test(e.transactionID) ||
     typeof e.eventID!=='string' || !/^[\x21-\x7e]{1,4096}$/.test(e.eventID) || !identifier.test(e.providerProduct) || !Number.isInteger(e.quantity) || e.quantity<1 || e.quantity>10 ||
-    !/^[a-z]{3}$/.test(e.currency) || !money(e.totalMinor,true) || !money(e.refundedMinor) || e.refundedMinor>e.totalMinor ||
+    !/^[a-z]{3}$/.test(e.currency) || !checkoutMoney(e.totalMinor,e.provider,true) || !checkoutMoney(e.refundedMinor,e.provider) || e.refundedMinor>e.totalMinor ||
     !['pending','purchased','voided'].includes(e.state) || (e.state==='pending' && e.refundedMinor!==0)) throw new ServiceError('invalid_purchase_evidence',502);
 }
 
@@ -217,10 +235,11 @@ export class AIValuePurchases {
       if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifierKey(verifier.provider,verifier.environment))) throw new ServiceError('invalid_purchase_verifier');
       this.#verifiers.set(verifierKey(verifier.provider,verifier.environment),Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
     }
-    const bindings=new Set<string>(),playMarkets=new Map<string,Readonly<AIValueProduct>[]>();
+    const bindings=new Set<string>(),playMarkets=new Map<string,Readonly<AIValueProduct>[]>(),appleMarkets=new Map<string,Readonly<AIValueProduct>[]>();
     if((options.catalog?.length??0)>4096) throw new ServiceError('invalid_ai_value_catalog');
     for (const candidate of options.catalog??[]) {
-      const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,product.quote.play?.regionCode??product.currency]);
+      const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,
+        product.quote.apple?.storefront??product.quote.play?.regionCode??product.currency]);
       const verifier=this.#verifiers.get(verifierKey(product.provider,product.environment));
       if (this.#catalog.has(key) || bindings.has(binding) || !verifier || scopeKey(product)!==scopeKey(verifier)) throw new ServiceError('invalid_ai_value_catalog');
       this.#catalog.set(key,product);bindings.add(binding);
@@ -228,6 +247,11 @@ export class AIValuePurchases {
         const market=product.quote.play?.regionCode??'legacy',rows=playMarkets.get(market)??[];
         rows.push(product);playMarkets.set(market,rows);
         if(rows.length>100 || Buffer.byteLength(JSON.stringify(rows))>120_000) throw new ServiceError('invalid_ai_value_catalog');
+      }
+      if(product.provider==='apple') {
+        const market=JSON.stringify([product.environment,product.quote.apple?.storefront]),rows=appleMarkets.get(market)??[];
+        rows.push(product);appleMarkets.set(market,rows);
+        if(rows.length>20 || Buffer.byteLength(JSON.stringify(rows))>120_000) throw new ServiceError('invalid_ai_value_catalog');
       }
     }
   }

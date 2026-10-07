@@ -1,6 +1,6 @@
 import type { PurchaseEnvironment } from './minute-purchases.js';
 import { transaction, type Database } from './db.js';
-import { minuteBalance } from './minutes.js';
+import { minuteBalance, MINIMUM_PUBLIC_FREE_SESSION_MS } from './minutes.js';
 import { lockWallet } from './ledger.js';
 import { ServiceError } from './errors.js';
 import { estimatedConversationMilliseconds } from './ai-top-up-pricing.js';
@@ -8,23 +8,29 @@ import { estimatedConversationMilliseconds } from './ai-top-up-pricing.js';
 export interface PaidBalancePolicy { enabled: boolean; estimatedNanoUSDPerMinute: bigint; minimumSessionNanoUSD: bigint }
 
 /** Display only. Admission reserves funds again under the account lock. */
-export async function conversationBalance(db: Database, account: string, publicMinutes = false, policy?: PaidBalancePolicy,environment?:PurchaseEnvironment) {
+export async function conversationBalance(db: Database, account: string, publicMinutes = false, policy?: PaidBalancePolicy,environment?:PurchaseEnvironment,realFundsOnly=publicMinutes) {
   return transaction(db, async sql => {
     const owner = (await sql.query('SELECT is_guest,minutes_revision FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [account])).rows[0];
     if (!owner) throw new ServiceError('account_not_found',404);
-    const free = await minuteBalance(sql,account,publicMinutes);
-    const wallet = owner.is_guest ? undefined : await lockWallet(sql,account,true,true,environment);
+    const minuteWalletBalance = await minuteBalance(sql,account,publicMinutes);
+    // Server-funded free minutes do not depend on the app's purchase environment.
+    // minuteBalance excludes unreconciled and sandbox-derived minute value.
+    const free = minuteWalletBalance;
+    // Public conversations spend real account funds on every platform. StoreKit
+    // identifies purchase acquisition; it cannot select synthetic spending funds.
+    const wallet = owner.is_guest ? undefined : await lockWallet(sql,account,true,true,realFundsOnly?'live':environment);
     const supported = !!policy?.enabled && !!wallet?.cashProvenanceVerified;
     const available = supported ? wallet!.fundedAvailable : 0n;
     const estimate = supported ? estimatedConversationMilliseconds(available,policy!.estimatedNanoUSDPerMinute) : 0;
     const active = (await sql.query("SELECT state FROM hosted_sessions WHERE account_id=$1 AND state<>'closed' LIMIT 1",[account])).rows[0]?.state;
-    const settling = active==='closing' || active==='incomplete' || (!active && (free.reservedMilliseconds>0 || (wallet?.reserved??0n)>0n));
+    const settling = active==='closing' || active==='incomplete' || (!active && (minuteWalletBalance.reservedMilliseconds>0 || (wallet?.reserved??0n)>0n));
     const paid = supported ? {currency:'USD' as const,billingBasis:'actual-ai-usage' as const,
       balanceNanoUSD:wallet!.fundedBalance.toString(),reservedNanoUSD:wallet!.fundedReserved.toString(),availableNanoUSD:available.toString(),
       estimatedMilliseconds:estimate,estimatedNanoUSDPerMinute:policy!.estimatedNanoUSDPerMinute.toString(),
       minimumSessionNanoUSD:policy!.minimumSessionNanoUSD.toString(),available:available>=policy!.minimumSessionNanoUSD} : undefined;
     const paidUnknown = !owner.is_guest && !!wallet && (!wallet.cashProvenanceVerified || (!supported && wallet.fundedBalance>0n));
-    const ready = free.availableMilliseconds>0 || paid?.available===true;
+    const minimumFree = publicMinutes ? MINIMUM_PUBLIC_FREE_SESSION_MS : 1;
+    const ready = free.availableMilliseconds>=minimumFree || paid?.available===true;
     const presentation = {schemaVersion:1,asOf:new Date().toISOString(),revision:String(owner.minutes_revision),
       freeAvailableMilliseconds:free.availableMilliseconds,paidEstimatedMilliseconds:paidUnknown?null:estimate,
       hasPurchasedRemainder:available>0n,totalDisplayMilliseconds:paidUnknown?null:free.availableMilliseconds+estimate,

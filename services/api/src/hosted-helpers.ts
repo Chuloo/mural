@@ -193,6 +193,10 @@ export class HostedHelpers {
     return transaction(this.db, async sql => {
       await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
       const owner = (await sql.query('SELECT funding_mode,funding_environment FROM hosted_sessions WHERE id=$1 AND account_id=$2', [sessionID,account])).rows[0];
+      // Existing test-funded sessions retain settlement evidence, but cannot
+      // start another paid provider request through the public gateway.
+      if(this.config.publicMinuteAccess && !this.config.restrictToAllowlist && owner?.funding_mode==='ai-value' && owner.funding_environment==='test')
+        throw new ServiceError('insufficient_credit',402);
       const paidWallet = owner?.funding_mode==='ai-value' ? await lockPaidWallet(sql,account,true,owner.funding_environment) : undefined;
       const session = (await sql.query(`SELECT h.*,a.deleted_at,r.account_id AS minute_owner,r.amount_ms AS minute_amount,r.state AS minute_state,
         EXISTS(SELECT 1 FROM minute_purchase_transactions p WHERE p.account_id=h.account_id

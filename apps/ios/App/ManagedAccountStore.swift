@@ -11,11 +11,11 @@ final class ManagedAccountStore {
     private(set) var hostedBalance: HostedBalance?
     private(set) var isBusy = false
     var message: String?
-    private(set) var deletionNeedsSupport = false
     @ObservationIgnored private let client: ManagedAccountClient?
     @ObservationIgnored private let keychain: ManagedAccountKeychain?
     @ObservationIgnored private let identity = ManagedAccountIdentity()
     @ObservationIgnored private var operation: Task<Void, Never>?
+    @ObservationIgnored private var deletingGuest = false
     @ObservationIgnored private var gate = ManagedAccountOperationGate()
     @ObservationIgnored private var balanceRevision: (account: UUID, revision: UInt64)?
     private let isPreview: Bool
@@ -90,8 +90,7 @@ final class ManagedAccountStore {
             profile = result
             if let hosted = HostedClient.shared {
                 let owner = HostedOwner(accountID: newSession.accountID, accessToken: newSession.accessToken, expiresAt: newSession.expiresAt)
-                try await GuestAccess.shared.linkIfNeeded(to: owner)
-                let balance = try? await hosted.balance(owner)
+                let balance = try await refreshHostedBalance(hosted, owner: owner)
                 guard gate.accepts(token), session?.accountID == newSession.accountID else { return }
                 acceptBalance(balance, account: newSession.accountID)
             }
@@ -108,12 +107,22 @@ final class ManagedAccountStore {
             profile = result
             if let hosted = HostedClient.shared {
                 let owner = HostedOwner(accountID: session.accountID, accessToken: session.accessToken, expiresAt: session.expiresAt)
-                try await GuestAccess.shared.linkIfNeeded(to: owner)
-                let balance = try? await hosted.balance(owner)
+                let balance = try await refreshHostedBalance(hosted, owner: owner)
                 guard gate.accepts(token), self.session?.accountID == session.accountID else { return }
                 acceptBalance(balance, account: session.accountID)
             }
         }
+    }
+    private func refreshHostedBalance(_ hosted: HostedClient, owner: HostedOwner) async throws -> HostedBalance {
+        do { try await GuestAccess.shared.linkIfNeeded(to: owner) }
+        catch {
+            // GuestAccess keeps its pending link until the server confirms transfer.
+            // A delayed guest transfer must not hide this member's existing credit.
+            if error is CancellationError || error as? ManagedAccountError == .cancelled ||
+                (error as? URLError)?.code == .cancelled { throw ManagedAccountError.cancelled }
+        }
+        try Task.checkCancellation()
+        return try await hosted.balance(owner)
     }
     func connectGoogle() {
         guard !isPreview, !isBusy, let session, let client, let configuration,
@@ -164,7 +173,10 @@ final class ManagedAccountStore {
         guard !isBusy, let client, let session, let keychain else { return }
         run { [self] token in
             var code: String?
-            if session.provider == .apple {
+            // A Google session may belong to an account that also linked Apple.
+            // Refresh providers before deletion; the server is the source of truth.
+            let currentProfile = try await client.profile(session: session)
+            if currentProfile.providers.contains(.apple) {
                 // A fresh code lets the server verify this Apple identity and revoke its authorization.
                 code = try await identity.apple(nonce: ManagedAccountIdentity.random()).authorizationCode
             }
@@ -180,19 +192,28 @@ final class ManagedAccountStore {
             message = "Account deleted. Your learning history remains on this iPhone."
         }
     }
+    var hasGuestAccount: Bool { GuestAccess.shared.hasUnlinkedAccount }
+    func deleteGuestAccount() {
+        guard !isPreview, !isBusy, session == nil, let client else { return }
+        deletingGuest = true
+        run { [self] _ in
+            defer { deletingGuest = false }
+            try await GuestAccess.shared.deleteAccount(using: client)
+            message = "Guest account deleted. Your learning history remains on this iPhone."
+        }
+    }
     /// Close pending sign-in on dismissal. Account mutations finish so their result is not ambiguous.
     func cancelSignIn() {
-        guard session == nil else { return }
+        guard session == nil, !deletingGuest else { return }
         gate.cancel(); operation?.cancel(); identity.cancel(); operation = nil; isBusy = false
     }
     private func run(_ body: @escaping @MainActor (UInt64) async throws -> Void) {
-        let token = gate.begin(); isBusy = true; message = nil; deletionNeedsSupport = false
+        let token = gate.begin(); isBusy = true; message = nil
         operation = Task { [self] in
             defer { if gate.accepts(token) { isBusy = false; operation = nil } }
             do { try await body(token) }
             catch {
                 guard gate.accepts(token) else { return }
-                deletionNeedsSupport = error as? ManagedAccountError == .server("unresolved_billing")
                 if error as? ManagedAccountError == .server("sign_in_required") {
                     session = nil; profile = nil
                     do { try keychain?.remove() } catch { message = Self.message(for: error); return }
@@ -207,7 +228,8 @@ final class ManagedAccountStore {
         if let hosted = error as? HostedError { return hosted.localizedDescription }
         return switch error as? ManagedAccountError {
         case .secureStorage: "Mural couldn’t update this iPhone’s secure account storage. Unlock the iPhone and try again."
-        case .server("unresolved_billing"): "Your account has a balance, pending payment or active usage. Contact hi@hackmamba.io to resolve it before deleting your account."
+        case .server("account_usage_pending"), .server("unresolved_billing"):
+            "End your conversation and wait for its minutes to update, then try deleting your account again."
         case .server("sign_in_required"): "Please sign in again. Your learning history is still on this iPhone."
         case .server("rate_limit"): "Please try again later."
         case .server("same_account_required"): "Use the Apple account already connected to this Mural account."
@@ -216,6 +238,8 @@ final class ManagedAccountStore {
             "Sign in with Apple is temporarily unavailable. Please try again later."
         case .server("identity_provider_not_configured"), .unavailable:
             "This sign-in option is unavailable. Please try again later."
+        case .purchaseVerificationUnavailable:
+            "Mural couldn’t verify Apple purchases right now. Please try again later."
         case .invalidCallback, .invalidResponse, .server("invalid_challenge"):
             "Sign-in couldn’t be verified. Please start again."
         default: "Mural couldn’t complete that request. Check your connection and try again."

@@ -712,6 +712,80 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.buttons["onboarding-language-fr"].exists)
     }
 
+    func testAIConsentCanBeWithdrawnAndRestoredWithoutLosingSavedWords() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-existing-user", "--screenshot=words"]
+        app.launch()
+        let savedWord = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "me apetece")).firstMatch
+        XCTAssertTrue(savedWord.waitForExistence(timeout: 5))
+        app.tabBars.buttons["Talk"].tap()
+        app.buttons["start-conversation"].tap()
+        XCTAssertTrue(app.buttons["ai-consent-agree"].waitForExistence(timeout: 5))
+        app.buttons["ai-consent-agree"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            if app.buttons["settings-ai-processing"].isHittable { break }
+            app.swipeUp()
+        }
+        app.buttons["settings-ai-processing"].tap()
+        XCTAssertTrue(app.buttons["ai-processing-withdraw"].waitForExistence(timeout: 5))
+        app.buttons["ai-processing-withdraw"].tap()
+        app.buttons.matching(identifier: "ai-processing-confirm-withdraw").firstMatch.tap()
+        XCTAssertTrue(app.buttons["ai-processing-enable"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["ai-processing-status"].label.contains("saved words and conversations remain available"))
+        app.buttons["ai-processing-done"].tap()
+        app.buttons["Done"].tap()
+        app.buttons["start-conversation"].tap()
+        XCTAssertTrue(app.staticTexts["ai-consent-title"].waitForExistence(timeout: 5))
+        app.buttons["ai-consent-decline"].tap()
+        app.tabBars.buttons["Words"].tap()
+        XCTAssertTrue(savedWord.waitForExistence(timeout: 5))
+        app.tabBars.buttons["Talk"].tap()
+        app.buttons["start-conversation"].tap()
+        app.buttons["ai-consent-agree"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    }
+
+    func testWithdrawingAIConsentEndsActiveConversationAndPreservesTranscript() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=conversation"]
+        app.launch()
+        XCTAssertEqual(app.buttons["start-conversation"].label, "Mute microphone")
+        app.buttons["Settings"].tap()
+        for _ in 0..<8 {
+            if app.buttons["settings-ai-processing"].isHittable { break }
+            app.swipeUp()
+        }
+        app.buttons["settings-ai-processing"].tap()
+        XCTAssertTrue(app.buttons["ai-processing-enable"].waitForExistence(timeout: 5))
+        app.buttons["ai-processing-enable"].tap()
+        app.buttons["ai-processing-withdraw"].tap()
+        app.buttons.matching(identifier: "ai-processing-confirm-withdraw").firstMatch.tap()
+        XCTAssertTrue(app.buttons["ai-processing-enable"].waitForExistence(timeout: 5))
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "AI processing permission withdrawn"; screen.lifetime = .keepAlways; add(screen)
+        app.buttons["ai-processing-done"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(app.buttons["start-conversation"].label, "Start conversation")
+        app.buttons["Conversation transcript"].tap()
+        XCTAssertTrue(app.staticTexts["Un café con leche, por favor."].waitForExistence(timeout: 5))
+    }
+
+    func testAIConsentActionsRemainReachableAtLargestAccessibilitySize() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-existing-user", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        app.buttons["start-conversation"].tap()
+        XCTAssertTrue(app.staticTexts["ai-consent-title"].waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            if app.buttons["ai-consent-decline"].isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.buttons["ai-consent-decline"].isHittable)
+        app.buttons["ai-consent-decline"].tap()
+        XCTAssertTrue(app.buttons["start-conversation"].exists)
+    }
+
     func testOnboardingChoosesLearningAndSubtitleLanguagesWithoutAnAccount() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding"]

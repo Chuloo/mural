@@ -34,6 +34,26 @@ function intercept(db:Database,hook:(text:unknown,run:()=>Promise<unknown>)=>Pro
   const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;
  }});
 }
+test('migration boundaries reject arbitrary files and options before database access',async()=>{
+ for(const options of [{through:'../../foreign.sql'},{through:'031_play_regional_quotes.sql'},{through:'033_apple_regional_quotes.sql'},
+   {directory:'/private/tmp'},[],null,'032_apple_funding_scope.sql'])
+   await assert.rejects(migrate({} as Database,options as any),/Unsupported migration boundary/);
+});
+integration('the canonical runner creates a validated032 history and default calls append033/034 without rewriting it',async()=>{
+ const f=await fixture();try{
+  await migrate(f.db,{through:'032_apple_funding_scope.sql'});
+  const before=await history(f.db);assert.equal(before.length,32);assert.equal(before.at(-1)!.name,'032_apple_funding_scope.sql');
+  assert.equal(await validated(f.db),true);assert.equal(await validated(f.db,true),true);
+  const boundSQL="SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='minute_purchase_orders'::regclass AND conname='minute_purchase_orders_total_minor_check'";
+  assert.doesNotMatch((await f.db.query(boundSQL)).rows[0].definition,/1000000000/);
+  await migrate(f.db);const after=await history(f.db);
+  assert.equal(after.length,34);assert.equal(after.at(-2)!.name,'033_apple_regional_quotes.sql');
+  assert.equal(after.at(-1)!.name,'034_web_purchases.sql');
+  assert.deepEqual(after.slice(0,32),before);
+  assert.match((await f.db.query(boundSQL)).rows[0].definition,/1000000000/);
+  await migrate(f.db);assert.deepEqual(await history(f.db),after);
+ } finally {await f.cleanup();}
+});
 integration('fresh migrations validate after committing DDL and permit a concurrent writer lock during the scan',async()=>{
  const f=await fixture();let scans=0;
  try{

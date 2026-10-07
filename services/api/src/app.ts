@@ -26,12 +26,14 @@ import type { PlayRtdnSubscriber } from './google-play-rtdn.js';
 import { HOSTED_HELPER_BODY_LIMIT, type HostedHelpers } from './hosted-helpers.js';
 import { Diagnostics, errorReference } from './diagnostics.js';
 import { startupDiagnostic, type StartupDiagnostic } from './startup-diagnostics.js';
+import { WEB_PURCHASE_PATH, type WebPurchases } from './web-purchases.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig { rateLimit?: { max: number; timeWindow: number } }
 }
 
 export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthConfig; payments?: SandboxPayments; attestor?: TrialAttestor; minuteAttestor?: MinuteAttestor; guestMinuteAttestor?: GuestMinuteAttestor; appleRevoker?: AppleRevoker; hosted?: HostedVoice; accessRequests?: AccessRequests; aiReports?: AIReports;
+  webPurchases?: WebPurchases;
   onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
   minuteCommerce?: { purchases: MinutePurchases; aiPurchases?: AIValuePurchases; fulfillment?: PurchaseFulfillmentRouter;
@@ -194,6 +196,82 @@ export function createApp(services: Services) {
     searchPerCallNanoUSD: '10000000', paymentFees: 'quoted separately at checkout', hostedVoiceAvailable: featureState().hostedVoice,
     consumerUnit: 'prepaid-ai-value', consumerBillingBasis: 'actual-ai-usage', freeAllowanceUnit:'conversation-minutes',
     paidMinuteEstimatesOnly:true,minutePacks: [], minutePurchasesAvailable: false }));
+  const webCommerce = () => {
+    const commerce = services.minuteCommerce;
+    if (!services.webPurchases || !commerce?.aiPurchases || commerce.stripe?.environment !== 'live')
+      throw new ServiceError('web_purchases_unavailable',503);
+    return { access:services.webPurchases,purchases:commerce.aiPurchases,stripe:commerce.stripe };
+  };
+  const webGuard = async (request: FastifyRequest, reply: import('fastify').FastifyReply) => {
+    const { access } = webCommerce(), origin = access.allowedOrigin(request.headers.origin);
+    reply.header('Access-Control-Allow-Origin',origin).header('Vary','Origin');
+    if (request.method === 'OPTIONS') {
+      const method = request.headers['access-control-request-method'], requested = request.headers['access-control-request-headers'];
+      const path = request.routeOptions.url ?? '';
+      const methods = path.endsWith('/session') ? ['GET','DELETE'] :
+        path.endsWith('/challenges') || path.endsWith('/verify') || path.endsWith('/orders') ? ['POST'] : ['GET'];
+      if (typeof method !== 'string' || !methods.includes(method) || (requested !== undefined &&
+        (typeof requested !== 'string' || requested.toLowerCase().split(',').some(header =>
+          !['content-type','authorization','idempotency-key'].includes(header.trim()))))) throw new ServiceError('invalid_preflight');
+      return reply.header('Access-Control-Allow-Methods',methods.join(', '))
+        .header('Access-Control-Allow-Headers','Content-Type, Authorization, Idempotency-Key')
+        .header('Access-Control-Max-Age','600').code(204).send();
+    }
+    const path = request.routeOptions.url ?? '', address = access.clientAddress(request.headers,request.raw.socket.remoteAddress ?? request.ip);
+    if (path.endsWith('/challenges') || path.endsWith('/verify'))
+      await access.enter(path.endsWith('/challenges')?'challenge':'verify',address);
+    else {
+      if (!services.accounts) throw new ServiceError('web_purchases_unavailable',503);
+      await services.accounts.admission.enter('account',request.headers,request.raw.socket.remoteAddress ?? request.ip);
+    }
+    if (request.method === 'POST' && request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
+      throw new ServiceError('invalid_content_type',415);
+  };
+  const webOptions = { config:{rateLimit:{max:120,timeWindow:60_000}},bodyLimit:1024,onRequest:webGuard };
+  for (const suffix of ['/challenges','/verify','/products','/orders','/orders/by-key/:key','/orders/:id','/session'])
+    app.options(`${WEB_PURCHASE_PATH}${suffix}`,webOptions,async () => ({}));
+  app.post(`${WEB_PURCHASE_PATH}/challenges`,webOptions,async (request,reply) =>
+    reply.code(202).send(await webCommerce().access.challenge(request.body)));
+  app.post(`${WEB_PURCHASE_PATH}/verify`,webOptions,async request => webCommerce().access.verify(request.body));
+  app.get(`${WEB_PURCHASE_PATH}/session`,webOptions,async request => {
+    const identity = await webCommerce().access.authenticate(request.headers.authorization); return { email:identity.email };
+  });
+  app.delete(`${WEB_PURCHASE_PATH}/session`,webOptions,async request => {
+    await webCommerce().access.revoke(request.headers.authorization); return { signedOut:true };
+  });
+  app.get(`${WEB_PURCHASE_PATH}/products`,webOptions,async request => {
+    const { access,purchases } = webCommerce(); await access.authenticate(request.headers.authorization);
+    const products = purchases.products('stripe','live');
+    return { available:products.length>0,maximumQuantity:purchases.maximumQuantity('stripe'),billingBasis:'actual-ai-usage',
+      products:products.map(({merchant:_merchant,provider:_provider,...product}) => product) };
+  });
+  const ownedWebOrder = async (account: string,id: string) => {
+    const row = (await db.query(`SELECT o.id,o.sku,o.quantity,o.currency,o.total_minor,q.ai_value_nano
+      FROM minute_purchase_orders o JOIN ai_value_purchase_quotes q ON q.order_id=o.id WHERE o.id=$1 AND o.account_id=$2
+      AND o.provider='stripe' AND o.environment='live' AND o.entitlement_kind='ai_value'`,[uuid(id),account])).rows[0];
+    if (!row) throw new ServiceError('purchase_not_found',404);
+    return { ...await webCommerce().purchases.status(account,id),order:{sku:row.sku,quantity:Number(row.quantity),
+      currency:row.currency,totalMinor:Number(row.total_minor),aiValueNanoUSD:String(row.ai_value_nano)} };
+  };
+  app.post(`${WEB_PURCHASE_PATH}/orders`,webOptions,async request => {
+    const { access,purchases,stripe } = webCommerce(), { accountID } = await access.authenticate(request.headers.authorization);
+    const body = objectBody(request);
+    if (Object.keys(body).some(key => !['sku','quantity'].includes(key))) throw new ServiceError('invalid_request');
+    const key = request.headers['idempotency-key']; if (typeof key !== 'string') throw new ServiceError('invalid_ai_value_order');
+    const order = await purchases.createOrder(accountID,'stripe',stringField(body,'sku',200),key,
+      body.quantity === undefined ? 1 : body.quantity as number,undefined,undefined,'live');
+    const payment = await stripe.checkout(accountID,order.orderID);
+    const {merchant:_merchant,provider:_provider,...quoted} = order; return { ...quoted,payment };
+  });
+  app.get(`${WEB_PURCHASE_PATH}/orders/by-key/:key`,webOptions,async request => {
+    const { accountID } = await webCommerce().access.authenticate(request.headers.authorization);
+    const { orderID } = await stripeOrderByKey(db,accountID,(request.params as {key:string}).key);
+    await ownedWebOrder(accountID,orderID); return { orderID };
+  });
+  app.get(`${WEB_PURCHASE_PATH}/orders/:id`,webOptions,async request => {
+    const { accountID } = await webCommerce().access.authenticate(request.headers.authorization);
+    return ownedWebOrder(accountID,(request.params as {id:string}).id);
+  });
   app.route({ method: ['POST', 'OPTIONS'], url: ACCESS_REQUEST_PATH, bodyLimit: 1024,
     onRequest: async (request, reply) => {
       const access = services.accessRequests;
@@ -267,7 +345,7 @@ export function createApp(services: Services) {
   app.get('/v1/minutes', paymentReadOptions, async request => conversationBalance(db, await authenticate(db, request.headers.authorization, true),
     services.hosted?.publicMinuteAccess===true, services.hosted?.publicPaidAccess ? { enabled: true,
       estimatedNanoUSDPerMinute: services.hosted.estimatedNanoUSDPerMinute, minimumSessionNanoUSD: services.hosted.minimumPaidSessionNanoUSD } : undefined,
-    await fundingScope(request)));
+    services.hosted?.realFundedAccess ? 'live' : await fundingScope(request),services.hosted?.realFundedAccess===true));
   app.post('/v1/guest/minutes', { bodyLimit: 1024 }, async request => {
     const proof = objectBody(request);
     try { return { available: true, ...await startGuestMinutes(db, proof, services.guestMinuteAttestor ?? new UnconfiguredGuestMinuteAttestor()) }; }
@@ -300,7 +378,11 @@ export function createApp(services: Services) {
     const provider = (request.query as Record<string, unknown>).provider;
     if (provider !== 'stripe' && provider !== 'play' && provider !== 'apple') throw new ServiceError('invalid_purchase_provider');
     if (services.minuteCommerce?.aiPurchases) {
-      let products = services.minuteCommerce.aiPurchases.products(provider,provider==='apple'?await fundingScope(request,true):undefined);
+      const appleEnvironment=provider==='apple'?await fundingScope(request,true):undefined;
+      let admissionReady=true;
+      if(provider==='apple' && appleEnvironment && services.minuteCommerce.appleScopes?.historyAdmissionRequired)
+        admissionReady=await services.minuteCommerce.appleScopes.admissionReady(appleEnvironment);
+      let products = admissionReady?services.minuteCommerce.aiPurchases.products(provider,appleEnvironment):[];
       if(provider==='play') {
         const selected=(request.query as Record<string,unknown>).regionCode;
         if(selected!==undefined) {
@@ -315,8 +397,12 @@ export function createApp(services: Services) {
       }
       if(provider==='apple') {
         const storefront=(request.query as Record<string,unknown>).storefront;
-        if(typeof storefront!=='string' || !['USA','NOR'].includes(storefront)) return {available:false,maximumQuantity:1,products:[]};
+        if(typeof storefront!=='string' || !/^[A-Z]{3}$/.test(storefront)) {
+          diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront:'unsupported',admissionReady,offerCount:0});
+          return {available:false,maximumQuantity:1,products:[]};
+        }
         products=products.filter(p=>p.quote.apple?.storefront===storefront);
+        diagnostics.record('apple_catalog',{environment:appleEnvironment,storefront:products.length?storefront:'unsupported',admissionReady,offerCount:products.length});
         return {available:products.length>0,maximumQuantity:services.minuteCommerce.aiPurchases.maximumQuantity(provider),
           products:products.map(p=>({sku:p.sku,providerProduct:p.providerProduct,currency:p.currency,totalMinor:p.totalMinor,
             currencyExponent:p.quote.apple!.currencyExponent,estimatedMilliseconds:p.estimatedMilliseconds,
@@ -340,6 +426,7 @@ export function createApp(services: Services) {
     if (!commerce || !commerce[provider]) throw new ServiceError('minute_purchases_unavailable', 503);
     const quantity=body.quantity===undefined?1:body.quantity;
     const appleEnvironment=provider==='apple'?await fundingScope(request,true):undefined;
+    if(appleEnvironment && commerce.appleScopes?.historyAdmissionRequired)await commerce.appleScopes.requireAdmission(appleEnvironment);
     if (typeof quantity!=='number' || !Number.isInteger(quantity) || quantity<1 || quantity>10 || (provider==='play' && quantity!==1)) throw new ServiceError('invalid_purchase_quantity');
     if (!commerce.aiPurchases && quantity!==1) throw new ServiceError('invalid_purchase_quantity');
     const order = commerce.aiPurchases ? await commerce.aiPurchases.createOrder(account, provider, stringField(body, 'sku', 128), key, quantity,provider==='apple'?{storefront:stringField(body,'storefront',3),scheduleVersion:stringField(body,'scheduleVersion',200)}:undefined,
@@ -417,7 +504,7 @@ export function createApp(services: Services) {
   });
   app.get('/v1/wallet', paymentReadOptions, async request => {
     const account=await authenticate(db,request.headers.authorization,true);
-    const wallet=await paidAIBalance(db,account,await fundingScope(request),false);
+    const wallet=await paidAIBalance(db,account,services.hosted?.realFundedAccess ? 'live' : await fundingScope(request),false);
     return {currency:'USD',balanceNanoUSD:wallet.balanceNanoUSD,reservedNanoUSD:wallet.reservedNanoUSD,
       availableNanoUSD:wallet.availableNanoUSD};
   });
@@ -426,13 +513,26 @@ export function createApp(services: Services) {
     await signOut(db, request.headers.authorization);
     return { signedOut: true };
   });
+  app.delete('/v1/guest/account', {
+    bodyLimit: 1024, config: { rateLimit: { max: 120, timeWindow: 60_000 } },
+  }, async request => {
+    const account=await authenticate(db,request.headers.authorization,true);
+    const owner=(await db.query('SELECT is_guest FROM accounts WHERE id=$1',[account])).rows[0];
+    if(!owner?.is_guest) throw new ServiceError('invalid_request');
+    const body=objectBody(request);
+    if(Object.keys(body).some(key=>key!=='confirmCreditAccessLoss') || body.confirmCreditAccessLoss!==true)
+      throw new ServiceError('invalid_request');
+    const result=await deleteAccount(db,account,undefined,undefined,request.headers.authorization,new Date(),false,true);
+    return {deleted:true,retained:result.retainedFinancialRecords?'Required records, linked to an opaque account ID.':null};
+  });
   app.delete('/v1/account', { bodyLimit: 5120 }, async request => {
-    const account = await authenticate(db, request.headers.authorization);
+    const account = await authenticate(db, request.headers.authorization, true);
     const body = objectBody(request);
-    if (Object.keys(body).some(key => key !== 'appleAuthorizationCode')) throw new ServiceError('invalid_request');
+    if (Object.keys(body).some(key => !['appleAuthorizationCode','confirmCreditAccessLoss'].includes(key)) ||
+        (body.confirmCreditAccessLoss !== undefined && typeof body.confirmCreditAccessLoss !== 'boolean')) throw new ServiceError('invalid_request');
     const code = body.appleAuthorizationCode === undefined ? undefined : stringField(body, 'appleAuthorizationCode', 4096);
     const result = await deleteAccount(db, account, services.appleRevoker, code, request.headers.authorization,
-      new Date(), services.minuteCommerce?.playNotifications?.isOperational() === true);
+      new Date(), services.minuteCommerce?.playNotifications?.isOperational() === true, body.confirmCreditAccessLoss === true);
     return { deleted: true, retained: result.retainedFinancialRecords ? 'Required financial records, linked to an opaque account ID.' : null };
   });
   app.post('/v1/checkout', async request => {
@@ -467,7 +567,8 @@ export function createApp(services: Services) {
     const key = request.headers['idempotency-key'];
     if (typeof key !== 'string') throw new ServiceError('idempotency_key_required');
     return services.hosted.create(account, key, stringField(body, 'sdp', 65_536), stringField(body, 'language', 10),
-      { instructions: body.instructions, history: body.history }, body.requestedMilliseconds as number | undefined,await fundingScope(request));
+      { instructions: body.instructions, history: body.history }, body.requestedMilliseconds as number | undefined,
+      services.hosted.realFundedAccess ? 'live' : await fundingScope(request));
   });
   app.get('/v1/live/sessions/:id', async request => {
     if (!services.hosted) throw new ServiceError('hosted_voice_not_ready', 503);

@@ -365,3 +365,16 @@ integration('public read throttling uses authenticated client networks instead o
     assert.equal(other.statusCode, 200); assert.deepEqual(other.json(), { google: true, googleAndroid: false, apple: false });
   } finally { await service.close(); }
 });
+
+
+integration('Google sessions on linked Apple accounts must revoke the linked Apple authorization before deletion',async()=>{
+  const owner=await session(randomUUID(),'apple'),googleSubject=randomUUID();
+  const appleSubject=(await db!.query("SELECT subject FROM identities WHERE account_id=$1 AND provider='apple'",[owner.accountID])).rows[0].subject;
+  await db!.query("INSERT INTO identities(account_id,provider,subject) VALUES($1,'google',$2)",[owner.accountID,googleSubject]);
+  const google=await session(googleSubject);
+  await assert.rejects(deleteAccount(db!,owner.accountID,undefined,undefined,`Bearer ${google.accessToken}`,new Date(),false,true),{code:'apple_revocation_not_configured'});
+  let revokedSubject:string|undefined;
+  await deleteAccount(db!,owner.accountID,{revoke:async(_id,_code,subject)=>{revokedSubject=subject;}},'fresh-code',`Bearer ${google.accessToken}`,new Date(),false,true);
+  assert.equal(revokedSubject,appleSubject);
+  await assert.rejects(authenticate(db!,`Bearer ${google.accessToken}`),{code:'sign_in_required'});
+});

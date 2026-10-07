@@ -194,6 +194,6 @@ async function configure(db: Database, env: Environment, dependencies: MinuteCom
     { ...runnerSettings, onFailure: dependencies.onFailure },apple?new AppleHistoryReconciler(db,apple):undefined,playNotifications,
     appleSandbox?[new AppleHistoryReconciler(db,appleSandbox)]:[]);
   return { purchases, aiPurchases, fulfillment, ...(stripe ? { stripe } : {}), ...(play ? { play } : {}),
-    ...(apple?{apple,appleScopes:new ApplePurchaseScopes(apple,appleSandbox)}:{}),...(appleSandbox?{appleSandbox}:{}), vault, worker, runner,
+    ...(apple?{apple,appleScopes:new ApplePurchaseScopes(apple,appleSandbox,!!appleSandbox)}:{}),...(appleSandbox?{appleSandbox}:{}), vault, worker, runner,
     ...(playNotifications ? { playNotifications } : {}), environment, salesEnabled, catalogSHA256: catalogFile.hash };
 }

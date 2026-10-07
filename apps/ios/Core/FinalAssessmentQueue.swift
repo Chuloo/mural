@@ -69,6 +69,11 @@ public struct FinalAssessmentResult: Sendable {
         return true
     }
     public func isPending(_ id: UUID) -> Bool { jobs[id] != nil }
+    public func cancelAll() {
+        let pending = jobs.values
+        jobs.removeAll()
+        for job in pending { job.request.cancel(); job.timer.cancel() }
+    }
     public func cancel(_ id: UUID) {
         guard let job = jobs.removeValue(forKey: id) else { return }
         job.request.cancel(); job.timer.cancel()

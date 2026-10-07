@@ -36,9 +36,11 @@ SELECT json_build_object(
    FROM hosted_sessions WHERE state<>'closed'
  ) t),'[]'),
  'cursors',coalesce((SELECT json_agg(t) FROM (
-   SELECT 'apple' AS provider,extract(epoch FROM now()-updated_at)::bigint AS age_seconds
+   SELECT 'apple' AS provider,environment,merchant,extract(epoch FROM now()-updated_at)::bigint AS age_seconds,
+     floor(extract(epoch FROM now())-completed_through_ms/1000.0)::bigint AS completed_age_seconds
    FROM apple_notification_cursors
-   UNION ALL SELECT 'play',extract(epoch FROM now()-updated_at)::bigint FROM minute_play_void_cursors
+   UNION ALL SELECT 'play',environment,merchant,extract(epoch FROM now()-updated_at)::bigint,
+     floor(extract(epoch FROM now())-completed_through_ms/1000.0)::bigint FROM minute_play_void_cursors
  ) t),'[]'));
 COMMIT;
 """
@@ -49,8 +51,13 @@ def reference(value):
     return hashlib.sha256(str(value).encode()).hexdigest()[:12]
 
 
-def inspect_snapshot(snapshot, expected_providers=()):
+def history_scope_key(scope):
+    return ":".join(scope[key] for key in ("provider", "environment", "merchant"))
+
+
+def inspect_snapshot(snapshot, expected_providers=(), expected_history_scopes=(), activated_history_scopes=None):
     alerts = []
+    activated = activated_history_scopes if activated_history_scopes is not None else set()
 
     def add(kind, row):
         alerts.append({"kind": kind, "reference": reference(row["id"])})
@@ -77,16 +84,31 @@ def inspect_snapshot(snapshot, expected_providers=()):
         rows = [r for r in snapshot["cursors"] if r["provider"] == provider]
         if not rows or any(r["age_seconds"] >= 3600 for r in rows):
             add("provider_history_stalled", {"id": provider})
+    for scope in expected_history_scopes:
+        key = history_scope_key(scope)
+        rows = [row for row in snapshot["cursors"] if all(row.get(key) == scope[key]
+                for key in ("provider", "environment", "merchant"))]
+        completed = [row["completed_age_seconds"] for row in rows
+                     if row.get("completed_age_seconds") is not None]
+        # Completion is sticky in the monitor's state. A reset/null/missing cursor
+        # must not turn an already active production scope back into a pending one.
+        if any(age >= 0 for age in completed):
+            activated.add(key)
+        if not completed and scope.get("pendingUntilFirstCompletion", False) and key not in activated:
+            continue
+        if not completed or any(age < 0 or age >= 3600 for age in completed):
+            add("provider_history_stalled", {"id": key})
     return sorted(alerts, key=lambda row: (row["kind"], row["reference"]))
 
 
-def collect(target):
+def collect(target, activated_history_scopes=None):
     command = target["compose"] + ["exec", "-T", "database", "psql", "-X", "-qAt",
         "-v", "ON_ERROR_STOP=1", "-U", "mural", "-d", target["database"], "-f", "-"]
     # A command string (-c) may expose only the final COMMIT result on older psql.
     # A script preserves the SELECT output and still closes the read-only transaction.
     result = subprocess.run(command, input=SNAPSHOT_SQL, capture_output=True, text=True, timeout=45, check=True)
-    return inspect_snapshot(json.loads(result.stdout), target.get("expectedProviders", []))
+    return inspect_snapshot(json.loads(result.stdout), target.get("expectedProviders", []),
+                            target.get("expectedHistoryScopes", []), activated_history_scopes)
 
 
 def notice_due(alerts, previous, now):
@@ -156,6 +178,22 @@ def load_config(path):
             raise ValueError("invalid_compose_command")
         if not set(target.get("expectedProviders", [])).issubset({"apple", "play"}):
             raise ValueError("invalid_expected_provider")
+        scopes = target.get("expectedHistoryScopes", [])
+        if not isinstance(scopes, list):
+            raise ValueError("invalid_expected_history_scope")
+        seen_scopes = set()
+        for scope in scopes:
+            if (not isinstance(scope, dict) or set(scope) - {"provider", "environment", "merchant", "pendingUntilFirstCompletion"}
+                    or scope.get("provider") not in {"apple", "play"}
+                    or scope.get("environment") not in {"live", "test"}
+                    or not isinstance(scope.get("merchant"), str)
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}", scope["merchant"])
+                    or not isinstance(scope.get("pendingUntilFirstCompletion", False), bool)):
+                raise ValueError("invalid_expected_history_scope")
+            key = tuple(scope[field] for field in ("provider", "environment", "merchant"))
+            if key in seen_scopes:
+                raise ValueError("duplicate_expected_history_scope")
+            seen_scopes.add(key)
     if "smtp" in config:
         smtp = config["smtp"]
         if smtp.get("tls") not in ("implicit", "starttls"):
@@ -176,7 +214,7 @@ def deliver_target(config, name, alerts, previous, now, sender=send_smtp):
         return previous
     sender(config["smtp"], make_message(config["sender"], config["recipient"], name, alerts))
     # A failed send must never mark an incident delivered.
-    return {"sentAt": now, "alerts": alerts}
+    return {**previous, "sentAt": now, "alerts": alerts}
 
 
 def save_state(path, state):
@@ -203,7 +241,9 @@ def main():
         print(json.dumps({"mail": "accepted_by_smtp", "recipient": config["recipient"]}))
         return
     if args.dry_run:
-        print(json.dumps({target["name"]: collect(target) for target in config["targets"]}))
+        state = json.loads(args.state.read_text()) if args.state.exists() else {}
+        print(json.dumps({target["name"]: collect(target,
+            set(state.get(target["name"], {}).get("activatedHistoryScopes", []))) for target in config["targets"]}))
         return
     if "smtp" not in config:
         raise ValueError("mail_configuration_required")
@@ -212,12 +252,19 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         state = json.loads(args.state.read_text()) if args.state.exists() else {}
         for target in config["targets"]:
+            previous = state.get(target["name"], {})
+            activated = set(previous.get("activatedHistoryScopes", []))
             try:
-                alerts = collect(target)
+                alerts = collect(target, activated)
             except Exception:
                 alerts = [{"kind": "inspection_failed", "reference": reference(target["name"])}]
+            if sorted(activated) != previous.get("activatedHistoryScopes", []):
+                previous = {**previous, "activatedHistoryScopes": sorted(activated)}
+                state[target["name"]] = previous
+                # Retain first completion even if SMTP fails on an unrelated alert.
+                save_state(args.state, state)
             state[target["name"]] = deliver_target(config, target["name"], alerts,
-                                                   state.get(target["name"], {}), time.time())
+                                                   previous, time.time())
             save_state(args.state, state)
         print(json.dumps({"monitor": "checked", "targets": len(config["targets"])}))
 

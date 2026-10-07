@@ -512,3 +512,51 @@ integration('mapped expired Stripe sessions reconcile to voided without a webhoo
     assert.equal((await paidAIBalance(f.db, member.id)).balanceNanoUSD, '0'); assert.equal(f.createCount, 1);
   } finally { await f.cleanup(); }
 });
+
+
+integration('confirmed deletion retains pending and paid AI liabilities and allows late completion/refund',async()=>{
+  for (const paid of [false,true]) {
+    const f=await fixture({aiValue:true});try {
+      const member=await f.account(),order=await f.order(member);
+      if(paid) await f.webhook(f.stripeEvent(order.orderID));
+      const before=(await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[member.id])).rows[0].balance_nano;
+      const invalid=await f.app.inject({method:'DELETE',url:'/v1/account',headers:member.headers,payload:{confirmCreditAccessLoss:'yes'}});
+      assert.equal(invalid.statusCode,400);
+      const response=await f.app.inject({method:'DELETE',url:'/v1/account',headers:member.headers,payload:{confirmCreditAccessLoss:true}});
+      assert.equal(response.statusCode,200,response.body);
+      const row=(await f.db.query('SELECT email,deleted_at FROM accounts WHERE id=$1',[member.id])).rows[0];
+      assert.equal(row.email,null);assert.ok(row.deleted_at);
+      assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[member.id])).rows[0].balance_nano,before);
+      await assert.rejects(authenticate(f.db,member.headers.authorization),{code:'sign_in_required'});
+      if(!paid) await f.webhook(f.stripeEvent(order.orderID));
+      await f.webhook(f.stripeEvent(order.orderID,'paid',997));
+      assert.equal((await f.db.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[member.id])).rows[0].balance_nano,'0');
+    }finally{await f.cleanup();}
+  }
+});
+
+integration('confirmed deletion preserves purchased minute balance and outstanding refund debt',async()=>{
+  for(const spent of [false,true]){
+    const f=await fixture();try{
+      const member=await f.account(),order=await f.order(member);await f.webhook(f.stripeEvent(order.orderID));
+      if(spent){const hold=await reserveMinutes(f.db,member.id,'spent-before-delete',1_800_000);await finishMinuteReservation(f.db,hold,1_800_000);await f.webhook(f.stripeEvent(order.orderID,'paid',997));}
+      const prior=(await f.db.query('SELECT granted_ms,reversal_target_ms,recovered_ms FROM minute_purchase_transactions WHERE order_id=$1',[order.orderID])).rows[0];
+      assert.equal((await deleteAccount(f.db,member.id,undefined,undefined,undefined,new Date(),false,true)).retainedFinancialRecords,true);
+      assert.equal(Number((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1',[member.id])).rows[0].balance_ms),spent?0:1_800_000);
+      assert.deepEqual((await f.db.query('SELECT granted_ms,reversal_target_ms,recovered_ms FROM minute_purchase_transactions WHERE order_id=$1',[order.orderID])).rows[0],prior);
+      if(!spent){await f.webhook(f.stripeEvent(order.orderID,'paid',997));assert.equal(Number((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1',[member.id])).rows[0].balance_ms),0);}
+    }finally{await f.cleanup();}
+  }
+});
+
+integration('confirmed deletion waits for active usage but does not require billing support',async()=>{
+  const f=await fixture();try{
+    const member=await f.account(),order=await f.order(member);await f.webhook(f.stripeEvent(order.orderID));
+    const hold=await reserveMinutes(f.db,member.id,'active-before-delete',60_000);
+    const response=await f.app.inject({method:'DELETE',url:'/v1/account',headers:member.headers,payload:{confirmCreditAccessLoss:true}});
+    assert.equal(response.statusCode,409);assert.equal(response.json().error.code,'account_usage_pending');
+    assert.equal(await authenticate(f.db,member.headers.authorization),member.id);
+    await finishMinuteReservation(f.db,hold,0);
+    assert.equal((await f.app.inject({method:'DELETE',url:'/v1/account',headers:member.headers,payload:{confirmCreditAccessLoss:true}})).statusCode,200);
+  }finally{await f.cleanup();}
+});

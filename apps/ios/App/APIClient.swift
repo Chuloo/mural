@@ -44,6 +44,12 @@ struct CustomEndpoint: Codable, Equatable {
 @MainActor final class APIClient {
     var conversationProvider: ConversationProvider = .personalKey
     var hostedLease: HostedLease?
+    var canProcessAI: () -> Bool = { true }
+    private var responseTasks: [UUID: Task<APIResult, Error>] = [:]
+    func cancelAIRequests() {
+        responseTasks.values.forEach { $0.cancel() }
+        responseTasks.removeAll()
+    }
     private let session: URLSession
     private struct Target { var base: URL; var key: String?; var endpoint: CustomEndpoint? }
     private var voiceCredential = VoiceCredentialScope()
@@ -99,6 +105,7 @@ struct CustomEndpoint: Codable, Equatable {
     /// The same limits as Android: a faulty server can't exhaust memory with an endless JSON or audio body.
     static let jsonLimit = 1_048_576, audioLimit = 16_777_216, errorBodyLimit = 16_384
     private func send(_ target: Target, _ path: String, body: Data, contentType: String, limit: Int = APIClient.jsonLimit) async throws -> Data {
+        guard canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
         guard let url = URL(string: path, relativeTo: target.base)?.absoluteURL else { throw APIError.invalidResponse }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -154,6 +161,24 @@ struct CustomEndpoint: Codable, Equatable {
     }
     func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false,
                  purpose: String = "meaning", onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
+        guard canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
+        try Task.checkCancellation()
+        let id = UUID()
+        let task = Task { @MainActor in
+            try Task.checkCancellation()
+            guard self.canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
+            let result = try await self.performResponse(instructions: instructions, input: input, schema: schema,
+                                                       search: search, purpose: purpose, onText: onText)
+            try Task.checkCancellation()
+            guard self.canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
+            return result
+        }
+        responseTasks[id] = task
+        defer { responseTasks.removeValue(forKey: id) }
+        return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
+    }
+    private func performResponse(instructions: String, input: String, schema: [String: Any]?, search: Bool,
+                                 purpose: String, onText: (@MainActor (String) -> Void)?) async throws -> APIResult {
         if conversationProvider == .hosted {
             guard let hostedLease, let client = HostedClient.shared else { throw HostedError.unavailable }
             let result = try await client.helper(hostedLease, purpose: purpose, instructions: instructions, input: input,
@@ -222,6 +247,7 @@ struct CustomEndpoint: Codable, Equatable {
         return APIResult(text: text, sources: [], usage: APIUsage(input: usage?["prompt_tokens"] as? Int ?? 0, output: usage?["completion_tokens"] as? Int ?? 0))
     }
     private func streamResponse(_ target: Target, body: [String: Any], onText: @MainActor (String) -> Void) async throws -> [String: Any] {
+        guard canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
         guard let key = target.key, let url = URL(string: "responses", relativeTo: target.base)?.absoluteURL else { throw APIError.missingKey }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

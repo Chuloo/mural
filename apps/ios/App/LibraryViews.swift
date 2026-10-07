@@ -298,6 +298,7 @@ struct SettingsView: View {
     @State private var confirmingPersonalKey = false
     @State private var showingHostedSwitch = false
     @State private var showingAccount = false
+    @State private var showingAIProcessing = false
     @State private var endpoint = CustomEndpoint.load()
     private var store: LearningStore { coordinator.store }
     /// Hosted conversations never use the endpoint, however it is configured.
@@ -387,6 +388,11 @@ struct SettingsView: View {
                     }
                 } header: { Text("Advanced") }.id("advanced-section")
                 Section("Help & privacy") {
+                    Button {
+                        showingAIProcessing = true
+                    } label: {
+                        LabeledContent("AI processing", value: coordinator.hasAIConsent ? "Allowed" : "Off")
+                    }.accessibilityIdentifier("settings-ai-processing")
                     Link("Contact support", destination: URL(string: "https://mural.chat/support/")!)
                         .accessibilityIdentifier("settings-support")
                     Link("Privacy policy", destination: URL(string: "https://mural.chat/privacy/")!)
@@ -425,6 +431,9 @@ struct SettingsView: View {
             }
         }
         .sheet(isPresented: $showingHostedSwitch) { HostedAccessSwitchView(coordinator: coordinator) }
+        .sheet(isPresented: $showingAIProcessing) {
+            AIProcessingSettingsView(coordinator: coordinator)
+        }
         .confirmationDialog("Use your API key?", isPresented: $confirmingPersonalKey, titleVisibility: .visible) {
             Button("Use my key") { coordinator.selectConversationProvider(.personalKey) }
             Button("Cancel", role: .cancel) {}
