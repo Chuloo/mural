@@ -82,7 +82,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { coordinator.background(); HostedCloseRecovery.shared.pause() }
-            else if phase == .active { coordinator.resume(); Task { await HostedCloseRecovery.shared.resume(); await AppleMinutePurchases.shared.checkPurchases(includeHistory: false) } }
+            else if phase == .active { coordinator.resume(); Task { await HostedCloseRecovery.shared.resume(); await AppleMinutePurchases.shared.checkPurchases() } }
         }
         #if DEBUG
         .task {
