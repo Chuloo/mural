@@ -513,7 +513,9 @@ export function createApp(services: Services) {
     await signOut(db, request.headers.authorization);
     return { signedOut: true };
   });
-  app.delete('/v1/guest/account', { bodyLimit: 1024 }, async request => {
+  app.delete('/v1/guest/account', {
+    bodyLimit: 1024, config: { rateLimit: { max: 120, timeWindow: 60_000 } },
+  }, async request => {
     const account=await authenticate(db,request.headers.authorization,true);
     const owner=(await db.query('SELECT is_guest FROM accounts WHERE id=$1',[account])).rows[0];
     if(!owner?.is_guest) throw new ServiceError('invalid_request');
