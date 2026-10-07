@@ -90,7 +90,7 @@ final class AppleMinutePurchases {
         }
         Task {
             _ = try? await prepareEnvironment()
-            await checkPurchases(includeHistory: false)
+            await checkPurchases()
         }
     }
     func load() async {
@@ -222,23 +222,20 @@ final class AppleMinutePurchases {
             }
         }
     }
-    func checkPurchases(includeHistory: Bool = true) async {
+    func checkPurchases() async {
         guard enabled, !checking, !ProcessInfo.processInfo.arguments.contains("--preview"), let owner = member() else { return }
         checking = true; defer { checking = false }
         guard (try? await prepareEnvironment()) != nil else {
             message = "Couldn’t check purchases. Please try again."; return
         }
-        await recoverRecordedOrders(owner: owner)
-        for await result in Transaction.unfinished { await deliver(result, owner: owner) }
-        if includeHistory {
-            var checked = 0
-            for await result in Transaction.all {
-                guard current(owner), !Task.isCancelled else { return }
-                await deliver(result, owner: owner)
-                checked += 1
-                if checked >= 100 { break }
-            }
-        }
+        message = nil
+        var unfinished = Transaction.unfinished.makeAsyncIterator()
+        guard await ApplePurchaseRecovery.check(
+            recoverSavedOrders: { await self.recoverRecordedOrders(owner: owner) },
+            nextUnfinished: { await unfinished.next() },
+            isCurrent: { self.current(owner) },
+            deliver: { _ = await self.deliver($0, owner: owner) }
+        ) else { return }
         if current(owner) {
             pending = (try? attempts().contains { $0.accountID == owner.accountID && !$0.canResumeCheckout }) ?? true
             if message == nil { message = pending ? "Your purchase is still being checked. You can return later." : "Your purchases are up to date." }
