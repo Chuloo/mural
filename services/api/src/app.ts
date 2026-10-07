@@ -513,13 +513,26 @@ export function createApp(services: Services) {
     await signOut(db, request.headers.authorization);
     return { signedOut: true };
   });
+  app.delete('/v1/guest/account', {
+    bodyLimit: 1024, config: { rateLimit: { max: 120, timeWindow: 60_000 } },
+  }, async request => {
+    const account=await authenticate(db,request.headers.authorization,true);
+    const owner=(await db.query('SELECT is_guest FROM accounts WHERE id=$1',[account])).rows[0];
+    if(!owner?.is_guest) throw new ServiceError('invalid_request');
+    const body=objectBody(request);
+    if(Object.keys(body).some(key=>key!=='confirmCreditAccessLoss') || body.confirmCreditAccessLoss!==true)
+      throw new ServiceError('invalid_request');
+    const result=await deleteAccount(db,account,undefined,undefined,request.headers.authorization,new Date(),false,true);
+    return {deleted:true,retained:result.retainedFinancialRecords?'Required records, linked to an opaque account ID.':null};
+  });
   app.delete('/v1/account', { bodyLimit: 5120 }, async request => {
-    const account = await authenticate(db, request.headers.authorization);
+    const account = await authenticate(db, request.headers.authorization, true);
     const body = objectBody(request);
-    if (Object.keys(body).some(key => key !== 'appleAuthorizationCode')) throw new ServiceError('invalid_request');
+    if (Object.keys(body).some(key => !['appleAuthorizationCode','confirmCreditAccessLoss'].includes(key)) ||
+        (body.confirmCreditAccessLoss !== undefined && typeof body.confirmCreditAccessLoss !== 'boolean')) throw new ServiceError('invalid_request');
     const code = body.appleAuthorizationCode === undefined ? undefined : stringField(body, 'appleAuthorizationCode', 4096);
     const result = await deleteAccount(db, account, services.appleRevoker, code, request.headers.authorization,
-      new Date(), services.minuteCommerce?.playNotifications?.isOperational() === true);
+      new Date(), services.minuteCommerce?.playNotifications?.isOperational() === true, body.confirmCreditAccessLoss === true);
     return { deleted: true, retained: result.retainedFinancialRecords ? 'Required financial records, linked to an opaque account ID.' : null };
   });
   app.post('/v1/checkout', async request => {

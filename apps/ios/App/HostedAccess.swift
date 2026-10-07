@@ -383,6 +383,20 @@ private struct GuestRecord: Codable {
         try save(new)
         return new
     }
+    var hasUnlinkedAccount: Bool {
+        guard let record = try? read() else { return false }
+        return record.owner != nil && record.pendingMemberID == nil && record.linkedMemberID == nil
+    }
+    /// Retain the installation proof so deleting an account cannot reset the free trial.
+    func deleteAccount(using client: ManagedAccountClient) async throws {
+        guard var record = try read(), let existing = record.owner,
+              record.pendingMemberID == nil, record.linkedMemberID == nil else { return }
+        let owner: HostedOwner
+        if existing.usable { owner = existing } else { owner = try await self.owner(member: nil) }
+        try await client.deleteGuest(owner: owner)
+        record.owner = nil
+        try save(record)
+    }
     func owner(member: ManagedAccountSession?) async throws -> HostedOwner {
         let client = try HostedClient.shared.unwrap()
         if let member {
@@ -418,10 +432,18 @@ private struct GuestRecord: Codable {
     }
     func linkIfNeeded(to member: HostedOwner) async throws {
         var record = try record()
+        let client = try HostedClient.shared.unwrap()
+        // Signing in before a first conversation must not bypass the installation's
+        // eligible trial. An unavailable trial must not hide an existing paid balance.
+        if record.owner == nil, record.linkedMemberID == nil, record.pendingMemberID == nil,
+           let response = try? await client.guest(installationToken: record.installationToken),
+           let guest = try? Self.grantedOwner(response) {
+            record.owner = guest
+            try save(record)
+        }
         guard var guest = record.owner else { return }
         if let pending = record.pendingMemberID, pending != member.accountID { throw HostedError.signInRequired }
         if record.pendingMemberID == nil { record.pendingMemberID = member.accountID; try save(record) }
-        let client = try HostedClient.shared.unwrap()
         let response: [String: Any]
         do { response = try await client.linkGuest(guest, guestID: guest.accountID, member: member) }
         catch HostedError.server("invalid_guest_session", _) {

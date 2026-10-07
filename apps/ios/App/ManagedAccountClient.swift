@@ -109,20 +109,33 @@ struct ManagedAccountClient {
     func delete(session: ManagedAccountSession, appleCode: String?) async throws {
         struct Response: Decodable { let deleted: Bool }
         let result: Response = try await request("/v1/account", method: "DELETE",
-                                               body: appleCode.map { ["appleAuthorizationCode": $0] } ?? [:], session: session)
+            body: appleCode.map { ["appleAuthorizationCode": $0] } ?? [:], session: session,
+            confirmCreditAccessLoss: true)
+        guard result.deleted else { throw ManagedAccountError.invalidResponse }
+    }
+    func deleteGuest(owner: HostedOwner) async throws {
+        struct Response: Decodable { let deleted: Bool }
+        let result: Response = try await request("/v1/guest/account", method: "DELETE", body: [:], guest: owner, confirmCreditAccessLoss: true)
         guard result.deleted else { throw ManagedAccountError.invalidResponse }
     }
     private func request<T: Decodable>(_ path: String, method: String, body: [String: String]? = nil,
-                                        session: ManagedAccountSession? = nil) async throws -> T {
+                                        session: ManagedAccountSession? = nil, guest: HostedOwner? = nil,
+                                        confirmCreditAccessLoss: Bool? = nil) async throws -> T {
         var request = URLRequest(url: try configuration.endpoint(path))
         request.httpMethod = method; request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
+            var payload: [String: Any] = body
+            if let confirmCreditAccessLoss { payload["confirmCreditAccessLoss"] = confirmCreditAccessLoss }
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         }
         if let session {
             guard session.isUsable(scope: configuration.storageScope) else { throw ManagedAccountError.server("sign_in_required") }
             request.setValue("Bearer " + session.accessToken, forHTTPHeaderField: "Authorization")
+        }
+        if let guest {
+            guard guest.usable else { throw ManagedAccountError.server("sign_in_required") }
+            request.setValue("Bearer " + guest.accessToken, forHTTPHeaderField: "Authorization")
         }
         let (data, response) = try await http.send(request)
         guard (200...299).contains(response.statusCode) else {
@@ -132,7 +145,7 @@ struct ManagedAccountClient {
                 throw ManagedAccountError.server("sign_in_required")
             }
             // Only a small allowlist is displayed. Never surface raw provider/server response text.
-            let safe = ["unresolved_billing", "rate_limit", "apple_sign_in_not_ready", "apple_revocation_not_configured", "invalid_challenge", "identity_provider_not_configured", "same_account_required", "identity_link_conflict"]
+            let safe = ["account_usage_pending", "unresolved_billing", "rate_limit", "apple_sign_in_not_ready", "apple_revocation_not_configured", "invalid_challenge", "identity_provider_not_configured", "same_account_required", "identity_link_conflict"]
             throw ManagedAccountError.server(safe.contains(code) ? code : "service_unavailable")
         }
         do { return try JSONDecoder().decode(T.self, from: data) }

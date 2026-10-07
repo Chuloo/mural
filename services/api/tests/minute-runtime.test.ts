@@ -54,6 +54,12 @@ test('restricted runtime can serve signup and minute usage but cannot change ope
       await finishMinuteReservation(runtime,pending,30000);
       assert.deepEqual(await finalizeDeferredGuestLinks(runtime),{examined:1,completed:1});
       assert.equal((await minuteBalance(runtime,member)).availableMilliseconds,587655);
+      // The runtime can delete automatic guests even though they never had a cash wallet.
+      await updateWelcomePolicy(owner,{...await welcomePolicy(owner),dailyWelcomeBudgetMinutes:40,lifetimeWelcomeBudgetMinutes:40},'runtime-test','Guest deletion fixture');
+      const thirdGuest=await startGuestMinutes(runtime,{}, {verify:async()=>({deviceReference:`delete:${suffix}`,previouslyClaimed:false})});
+      assert.deepEqual(await deleteAccount(runtime, thirdGuest.guestID, undefined, undefined,
+        `Bearer ${thirdGuest.accessToken}`, new Date(), false, true), { retainedFinancialRecords: true });
+      assert.ok((await runtime.query('SELECT deleted_at FROM accounts WHERE id=$1', [thirdGuest.guestID])).rows[0].deleted_at);
       for(const table of ['minute_guest_link_intents','minute_guest_link_completions']){
         await assert.rejects(runtime.query(`DELETE FROM ${table}`),/permission denied/);
         const privileges=(await owner.query('SELECT has_table_privilege($1,$2,$3) AS allowed',[role,`${schema}.${table}`,'UPDATE,DELETE,TRUNCATE'])).rows[0];

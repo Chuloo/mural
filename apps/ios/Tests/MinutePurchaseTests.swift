@@ -3,6 +3,17 @@ import StoreKit
 @testable import MuralCore
 
 final class MinutePurchaseTests: XCTestCase {
+    func testSandboxPurchaseFeedbackNeverClaimsUsableCredit() {
+        XCTAssertEqual(ApplePurchaseScope.completionMessage(testPurchase: true),
+                       "Test purchase complete. You weren’t charged and no usable minutes were added.")
+        XCTAssertEqual(ApplePurchaseScope.pendingMessage(testPurchase: true),
+                       "Your test purchase is awaiting approval. It won’t add usable minutes.")
+        XCTAssertEqual(ApplePurchaseScope.historyStatus(testPurchase: true, refunded: false),
+                       "Test purchase recorded · no usable minutes added")
+        XCTAssertEqual(ApplePurchaseScope.historyStatus(testPurchase: true, refunded: true), "Test refund recorded")
+        XCTAssertEqual(ApplePurchaseScope.completionMessage(testPurchase: false), "Your minutes have been updated.")
+        XCTAssertEqual(ApplePurchaseScope.historyStatus(testPurchase: false, refunded: false), "Minutes added")
+    }
     func testAppleProofStaysOnConfiguredOriginAndNeverReachesOAuth() throws {
         let origin = try XCTUnwrap(URL(string: "https://api.mural.chat"))
         XCTAssertTrue(ApplePurchaseScope.permitsProof(to: URL(string: "https://api.mural.chat/v1/minutes"), origin: origin))

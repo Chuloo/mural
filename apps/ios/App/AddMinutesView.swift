@@ -121,7 +121,7 @@ private struct ApplePurchaseHistoryRow: View {
             Text(purchase.name).font(.headline)
             Text("Quantity · \(purchase.quantity)").font(.subheadline)
             Text(purchase.date, style: .date).font(.footnote).foregroundStyle(MuralColor.secondary)
-            Text(purchase.refunded ? "Refund recorded" : "Minutes added").font(.subheadline)
+            Text(ApplePurchaseScope.historyStatus(testPurchase: purchase.testPurchase, refunded: purchase.refunded)).font(.subheadline)
             if !purchase.refunded {
                 Button("Request a refund") { refundPresented = true }.frame(minHeight: 44)
                     .disabled(account.session?.accountID != purchase.accountID || !AppleMinutePurchases.shared.refundRequestsEnabled)
@@ -132,7 +132,9 @@ private struct ApplePurchaseHistoryRow: View {
             .refundRequestSheet(for: purchase.id, isPresented: $refundPresented) { result in
                 guard account.session?.accountID == purchase.accountID else { return }
                 switch result {
-                case .success(.success): message = "Check Purchase support for your refund status. Minutes update after Apple confirms a refund."
+                case .success(.success):
+                    message = purchase.testPurchase ? "Your test refund request was sent to Apple. It won’t change your usable minutes."
+                        : "Your refund request was sent to Apple. Minutes update after Apple confirms a refund."
                 case .success(.userCancelled): message = nil
                 case .failure: message = "Couldn’t confirm the refund status. Check Purchase support before trying again."
                 @unknown default: message = "Check Purchase support for the status of your request."

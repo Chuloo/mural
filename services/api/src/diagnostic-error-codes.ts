@@ -222,6 +222,7 @@ export const diagnosticErrorCodes = new Set([
   'unmapped_minute_purchase',
   'unmapped_purchase',
   'unresolved_billing',
+  'account_usage_pending',
   'usage_after_finalization',
   'usage_exceeds_reservation',
   'voice_worker_already_running',
