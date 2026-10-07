@@ -12,6 +12,12 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
 @MainActor final class APIClient {
     var conversationProvider: ConversationProvider = .personalKey
     var hostedLease: HostedLease?
+    var canProcessAI: () -> Bool = { true }
+    private var responseTasks: [UUID: Task<APIResult, Error>] = [:]
+    func cancelAIRequests() {
+        responseTasks.values.forEach { $0.cancel() }
+        responseTasks.removeAll()
+    }
     private let session: URLSession
     private var voiceCredential = VoiceCredentialScope()
     private var credentialExpiry: Task<Void, Never>?
@@ -43,6 +49,7 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         session = URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
     }
     func post(_ path: String, body: [String: Any]) async throws -> [String: Any] {
+        guard canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
         guard let key = personalKey() else { throw APIError.missingKey }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/" + path)!)
         request.httpMethod = "POST"; request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
@@ -57,6 +64,24 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
     }
     func respond(instructions: String, input: String, schema: [String: Any]? = nil, search: Bool = false,
                  purpose: String = "meaning", onText: (@MainActor (String) -> Void)? = nil) async throws -> APIResult {
+        guard canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
+        try Task.checkCancellation()
+        let id = UUID()
+        let task = Task { @MainActor in
+            try Task.checkCancellation()
+            guard self.canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
+            let result = try await self.performResponse(instructions: instructions, input: input, schema: schema,
+                                                       search: search, purpose: purpose, onText: onText)
+            try Task.checkCancellation()
+            guard self.canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
+            return result
+        }
+        responseTasks[id] = task
+        defer { responseTasks.removeValue(forKey: id) }
+        return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
+    }
+    private func performResponse(instructions: String, input: String, schema: [String: Any]?, search: Bool,
+                                 purpose: String, onText: (@MainActor (String) -> Void)?) async throws -> APIResult {
         if conversationProvider == .hosted {
             guard let hostedLease, let client = HostedClient.shared else { throw HostedError.unavailable }
             let result = try await client.helper(hostedLease, purpose: purpose, instructions: instructions, input: input,
@@ -93,6 +118,7 @@ struct APIResult { var text: String; var sources: [SourceLink]; var usage: APIUs
         return APIResult(text: text, sources: sources, usage: usage)
     }
     private func streamResponse(body: [String: Any], onText: @MainActor (String) -> Void) async throws -> [String: Any] {
+        guard canProcessAI() else { throw AIProcessingConsent.ConsentError.required }
         guard let key = personalKey() else { throw APIError.missingKey }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
         request.httpMethod = "POST"

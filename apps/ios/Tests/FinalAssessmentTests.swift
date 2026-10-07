@@ -121,6 +121,20 @@ import XCTest
         }
     }
 
+    func testWithdrawalCancelsAllPendingAssessmentsAndRejectsLateResults() async {
+        let first = ended(), second = ended("fr"), provider = Provider()
+        var received = 0
+        let queue = FinalAssessmentQueue(assess: provider.assess)
+        queue.onResult = { _ in received += 1 }
+        XCTAssertTrue(queue.submit(first)); XCTAssertTrue(queue.submit(second))
+        await waitUntil { provider.pending.count == 2 }
+        queue.cancelAll()
+        XCTAssertFalse(queue.isPending(first.id)); XCTAssertFalse(queue.isPending(second.id))
+        provider.finish(); provider.finish()
+        try? await Task.sleep(for: .milliseconds(5))
+        XCTAssertEqual(received, 0)
+    }
+
     func testCorrectedTranscriptRejectsTheOriginalAssessment() async {
         var session = ended()
         let provider = Provider(), queue = FinalAssessmentQueue(assess: provider.assess)

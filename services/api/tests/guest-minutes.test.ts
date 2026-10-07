@@ -266,3 +266,23 @@ integration('an expired bearer without an accepted binding cannot link until the
   assert.equal((await f.db.query("SELECT count(*) FROM minute_entries WHERE kind='welcome'")).rows[0].count,'1');
  }finally{await f.cleanup();}
 });
+
+
+integration('automatic guests can delete in-app without sign-in and cannot replay their free allowance',async()=>{
+  const f=await fixture();try{
+    const proof={installationToken:randomBytes(32).toString('base64url')};
+    const {InstallationGuestMinuteAttestor}=await import('../src/guest-minutes.js');
+    const attestor=new InstallationGuestMinuteAttestor(),guest=await startGuestMinutes(f.db,proof,attestor);
+    const service=createApp({db:f.db,auth:{}});
+    try{
+      const unconfirmed=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{authorization:`Bearer ${guest.accessToken}`},payload:{}});
+      assert.equal(unconfirmed.statusCode,400);
+      assert.equal(await authenticate(f.db,`Bearer ${guest.accessToken}`,true),guest.guestID);
+      const response=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{authorization:`Bearer ${guest.accessToken}`,'x-mural-client-ip':'192.0.2.42','x-mural-proxy-token':'d'.repeat(64)},payload:{confirmCreditAccessLoss:true}});
+      assert.equal(response.statusCode,200,response.body);
+      await assert.rejects(authenticate(f.db,`Bearer ${guest.accessToken}`,true),{code:'sign_in_required'});
+      await assert.rejects(startGuestMinutes(f.db,proof,attestor),{code:'sign_in_to_continue'});
+      assert.equal((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1',[guest.guestID])).rows[0].balance_ms,'0');
+    }finally{await service.close();}
+  }finally{await f.cleanup();}
+});

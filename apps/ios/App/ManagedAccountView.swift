@@ -113,16 +113,18 @@ struct ManagedAccountView: View {
                         Button("Continue as guest") { dismiss() }
                             .font(.subheadline).foregroundStyle(MuralColor.secondary)
                             .frame(minHeight: 44).padding(.top, 6)
+                        if store.hasGuestAccount {
+                            Button("Delete guest account…", role: .destructive) { confirmDeletion = true }
+                                .foregroundStyle(.red).frame(minHeight: 44)
+                                .accessibilityIdentifier("managed-guest-delete")
+                                .disabled(coordinator.isRunning)
+                        }
                     }.disabled(store.isBusy)
                 }
                 if store.isBusy { ProgressView("Updating account") }
                 if let message = store.message {
                     Text(message).font(.callout).foregroundStyle(MuralColor.secondary)
                         .accessibilityIdentifier("managedAccountMessage")
-                }
-                if store.deletionNeedsSupport {
-                    Link("Account deletion support", destination: URL(string: "https://mural.chat/support/#delete-account")!)
-                        .frame(minHeight: 44)
                 }
             }.padding(24).frame(maxWidth: 520).frame(maxWidth: .infinity)
         }
@@ -144,10 +146,12 @@ struct ManagedAccountView: View {
             Button("Stay signed in", role: .cancel) {}
         } message: { Text("Your learning history stays on this iPhone. If Mural can’t reach the server, sign-out on other devices may take up to 24 hours.") }
         .confirmationDialog("Delete your Mural account?", isPresented: $confirmDeletion, titleVisibility: .visible) {
-            Button("Delete account", role: .destructive, action: store.deleteAccount)
+            Button("Delete account", role: .destructive) {
+                if store.session == nil { store.deleteGuestAccount() } else { store.deleteAccount() }
+            }
             Button("Keep account", role: .cancel) {}
         } message: {
-            Text("This removes your sign-in details and account sessions and forfeits unused free minutes. Learning history stays on this iPhone. A paid balance, pending payment or active conversation must be resolved before deletion.")
+            Text("This permanently removes your account and sign-in details. You lose access to unused free and purchased minutes. Required payment and refund records are retained without your sign-in details. Learning history stays on this iPhone.")
         }
     }
 }
