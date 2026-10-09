@@ -60,7 +60,14 @@ final class ManagedAccountHTTP: NSObject, URLSessionTaskDelegate, @unchecked Sen
         } catch let error as ManagedAccountError { throw error }
         catch is CancellationError { throw ManagedAccountError.cancelled }
         catch let error as URLError where error.code == .cancelled { throw ManagedAccountError.cancelled }
-        catch { throw ManagedAccountError.transport }
+        catch {
+            #if DEBUG
+            if AudioVerification.requested, let network = error as? URLError {
+                UserDefaults.standard.set(network.code.rawValue, forKey: "verificationNetworkErrorCode")
+            }
+            #endif
+            throw ManagedAccountError.transport
+        }
     }
 }
 

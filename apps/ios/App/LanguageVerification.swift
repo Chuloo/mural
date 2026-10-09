@@ -19,6 +19,8 @@ extension AudioVerification {
             var protectedDataAvailableAtStart = false
             var connectionState = "idle"
             var connectionErrorPresent = false
+            var connectionFailureCategory: String?
+            var connectionErrorDescription: String?
             var provider = ""
             var receivedGreeting = false
             var targetLanguageDetected = false
@@ -138,6 +140,19 @@ extension AudioVerification {
         }
         report.connectionState = String(describing: coordinator.state)
         report.connectionErrorPresent = coordinator.error != nil
+        report.connectionErrorDescription = coordinator.error
+        if let failure = coordinator.hostedAccessFailure {
+            report.connectionFailureCategory = switch failure {
+            case .unavailable: "hosted_unavailable"
+            case .invalidResponse: "invalid_response"
+            case .secureStorage: "secure_storage"
+            case .signInRequired: "sign_in_required"
+            case .noMinutes: "no_minutes"
+            case .unconfirmed: "unconfirmed"
+            case .personalKeyRequired: "personal_key_required"
+            case .server(let code, _): code
+            }
+        }
         if report.connected {
             if !coordinator.isMuted { coordinator.toggleMute() }
             report.receivedGreeting = await waitFor(30) { coordinator.assistantPassage != nil }

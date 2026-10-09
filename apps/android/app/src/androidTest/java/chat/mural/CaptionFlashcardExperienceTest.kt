@@ -12,6 +12,18 @@ import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
 
+internal fun SemanticsNodeInteraction.revealPageViewport(): SemanticsNodeInteraction {
+    var ancestor = fetchSemanticsNode().parent
+    while (ancestor != null) {
+        if (ancestor.config.contains(androidx.compose.ui.semantics.SemanticsActions.ScrollBy)) {
+            performScrollTo()
+            break
+        }
+        ancestor = ancestor.parent
+    }
+    return this
+}
+
 @RunWith(AndroidJUnit4::class)
 class CaptionFlashcardExperienceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
@@ -112,10 +124,10 @@ class CaptionFlashcardExperienceTest {
         val mic = compose.onNodeWithTag("start-conversation").fetchSemanticsNode().boundsInRoot
         compose.waitUntil(5000) { offset("target-passage-scroll") > 20f && offset("meaning-passage-scroll") > 20f }
         capture("captions-following")
-        compose.onNodeWithTag("target-passage-scroll").performScrollTo()
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-passage-scroll").performTouchInput { swipeDown() }
         var paused = offset("target-passage-scroll")
-        compose.onNodeWithTag("meaning-passage-scroll").performScrollTo()
+        compose.onNodeWithTag("meaning-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("meaning-passage-scroll").performTouchInput { swipeDown() }
         compose.runOnIdle { assertTrue(vm.targetCaptionFollowing.interrupted); assertTrue(vm.meaningCaptionFollowing.interrupted) }
         compose.runOnIdle { vm.toggleMeaning() }
