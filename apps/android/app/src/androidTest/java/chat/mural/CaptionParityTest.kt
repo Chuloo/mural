@@ -503,10 +503,15 @@ class CaptionParityTest {
     @Test fun captionsAndLookupRemainReachableWithLargeSystemText() {
         val sentence = "我想去银行，然后去旅行。"
         show("zh", sentence, "I want to go to the bank, then travel.")
+        // At accessibility sizes, reveal the caption viewport in the page before
+        // scrolling a control inside that viewport.
+        compose.onNodeWithTag("target-passage-scroll").performScrollTo()
         compose.onNodeWithTag("target-caption").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("pinyin-reading").assertDoesNotExist()
+        compose.onNodeWithTag("meaning-passage-scroll").performScrollTo()
         compose.onNodeWithTag("meaning-caption").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("target-passage-scroll").performScrollTo()
         compose.onNodeWithTag("target-caption").performScrollTo()
         tap("银行", sentence)
         compose.onNodeWithTag("word-lookup-explanation").performScrollTo().assertIsDisplayed()
@@ -519,13 +524,16 @@ class CaptionParityTest {
 
         // Large text uses the page scroller. A long reply and its reading must stay
         // reachable without requiring both languages to fit on screen at once.
+        compose.onNodeWithTag("target-passage-scroll").performScrollTo()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         show("zh", sentence + "今天我们可以聊一聊你的生活。你喜欢喝咖啡还是喝茶？如果你有时间，我们可以一起去附近的咖啡馆，再去商店买一点儿东西。你觉得怎么样？你也可以告诉我你最喜欢的食物，或者说说你明天想做什么。",
             "I want to go to the bank, then travel. We can talk about your life, visit a café, and buy a few things. What would you like to do tomorrow?")
+        compose.onNodeWithTag("target-passage-scroll").performScrollTo()
         compose.onNodeWithTag("target-caption").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-reading").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("pinyin-reading").assertDoesNotExist()
+        compose.onNodeWithTag("meaning-passage-scroll").performScrollTo()
         compose.onNodeWithTag("meaning-caption").performScrollTo().assertIsDisplayed()
         if (!microphone.isDisplayed()) microphone.performScrollTo()
         microphone.assertIsDisplayed()
