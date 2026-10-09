@@ -131,7 +131,7 @@ struct HostedConnectRequest {
         startMetering()
     }
 
-    @discardableResult func send(_ event: [String: Any]) -> Bool {
+    @discardableResult func send(_ event: [String: Any], respond: Bool = false) -> Bool {
         guard let channel, channel.readyState == .open, let data = try? JSONSerialization.data(withJSONObject: event) else { return false }
         return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
     }

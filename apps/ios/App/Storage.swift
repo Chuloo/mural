@@ -93,28 +93,31 @@ import MuralCore
 }
 
 enum CredentialStore {
-    private static let service = "no.william.mural.openai"
-    private static var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "owner", kSecAttrSynchronizable as String: false] }
-    static func read() -> String? {
-        var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
+    static let openAI = "no.william.mural.openai"
+    static let customEndpoint = "no.william.mural.custom-endpoint"
+    private static func query(_ service: String) -> [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "owner", kSecAttrSynchronizable as String: false] }
+    static func read(service: String = openAI) -> String? {
+        var q = query(service); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
     static var hasKey: Bool { read() != nil }
-    static func save(_ key: String) throws {
+    static func save(_ key: String, service: String = openAI) throws {
         let value = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard value.hasPrefix("sk-"), value.count >= 20, !value.contains(where: \.isWhitespace) else { throw KeyError.invalid }
+        // A custom server may use any token format.
+        let valid = service == openAI ? value.hasPrefix("sk-") && value.count >= 20 : !value.isEmpty && value.count <= 500
+        guard valid, !value.contains(where: \.isWhitespace) else { throw KeyError.invalid }
         let data = Data(value.utf8)
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        let status = SecItemUpdate(query(service) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
-            var q = query; q[kSecValueData as String] = data
+            var q = query(service); q[kSecValueData as String] = data
             q[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             guard SecItemAdd(q as CFDictionary, nil) == errSecSuccess else { throw KeyError.save }
         } else if status != errSecSuccess { throw KeyError.save }
     }
-    static func delete() throws {
-        let status = SecItemDelete(query as CFDictionary)
+    static func delete(service: String = openAI) throws {
+        let status = SecItemDelete(query(service) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw KeyError.remove }
     }
     enum KeyError: LocalizedError {

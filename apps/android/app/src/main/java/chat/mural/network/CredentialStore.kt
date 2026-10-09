@@ -10,11 +10,12 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Stores the OpenAI API key encrypted by a non-exportable Android Keystore key. */
+/** Stores an API key encrypted by a non-exportable Android Keystore key. */
 class CredentialStore internal constructor(
     context: Context,
     preferencesName: String,
     private val keyAlias: String,
+    private val isValid: (String) -> Boolean = { isOpenAIKey(it) },
 ) {
     constructor(context: Context) : this(context, PREFERENCES, KEY_ALIAS)
 
@@ -26,9 +27,7 @@ class CredentialStore internal constructor(
     @Synchronized
     fun save(key: String) {
         val value = key.trim()
-        if (!value.startsWith("sk-") || value.length < 20 || value.any(Char::isWhitespace)) {
-            throw CredentialException.Invalid
-        }
+        if (!isValid(value)) throw CredentialException.Invalid
 
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -59,8 +58,7 @@ class CredentialStore internal constructor(
                 GCMParameterSpec(GCM_TAG_BITS, Base64.decode(encodedIv, Base64.NO_WRAP)),
             )
             cipher.doFinal(Base64.decode(encodedCiphertext, Base64.NO_WRAP)).toString(Charsets.UTF_8)
-                .takeIf { it.startsWith("sk-") && it.length >= 20 && it.none(Char::isWhitespace) }
-                ?: clearUnreadableCredential()
+                .takeIf(isValid) ?: clearUnreadableCredential()
         } catch (_: Exception) {
             clearUnreadableCredential()
         }
@@ -122,5 +120,7 @@ class CredentialStore internal constructor(
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_BITS = 128
+
+        fun isOpenAIKey(value: String) = value.startsWith("sk-") && value.length >= 20 && value.none(Char::isWhitespace)
     }
 }
