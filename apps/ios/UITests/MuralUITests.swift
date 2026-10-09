@@ -17,9 +17,12 @@ final class MuralUITests: XCTestCase {
             let footer = app.buttons["onboarding-continue"].frame
             let top = max(110, viewport.frame.minY)
             let bottom = min(viewport.frame.maxY, footer.minY - 4)
-            if element.isHittable && element.frame.midY >= top && element.frame.midY < bottom { return }
-            if element.frame.midY <= top { viewport.swipeDown(velocity: .slow) }
-            else { viewport.swipeUp(velocity: .slow) }
+            if element.isHittable && element.frame.minY >= top && element.frame.maxY < bottom { return }
+            let desiredCenter = (top + bottom) / 2
+            let shift = max(-viewport.frame.height * 0.3, min(viewport.frame.height * 0.3, desiredCenter - element.frame.midY))
+            let start = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: 0, dy: shift))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)
     }

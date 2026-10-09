@@ -116,9 +116,9 @@ class CaptionFlashcardExperienceTest {
         var paused = offset("target-passage-scroll")
         compose.onNodeWithTag("meaning-passage-scroll").performTouchInput { swipeDown() }
         compose.runOnIdle { assertTrue(vm.targetCaptionFollowing.interrupted); assertTrue(vm.meaningCaptionFollowing.interrupted) }
-        compose.runOnIdle { vm.updatePreferences(vm.archive.preferences.copy(meaningVisible = false)) }
+        compose.runOnIdle { vm.toggleMeaning() }
         compose.onNodeWithTag("meaning-passage-scroll").assertDoesNotExist()
-        compose.runOnIdle { vm.updatePreferences(vm.archive.preferences.copy(meaningVisible = true)) }
+        compose.runOnIdle { vm.toggleMeaning() }
         compose.runOnIdle { assertTrue(vm.meaningCaptionFollowing.interrupted) }
         compose.onNodeWithTag("tab-words").performClick()
         compose.onNodeWithTag("tab-talk").performClick()
