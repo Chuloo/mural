@@ -65,6 +65,12 @@ class CaptionFlashcardExperienceTest {
         }
         compose.onNodeWithTag("tab-words").performClick()
     }
+    private fun presentForRecording() {
+        if (androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("experienceRecording") == "true") {
+            compose.waitForIdle()
+            Thread.sleep(1500)
+        }
+    }
     @Test fun flashcardsTriggerAlignsWithHeadingAndPracticePreservesVocabulary() {
         seedWords()
         val before = compose.runOnIdle { ArchiveCodec.encode(vm.archive) }
@@ -74,6 +80,13 @@ class CaptionFlashcardExperienceTest {
         assertEquals(title.center.y, trigger.center.y, 5f)
         compose.onNodeWithTag("open-flashcards").performClick()
         compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        presentForRecording()
+        compose.onNodeWithTag("flashcard-pager").performTouchInput {
+            swipe(center, center.copy(x = center.x - width * .08f), durationMillis = 300)
+        }
+        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
         compose.onNodeWithTag("flashcard-previous").assertIsNotEnabled()
         compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
         val word = compose.onAllNodesWithTag("flashcard-word", useUnmergedTree = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].single().text
@@ -82,8 +95,13 @@ class CaptionFlashcardExperienceTest {
         compose.onAllNodesWithTag("reveal-flashcard").onFirst().performClick()
         compose.onAllNodesWithTag("flashcard-meaning", useUnmergedTree = true).onFirst().assertIsDisplayed()
         capture("flashcards-revealed")
+        presentForRecording()
+        compose.onNodeWithTag("reveal-flashcard").performClick()
+        compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
+        presentForRecording()
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("flashcard-progress").assertTextEquals("2 of 2")
+        presentForRecording()
         compose.onNodeWithTag("flashcard-next").assertIsNotEnabled()
         compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeUp() }
@@ -111,6 +129,21 @@ class CaptionFlashcardExperienceTest {
         compose.onNodeWithText("книга").assertDoesNotExist()
         compose.onNodeWithTag("open-flashcards").performClick()
         compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+    }
+    @Test fun longMeaningScrollsWithoutChangingCards() {
+        compose.runOnIdle {
+            val meaning = "Used when a person wants to do something now, such as meeting a friend for coffee. It expresses a wish or preference in a relaxed conversation."
+            state("archive", vm.archive.copy(sessions = mutableListOf(sample("ru", "книга", meaning), sample("ru", "кофе", "coffee"))))
+        }
+        compose.onNodeWithTag("tab-words").performClick()
+        compose.onNodeWithTag("open-flashcards").performClick()
+        compose.onNodeWithTag("reveal-flashcard").performClick()
+        val meaning = compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true)
+        meaning.assertExists()
+        compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeUp() }
+        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        compose.onNodeWithTag("flashcards-modal").assertIsDisplayed()
+        compose.onNodeWithTag("close-flashcards").assertIsDisplayed()
     }
     private fun offset(tag: String): Float = compose.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
     @Test fun targetAndMeaningFollowPauseForStreamingAndResumeWithNextCaption() {

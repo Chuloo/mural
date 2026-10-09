@@ -694,17 +694,53 @@ private struct FlashcardsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection = 0
+    @State private var dragOffset = 0.0
+    @State private var dragAxis = 0
+    @State private var advancing = false
+    @State private var revealAllowedAfter = Date.distantPast
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
                 if deck.words.isEmpty {
                     ContentUnavailableView("No words yet", systemImage: "leaf", description: Text("Useful words from your conversations will appear here."))
                 } else {
-                    TabView(selection: $selection) {
-                        ForEach(Array(deck.words.enumerated()), id: \.element.id) { index, word in
-                            FlashcardView(word: word, selected: selection == index).padding(.horizontal, 24).tag(index)
+                    GeometryReader { geometry in
+                        let direction = dragOffset > 0 ? -1 : 1
+                        let destination = deck.destination(from: selection, direction: direction)
+                        ZStack {
+                            if destination != selection {
+                                FlashcardView(word: deck.words[destination], selected: false)
+                                    .padding(.horizontal, 24).scaleEffect(0.94 + min(abs(dragOffset) / geometry.size.width, 1) * 0.06)
+                                    .offset(y: 12).opacity(0.7).allowsHitTesting(false).accessibilityHidden(true)
+                            }
+                            FlashcardView(word: deck.words[selection], selected: true, canReveal: { !advancing && Date() > revealAllowedAfter }).id(deck.words[selection].id)
+                                .padding(.horizontal, 24).offset(x: dragOffset)
+                                .rotationEffect(.degrees(reduceMotion ? 0 : dragOffset / geometry.size.width * 12))
+                                .simultaneousGesture(DragGesture(minimumDistance: 12)
+                                    .onChanged { value in
+                                        guard !advancing else { return }
+                                        revealAllowedAfter = Date().addingTimeInterval(0.3)
+                                        if dragAxis == 0 { dragAxis = abs(value.translation.width) > abs(value.translation.height) ? 1 : -1 }
+                                        guard dragAxis == 1 else { return }
+                                        let candidate = value.translation.width
+                                        let target = deck.destination(from: selection, direction: candidate < 0 ? 1 : -1)
+                                        dragOffset = target == selection ? candidate * 0.2 : candidate
+                                    }
+                                    .onEnded { value in
+                                        revealAllowedAfter = Date().addingTimeInterval(0.3)
+                                        let horizontal = dragAxis == 1
+                                        dragAxis = 0
+                                        guard !advancing else { return }
+                                        let distance = value.translation.width
+                                        if horizontal && (abs(distance) > geometry.size.width * 0.22 || abs(value.predictedEndTranslation.width) > geometry.size.width * 0.5) {
+                                            move(distance < 0 ? 1 : -1, width: geometry.size.width)
+                                        } else {
+                                            withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.82)) { dragOffset = 0 }
+                                        }
+                                    })
                         }
-                    }.tabViewStyle(.page(indexDisplayMode: .never)).accessibilityIdentifier("flashcard-pager")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }.accessibilityIdentifier("flashcard-pager")
                     HStack(spacing: 24) {
                         navigationButton("Previous word", symbol: "chevron.left", direction: -1)
                         Text("\(selection + 1) of \(deck.words.count)").font(.subheadline).monospacedDigit()
@@ -719,41 +755,80 @@ private struct FlashcardsView: View {
     }
     private func navigationButton(_ label: String, symbol: String, direction: Int) -> some View {
         Button {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { selection = deck.destination(from: selection, direction: direction) }
+            move(direction, width: 500)
         } label: {
             Image(systemName: symbol).frame(width: 48, height: 48).modifier(SoftGlass())
         }.buttonStyle(.plain).accessibilityLabel(label)
             .disabled(deck.destination(from: selection, direction: direction) == selection)
+    }
+    private func move(_ direction: Int, width: Double) {
+        guard !advancing else { return }
+        let destination = deck.destination(from: selection, direction: direction)
+        guard destination != selection else {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.82)) { dragOffset = 0 }
+            return
+        }
+        if reduceMotion { selection = destination; dragOffset = 0; return }
+        advancing = true
+        withAnimation(.easeIn(duration: 0.2), completionCriteria: .logicallyComplete) {
+            dragOffset = direction > 0 ? -width * 1.2 : width * 1.2
+        } completion: {
+            selection = destination
+            dragOffset = 0
+            advancing = false
+        }
     }
 }
 
 private struct FlashcardView: View {
     let word: WordState
     let selected: Bool
+    var canReveal: () -> Bool = { true }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
     var body: some View {
+        ZStack {
+            face(back: false).modifier(FlashcardFaceRotation(angle: revealed && !reduceMotion ? 180 : 0, back: false))
+                .opacity(reduceMotion && revealed ? 0 : 1).accessibilityHidden(revealed).allowsHitTesting(!revealed)
+            face(back: true).modifier(FlashcardFaceRotation(angle: reduceMotion ? 180 : (revealed ? 180 : 0), back: true))
+                .opacity(reduceMotion && !revealed ? 0 : 1).accessibilityHidden(!revealed).allowsHitTesting(revealed)
+        }.onChange(of: selected) { _, _ in revealed = false }
+    }
+    private func face(back: Bool) -> some View {
         ScrollView {
             VStack(spacing: 28) {
                 HStack(spacing: 10) { RecallBars(count: word.bars); Text(word.label).font(.subheadline).foregroundStyle(MuralColor.secondary) }
                     .accessibilityElement(children: .combine).accessibilityIdentifier("flashcard-proficiency")
                 Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
                     .multilineTextAlignment(.center).textSelection(.enabled).accessibilityIdentifier("flashcard-word")
-                if revealed {
+                if back {
                     Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
-                        .accessibilityIdentifier("flashcard-meaning").transition(.opacity)
+                        .accessibilityIdentifier("flashcard-meaning")
                 }
-                Button(revealed ? "Hide meaning" : "Tap to reveal meaning") { reveal() }
+                Button(back ? "Hide meaning" : "Tap to reveal meaning") { reveal() }
                     .font(.subheadline).foregroundStyle(MuralColor.secondary).frame(minHeight: 44)
                     .accessibilityIdentifier("reveal-flashcard")
             }.padding(28).frame(maxWidth: .infinity, minHeight: 320)
                 .background(.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 32))
                 .overlay(RoundedRectangle(cornerRadius: 32).strokeBorder(MuralColor.peach.opacity(0.65), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 32)).onTapGesture { reveal() }
-                .accessibilityAction(named: revealed ? "Hide meaning" : "Reveal meaning") { reveal() }
+                .accessibilityAction(named: back ? "Hide meaning" : "Reveal meaning") { reveal() }
                 .padding(.vertical, 12)
         }.defaultScrollAnchor(.center, for: .alignment).scrollIndicators(.hidden)
-            .onChange(of: selected) { _, _ in revealed = false }
     }
-    private func reveal() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { revealed.toggle() } }
+    private func reveal() {
+        guard canReveal() else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.48)) { revealed.toggle() }
+    }
+}
+
+private struct FlashcardFaceRotation: AnimatableModifier {
+    var angle: Double
+    let back: Bool
+    var animatableData: Double { get { angle } set { angle = newValue } }
+    func body(content: Content) -> some View {
+        content.opacity((angle >= 90) == back ? 1 : 0)
+            .rotation3DEffect(.degrees(angle - (back ? 180 : 0)), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+            .allowsHitTesting((angle >= 90) == back)
+    }
 }

@@ -1116,14 +1116,26 @@ final class MuralUITests: XCTestCase {
         let progress = app.staticTexts["flashcard-progress"]
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
         XCTAssertEqual(progress.label, "1 of 4")
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
+        let shortDrag = app.staticTexts["flashcard-word"]
+        let start = shortDrag.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -24, dy: 0)))
+        XCTAssertEqual(progress.label, "1 of 4")
+        shortDrag.swipeRight()
+        XCTAssertEqual(progress.label, "1 of 4")
         XCTAssertFalse(app.buttons["Previous word"].isEnabled)
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
         let originalWord = app.staticTexts["flashcard-word"].label
         app.buttons["reveal-flashcard"].tap()
         XCTAssertTrue(app.staticTexts["flashcard-meaning"].waitForExistence(timeout: 3))
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
+        app.buttons["reveal-flashcard"].tap()
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
         let card = app.staticTexts["flashcard-word"]
         card.swipeLeft()
         XCTAssertEqual(progress.label, "2 of 4")
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
         app.staticTexts["flashcard-word"].swipeUp()
         XCTAssertEqual(progress.label, "2 of 4")
@@ -1160,6 +1172,22 @@ final class MuralUITests: XCTestCase {
         app.tabBars.buttons["Words"].tap()
         XCTAssertTrue(app.buttons["open-flashcards"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["open-flashcards"].isEnabled)
+    }
+
+    func testFlashcardLongMeaningScrollsWithoutChangingCards() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=words", "--preview-long-flashcard", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-flashcards"].waitForExistence(timeout: 10))
+        app.buttons["open-flashcards"].tap()
+        app.buttons["reveal-flashcard"].tap()
+        let meaning = app.staticTexts["flashcard-meaning"]
+        XCTAssertTrue(meaning.waitForExistence(timeout: 5))
+        let startY = meaning.frame.minY
+        app.scrollViews.firstMatch.swipeUp()
+        XCTAssertLessThan(meaning.frame.minY, startY - 10)
+        XCTAssertEqual(app.staticTexts["flashcard-progress"].label, "1 of 4")
+        XCTAssertTrue(app.buttons["close-flashcards"].isHittable)
     }
 
     func testCaptionPauseSurvivesMeaningVisibilityAndNavigation() {
