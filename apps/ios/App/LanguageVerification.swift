@@ -155,6 +155,7 @@ extension AudioVerification {
         }
         if report.connected {
             if !coordinator.isMuted { coordinator.toggleMute() }
+            _ = await coordinator.sendTyped("Say one short greeting in \(coordinator.language.name).")
             report.receivedGreeting = await waitFor(30) { coordinator.assistantPassage != nil }
             await settleCaption()
             // One support-language beginner request, then a target-language question with more complex syntax.

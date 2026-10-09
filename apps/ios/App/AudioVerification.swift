@@ -46,13 +46,17 @@ extension AudioVerification {
             do {
                 let (_, response) = try await ManagedAccountHTTP().send(URLRequest(url: URL(string: "https://api.mural.chat/healthz")!))
                 result["httpStatus"] = (response as? HTTPURLResponse)?.statusCode
-                let owner = try await GuestAccess.shared.owner(member: nil)
+                let member = try ManagedAccountConfiguration.load().flatMap { try ManagedAccountKeychain(scope: $0.storageScope).load() }
+                let owner = try await GuestAccess.shared.owner(member: member)
                 result["hostedAvailable"] = try await HostedClient.shared?.available(owner)
                 result["canStart"] = try await HostedClient.shared?.balance(owner).canStart
             } catch let error as URLError {
                 result["networkErrorCode"] = error.code.rawValue
             } catch {
                 result["unexpectedFailure"] = true
+                result["failureType"] = String(describing: type(of: error))
+                if let account = error as? ManagedAccountError { result["accountFailure"] = String(describing: account) }
+                if let hosted = error as? HostedError { result["hostedFailure"] = String(describing: hosted) }
                 result["networkErrorCode"] = UserDefaults.standard.object(forKey: "verificationNetworkErrorCode")
             }
             if let data = try? JSONSerialization.data(withJSONObject: result) {
