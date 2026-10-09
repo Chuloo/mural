@@ -48,6 +48,7 @@ extension AudioVerification {
                 result["httpStatus"] = (response as? HTTPURLResponse)?.statusCode
                 let member = try ManagedAccountConfiguration.load().flatMap { try ManagedAccountKeychain(scope: $0.storageScope).load() }
                 let owner = try await GuestAccess.shared.owner(member: member)
+                result["verificationAccountID"] = owner.accountID.uuidString
                 result["hostedAvailable"] = try await HostedClient.shared?.available(owner)
                 result["canStart"] = try await HostedClient.shared?.balance(owner).canStart
             } catch let error as URLError {

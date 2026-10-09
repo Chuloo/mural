@@ -171,9 +171,14 @@ extension AudioVerification {
                 "ru": "Если бы ты открыл кафе, как бы ты использовал местные продукты и сохранял доступные цены?"
             ]
             for reply in ["I am learning. How can I politely order a coffee?", advanced[id] ?? "Tell me more."] {
+                _ = await waitFor(10) { !coordinator.working }
                 let before = coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0
-                await coordinator.sendTyped(reply)
-                if await waitFor(35, condition: { (coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0) > before }) {
+                let previousCaption = coordinator.caption
+                guard await coordinator.sendTyped(reply) else {
+                    report.failure = "The synthetic typed turn was not accepted."
+                    break
+                }
+                if await waitFor(35, condition: { (coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0) > before || coordinator.caption != previousCaption }) {
                     report.typedReplies += 1
                     await settleCaption()
                 } else { break }
