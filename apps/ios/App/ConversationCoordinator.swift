@@ -10,6 +10,8 @@ import MuralCore
     private(set) var state: ConnectionState = .idle
     private(set) var session: SessionRecord?
     var selectedTheme: ConversationTheme?
+    var targetCaptionFollowing = CaptionFollowing()
+    var meaningCaptionFollowing = CaptionFollowing()
     private(set) var inputLevel = 0.0
     private(set) var outputLevel = 0.0
     private(set) var isMuted = false
@@ -626,7 +628,7 @@ import MuralCore
         }
         session = record
         if active { state = .active; scheduleTranslation() }
-        else { state = .closing; finish(final: !checkNotice) }
+        else { state = .closing; finish(final: !checkNotice); scheduleTranslation() }
         if arguments.contains("--preview-free-boundary") {
             cancelReset(); continuationSession = record; continuationOwner = UUID()
             continuationNeedsMinutes = arguments.contains("--preview-continuation-insufficient")
@@ -654,7 +656,7 @@ import MuralCore
         do {
             try await Task.sleep(for: .seconds(8))
             session?.correctFragment(id: "caption-first", text: String(repeating: "Я люблю читать книги и разговаривать за чашкой кофе. ", count: 12))
-            try await Task.sleep(for: .seconds(8))
+            try await Task.sleep(for: .seconds(ProcessInfo.processInfo.arguments.contains("--preview-caption-persistence") ? 30 : 8))
             session?.append(Fragment(id: "caption-next", speaker: .assistant,
                 text: String(repeating: "Ещё одна история о книгах и кофе. ", count: 10), startMS: 6000, endMS: 7000))
         } catch {}

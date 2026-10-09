@@ -9,16 +9,6 @@ struct RootView: View {
     init(store: LearningStore) {
         let coordinator = ConversationCoordinator(store: store)
         #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--preview-onboarding") {
-            store.updatePreferences { $0.hasOnboarded = false }
-        }
-        if ProcessInfo.processInfo.arguments.contains("--preview"), ProcessInfo.processInfo.arguments.contains("--preview-existing-user") {
-            store.updatePreferences { $0.hasOnboarded = true }
-        }
-        if let screen = ScreenshotPreview.screen { coordinator.prepareScreenshot(screen) }
-        coordinator.prepareTypedReplyPreview()
-        coordinator.prepareConversationPolicyPreview()
-        coordinator.prepareCaptionFollowingPreview()
         _tab = State(initialValue: ScreenshotPreview.tab)
         #endif
         _coordinator = State(initialValue: coordinator)
@@ -88,6 +78,16 @@ struct RootView: View {
         #if DEBUG
         .task {
             #if targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--preview-onboarding") {
+                coordinator.store.updatePreferences { $0.hasOnboarded = false }
+            }
+            if ProcessInfo.processInfo.arguments.contains("--preview"), ProcessInfo.processInfo.arguments.contains("--preview-existing-user") {
+                coordinator.store.updatePreferences { $0.hasOnboarded = true }
+            }
+            if let screen = ScreenshotPreview.screen { coordinator.prepareScreenshot(screen) }
+            coordinator.prepareTypedReplyPreview()
+            coordinator.prepareConversationPolicyPreview()
+            coordinator.prepareCaptionFollowingPreview()
             if ProcessInfo.processInfo.arguments.contains("--verify-network-recovery") {
                 coordinator.notice = await LiveTransport.verifyRecoveryLifecycle() ? "Network recovery lifecycle passed" : "Network recovery lifecycle failed"
                 return
@@ -236,7 +236,7 @@ struct TalkView: View {
                     .frame(height: targetLineHeight * 3 + (coordinator.language.id == "zh" ? 58 : 0))
                     .accessibilityIdentifier("target-passage-scroll")
                 if coordinator.store.preferences.meaningVisible {
-                    followingPassage(text: coordinator.meaning) { meaningPassage }
+                    followingPassage(text: coordinator.meaning, isMeaning: true) { meaningPassage }
                         .frame(height: meaningLineHeight * 3 + (coordinator.meaningError == nil ? 0 : 60))
                         .accessibilityIdentifier("meaning-passage-scroll")
                 }
@@ -285,8 +285,11 @@ struct TalkView: View {
             }
         }.font(.footnote).frame(maxWidth: .infinity)
     }
-    private func followingPassage<Content: View>(text: String, @ViewBuilder content: @escaping () -> Content) -> some View {
-        FollowingPassage(passageID: coordinator.session.map { $0.id.uuidString + ":" + (coordinator.assistantPassage?.id ?? "") }, text: text, content: content)
+    private func followingPassage<Content: View>(text: String, isMeaning: Bool = false, @ViewBuilder content: @escaping () -> Content) -> some View {
+        let following = Binding(get: { isMeaning ? coordinator.meaningCaptionFollowing : coordinator.targetCaptionFollowing },
+                                set: { if isMeaning { coordinator.meaningCaptionFollowing = $0 } else { coordinator.targetCaptionFollowing = $0 } })
+        return FollowingPassage(passageID: coordinator.session.map { $0.id.uuidString + ":" + (coordinator.assistantPassage?.id ?? "") },
+                                text: text, content: content, following: following)
     }
     private var linkedCaption: AttributedString {
         var result = AttributedString()
@@ -411,7 +414,7 @@ private struct FollowingPassage<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
-    @State private var following = CaptionFollowing()
+    @Binding var following: CaptionFollowing
     @State private var position = ScrollPosition(y: 0)
     @State private var offset = 0.0
     @State private var maximum = 0.0

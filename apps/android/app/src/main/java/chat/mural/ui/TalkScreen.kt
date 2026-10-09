@@ -113,8 +113,8 @@ fun TalkScreen(
     val targetScroll = remember(assistantPassage?.id) { ScrollState(0) }
     val meaningScroll = remember(assistantPassage?.id, vm.archive.preferences.meaningLanguage) { ScrollState(0) }
     val textMeasurer = rememberTextMeasurer()
-    val targetFollowing = FollowCaption(targetScroll, assistantPassage?.id)
-    val meaningFollowing = FollowCaption(meaningScroll, assistantPassage?.id)
+    val targetFollowing = FollowCaption(targetScroll, assistantPassage?.id, vm.targetCaptionFollowing) { vm.targetCaptionFollowing = it }
+    val meaningFollowing = FollowCaption(meaningScroll, assistantPassage?.id, vm.meaningCaptionFollowing) { vm.meaningCaptionFollowing = it }
 
     BoxWithConstraints(Modifier.fillMaxSize().testTag("talk-screen")) {
     val scrollPage = LocalDensity.current.fontScale > 1.3f || maxHeight < 480.dp
@@ -337,8 +337,10 @@ fun TalkScreen(
 }
 
 @Composable
-internal fun FollowCaption(state: ScrollState, passageID: String?): Modifier {
-    var following by remember(passageID) { mutableStateOf(chat.mural.core.CaptionFollowing(passageID)) }
+internal fun FollowCaption(state: ScrollState, passageID: String?, following: chat.mural.core.CaptionFollowing,
+    onFollowingChanged: (chat.mural.core.CaptionFollowing) -> Unit): Modifier {
+    val latestFollowing by androidx.compose.runtime.rememberUpdatedState(following)
+    fun interrupt() = onFollowingChanged(latestFollowing.receive(passageID).interrupt())
     val density = LocalDensity.current.density
     val context = androidx.compose.ui.platform.LocalContext.current
     val accessibility = remember(context) { context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager }
@@ -352,21 +354,22 @@ internal fun FollowCaption(state: ScrollState, passageID: String?): Modifier {
     val connection = remember(passageID) {
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
             override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
-                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput && available.y != 0f) following = following.interrupt()
+                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput && available.y != 0f) interrupt()
                 return androidx.compose.ui.geometry.Offset.Zero
             }
         }
     }
     LaunchedEffect(state, passageID) {
+        onFollowingChanged(latestFollowing.receive(passageID))
         state.interactionSource.interactions.collect { interaction ->
-            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) following = following.interrupt()
+            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) interrupt()
         }
     }
     LaunchedEffect(state, passageID, following.interrupted, touchExploration) {
         if (passageID == null || following.interrupted || touchExploration) return@LaunchedEffect
         kotlinx.coroutines.delay(900)
         while (true) {
-            val next = following.nextOffset(state.value.toDouble() / density, state.maxValue.toDouble() / density, .05,
+            val next = latestFollowing.nextOffset(state.value.toDouble() / density, state.maxValue.toDouble() / density, .05,
                 reducedMotion = !android.animation.ValueAnimator.areAnimatorsEnabled()) * density
             if (next > state.value) state.scrollTo(next.toInt())
             kotlinx.coroutines.delay(50)

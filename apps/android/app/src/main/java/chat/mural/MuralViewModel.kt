@@ -106,6 +106,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var loadingHistory by mutableStateOf(true); private set
     var session by mutableStateOf<SessionRecord?>(null); private set
     var state by mutableStateOf("idle"); private set
+    var targetCaptionFollowing by mutableStateOf(CaptionFollowing())
+    var meaningCaptionFollowing by mutableStateOf(CaptionFollowing())
     var error by mutableStateOf<String?>(null); private set
     var errorNeedsKeySetup by mutableStateOf(false); private set
     var errorNeedsAccountSignIn by mutableStateOf(false); private set

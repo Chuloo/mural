@@ -13,10 +13,13 @@ final class MuralUITests: XCTestCase {
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<8 {
+            let viewport = app.scrollViews.firstMatch
             let footer = app.buttons["onboarding-continue"].frame
-            if element.isHittable && element.frame.minY >= 110 && element.frame.maxY < footer.minY - 16 { return }
-            if element.frame.maxY <= 110 { app.swipeDown() }
-            else { app.swipeUp() }
+            let top = max(110, viewport.frame.minY)
+            let bottom = min(viewport.frame.maxY, footer.minY - 4)
+            if element.isHittable && element.frame.midY >= top && element.frame.midY < bottom { return }
+            if element.frame.midY <= top { viewport.swipeDown(velocity: .slow) }
+            else { viewport.swipeUp(velocity: .slow) }
         }
         XCTAssertTrue(element.isHittable)
     }
@@ -588,7 +591,7 @@ final class MuralUITests: XCTestCase {
         app.navigationBars.buttons.firstMatch.tap()
         app.buttons["account-purchase-history"].tap()
         XCTAssertTrue(app.staticTexts["Recent Apple purchases"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Refund recorded"].exists)
+        XCTAssertTrue(app.staticTexts["Test refund recorded"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Quantity · 2"].exists)
         XCTAssertFalse(app.buttons["Request a refund"].firstMatch.isEnabled)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "USD")).firstMatch.exists)
@@ -1074,6 +1077,29 @@ final class MuralUITests: XCTestCase {
     func testDutchOnboarding() { checkNewOnboarding(id: "nl", greeting: "Hoi!") }
     func testRussianOnboarding() { checkNewOnboarding(id: "ru", greeting: "Привет!") }
 
+    func testDutchAndRussianMeaningChoicesReachTalk() {
+        for (meaning, greeting) in [("Dutch", "Hoi!"), ("Russian", "Привет!")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--preview", "--preview-onboarding"]
+            app.launch()
+            XCTAssertTrue(app.buttons["onboarding-continue"].waitForExistence(timeout: 10))
+            app.buttons["onboarding-continue"].tap()
+            app.buttons["onboarding-meaning-picker"].tap()
+            let choice = app.buttons[meaning]
+            for _ in 0..<6 {
+                if choice.exists && choice.isHittable { break }
+                app.collectionViews.firstMatch.swipeUp()
+            }
+            choice.tap()
+            XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, greeting)
+            confirmAdult(in: app)
+            app.buttons["onboarding-continue"].tap()
+            XCTAssertTrue(app.staticTexts["meaning-caption"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.staticTexts["meaning-caption"].label, greeting)
+            app.terminate()
+        }
+    }
+
     func testFlashcardsRevealNavigateAndIgnoreVerticalSwipes() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--screenshot=words"]
@@ -1131,6 +1157,30 @@ final class MuralUITests: XCTestCase {
         app.tabBars.buttons["Words"].tap()
         XCTAssertTrue(app.buttons["open-flashcards"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["open-flashcards"].isEnabled)
+    }
+
+    func testCaptionPauseSurvivesMeaningVisibilityAndNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-caption-following", "--preview-caption-persistence"]
+        app.launch()
+        let target = app.descendants(matching: .any)["target-passage-scroll"].firstMatch
+        let meaning = app.descendants(matching: .any)["meaning-passage-scroll"].firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 10))
+        let moved = NSPredicate { _, _ in Int((target.value as? String ?? "0").split(separator: "|").first ?? "0") ?? 0 > 20 }
+        expectation(for: moved, evaluatedWith: target)
+        waitForExpectations(timeout: 5)
+        target.swipeDown()
+        meaning.swipeDown()
+        XCTAssertTrue((target.value as? String ?? "").contains("paused"))
+        XCTAssertTrue((meaning.value as? String ?? "").contains("paused"))
+        app.buttons["Hide meaning subtitles"].tap()
+        app.buttons["Show meaning subtitles"].tap()
+        XCTAssertTrue(meaning.waitForExistence(timeout: 3))
+        XCTAssertTrue((meaning.value as? String ?? "").contains("paused"))
+        app.tabBars.buttons["Words"].tap()
+        app.tabBars.buttons["Talk"].tap()
+        XCTAssertTrue((target.value as? String ?? "").contains("paused"))
+        XCTAssertTrue((meaning.value as? String ?? "").contains("paused"))
     }
 
     func testCaptionsFollowPauseAcrossStreamingAndResumeNextReply() {

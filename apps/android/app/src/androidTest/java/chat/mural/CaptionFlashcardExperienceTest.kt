@@ -1,5 +1,7 @@
 package chat.mural
 
+import android.graphics.Bitmap
+import java.io.File
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
@@ -29,6 +31,12 @@ class CaptionFlashcardExperienceTest {
     @After fun restore() {
         if (!::original.isInitialized) return
         compose.runOnIdle { state("session", null); state("state", "idle"); state("meaning", ""); state("archive", ArchiveCodec.decode(original)) }
+    }
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val folder = File(instrumentation.targetContext.filesDir, "feature-review").apply { mkdirs() }
+        File(folder, "$name.png").outputStream().use { instrumentation.uiAutomation.takeScreenshot()!!.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
     private fun sample(id: String, lemma: String, meaning: String, day: Int = 0): SessionRecord {
         val date = nowSeconds() - day * 86400
@@ -61,6 +69,7 @@ class CaptionFlashcardExperienceTest {
         assertTrue(level.height > 0)
         compose.onAllNodesWithTag("reveal-flashcard").onFirst().performClick()
         compose.onAllNodesWithTag("flashcard-meaning", useUnmergedTree = true).onFirst().assertIsDisplayed()
+        capture("flashcards-revealed")
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("flashcard-progress").assertTextEquals("2 of 2")
         compose.onNodeWithTag("flashcard-next").assertIsNotEnabled()
@@ -102,8 +111,19 @@ class CaptionFlashcardExperienceTest {
         show(first)
         val mic = compose.onNodeWithTag("start-conversation").fetchSemanticsNode().boundsInRoot
         compose.waitUntil(5000) { offset("target-passage-scroll") > 20f && offset("meaning-passage-scroll") > 20f }
+        capture("captions-following")
         compose.onNodeWithTag("target-passage-scroll").performTouchInput { swipeDown() }
-        val paused = offset("target-passage-scroll")
+        var paused = offset("target-passage-scroll")
+        compose.onNodeWithTag("meaning-passage-scroll").performTouchInput { swipeDown() }
+        compose.runOnIdle { assertTrue(vm.targetCaptionFollowing.interrupted); assertTrue(vm.meaningCaptionFollowing.interrupted) }
+        compose.runOnIdle { vm.updatePreferences(vm.archive.preferences.copy(meaningVisible = false)) }
+        compose.onNodeWithTag("meaning-passage-scroll").assertDoesNotExist()
+        compose.runOnIdle { vm.updatePreferences(vm.archive.preferences.copy(meaningVisible = true)) }
+        compose.runOnIdle { assertTrue(vm.meaningCaptionFollowing.interrupted) }
+        compose.onNodeWithTag("tab-words").performClick()
+        compose.onNodeWithTag("tab-talk").performClick()
+        compose.runOnIdle { assertTrue(vm.targetCaptionFollowing.interrupted); assertTrue(vm.meaningCaptionFollowing.interrupted) }
+        paused = offset("target-passage-scroll")
         compose.runOnIdle { state("session", vm.session!!.copy(fragments = mutableListOf(first.copy(text = text + "Ещё немного.")))) }
         Thread.sleep(1000)
         assertEquals(paused, offset("target-passage-scroll"), 1f)
