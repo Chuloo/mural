@@ -752,7 +752,7 @@ private struct FlashcardView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 32)).onTapGesture { reveal() }
                 .accessibilityAction(named: revealed ? "Hide meaning" : "Reveal meaning") { reveal() }
                 .padding(.vertical, 12)
-        }.scrollIndicators(.hidden)
+        }.defaultScrollAnchor(.center, for: .alignment).scrollIndicators(.hidden)
             .onChange(of: selected) { _, _ in revealed = false }
     }
     private func reveal() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { revealed.toggle() } }
