@@ -88,7 +88,7 @@ public enum LearningEngine {
                     capabilityEvidence[a.capability, default: []].insert("\(calendar.startOfDay(for: a.createdAt))|\(a.context)")
                 }
                 var seenWords = Set<String>()
-                for word in a.words where !hiddenWords.contains(word.key) && seenWords.insert(word.key).inserted {
+                for word in a.words where !WordProposal.isHidden(key: word.key, hiddenWords: hiddenWords) && seenWords.insert(word.key).inserted {
                     events[word.key, default: []].append((word, a.createdAt, a.context))
                 }
             }

@@ -100,7 +100,40 @@ public struct WordProposal: Codable, Sendable {
         self.lemma = lemma; self.meaning = meaning; self.form = form; self.kind = kind
         self.confidence = confidence; self.sourceIDs = sourceIDs; self.quote = quote; self.language = language
     }
-    public var key: String { language + "|" + lemma.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() + "|" + meaning.lowercased() }
+    public var key: String { language + "|" + Self.normalizedLemma(lemma) }
+
+    /// Dictionary identity for vocabulary: language + lemma, ignoring paraphrase and leading articles.
+    public static func normalizedLemma(_ lemma: String) -> String {
+        var text = lemma.trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+        let articles = [
+            "unas ", "unos ", "une ", "uno ", "una ", "los ", "las ", "les ", "des ",
+            "der ", "die ", "das ", "den ", "dem ", "ein ", "eine ", "gli ", "the ",
+            "el ", "la ", "lo ", "le ", "un ", "an ", "os ", "as ", "um ", "uma ",
+            "il ", "en ", "et ", "ei ", "å ", "o ", "a ", "i ", "l’", "l'",
+        ].sorted { $0.count > $1.count }
+        for article in articles where text.hasPrefix(article) {
+            text = String(text.dropFirst(article.count))
+            break
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Matches current keys and legacy `language|lemma|meaning` hide entries.
+    public static func isHidden(key: String, hiddenWords: [String]) -> Bool {
+        hiddenWords.contains { hidden in
+            let h = canonicalHiddenKey(hidden)
+            return h == key || h.hasPrefix(key + "|")
+        }
+    }
+
+    /// Collapse legacy `language|lemma|meaning` hide rows to `language|lemma`.
+    public static func canonicalHiddenKey(_ key: String) -> String {
+        let parts = key.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 2 else { return key.precomposedStringWithCanonicalMapping }
+        return parts[0] + "|" + normalizedLemma(parts[1])
+    }
 }
 
 public struct Assessment: Codable, Identifiable, Sendable {
@@ -216,7 +249,8 @@ public struct Archive: Codable, Sendable {
     public static func decode(_ data: Data) throws -> Archive {
         guard data.count <= maximumEncodedBytes else { throw ArchiveError.tooLarge }
         let migrated = try migrate(data)
-        let archive = try JSONDecoder().decode(Archive.self, from: migrated)
+        var archive = try JSONDecoder().decode(Archive.self, from: migrated)
+        archive.preferences.hiddenWords = archive.preferences.hiddenWords.map(WordProposal.canonicalHiddenKey)
         try archive.validate()
         return archive
     }
