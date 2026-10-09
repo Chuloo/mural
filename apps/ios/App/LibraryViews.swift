@@ -740,26 +740,19 @@ private struct FlashcardsView: View {
                                     })
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }.accessibilityIdentifier("flashcard-pager")
-                    HStack(spacing: 24) {
-                        navigationButton("Previous word", symbol: "chevron.left", direction: -1)
-                        Text("\(selection + 1) of \(deck.words.count)").font(.subheadline).monospacedDigit()
-                            .foregroundStyle(MuralColor.secondary).accessibilityIdentifier("flashcard-progress")
-                        navigationButton("Next word", symbol: "chevron.right", direction: 1)
-                    }.padding(.bottom, 24)
+                    }.accessibilityElement(children: .contain)
+                        .accessibilityLabel("Flashcard")
+                        .accessibilityValue("\(selection + 1) of \(deck.words.count)")
+                        .accessibilityIdentifier("flashcard-pager")
+                        .accessibilityActions {
+                            if selection > 0 { Button("Previous word") { move(-1, width: 500) } }
+                            if selection < deck.words.count - 1 { Button("Next word") { move(1, width: 500) } }
+                        }
                 }
             }.padding(.top, 16).background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .navigationTitle("Your words").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("close-flashcards") } }
         }.tint(MuralColor.ink).presentationDetents([.large]).presentationDragIndicator(.hidden).interactiveDismissDisabled()
-    }
-    private func navigationButton(_ label: String, symbol: String, direction: Int) -> some View {
-        Button {
-            move(direction, width: 500)
-        } label: {
-            Image(systemName: symbol).frame(width: 48, height: 48).modifier(SoftGlass())
-        }.buttonStyle(.plain).accessibilityLabel(label)
-            .disabled(deck.destination(from: selection, direction: direction) == selection)
     }
     private func move(_ direction: Int, width: Double) {
         guard !advancing else { return }

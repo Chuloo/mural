@@ -65,6 +65,14 @@ class CaptionFlashcardExperienceTest {
         }
         compose.onNodeWithTag("tab-words").performClick()
     }
+    private fun position(value: String) {
+        compose.onNodeWithTag("flashcard-pager").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value))
+    }
+    private fun accessibleMove(label: String) {
+        val action = compose.onNodeWithTag("flashcard-pager").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].first { it.label == label }
+        compose.runOnIdle { assertTrue(action.action()) }
+        compose.waitForIdle()
+    }
     private fun presentForRecording() {
         if (androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("experienceRecording") == "true") {
             compose.waitForIdle()
@@ -79,15 +87,15 @@ class CaptionFlashcardExperienceTest {
         assertTrue(trigger.left >= title.right)
         assertEquals(title.center.y, trigger.center.y, 5f)
         compose.onNodeWithTag("open-flashcards").performClick()
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        position("1 of 2")
         presentForRecording()
         compose.onNodeWithTag("flashcard-pager").performTouchInput {
             swipe(center, center.copy(x = center.x - width * .08f), durationMillis = 300)
         }
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        position("1 of 2")
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeRight() }
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
-        compose.onNodeWithTag("flashcard-previous").assertIsNotEnabled()
+        position("1 of 2")
+        compose.onNodeWithTag("flashcard-progress").assertDoesNotExist()
         compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
         val word = compose.onAllNodesWithTag("flashcard-word", useUnmergedTree = true).onFirst().fetchSemanticsNode().config[SemanticsProperties.Text].single().text
         val level = compose.onAllNodesWithTag("flashcard-proficiency", useUnmergedTree = true).onFirst().fetchSemanticsNode().boundsInRoot
@@ -100,22 +108,23 @@ class CaptionFlashcardExperienceTest {
         compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
         presentForRecording()
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeLeft() }
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("2 of 2")
+        position("2 of 2")
         presentForRecording()
-        compose.onNodeWithTag("flashcard-next").assertIsNotEnabled()
+        compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeLeft() }
+        position("2 of 2")
         compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeUp() }
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("2 of 2")
+        position("2 of 2")
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeDown() }
         compose.onNodeWithTag("flashcards-modal").assertIsDisplayed()
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeRight() }
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        position("1 of 2")
         compose.onAllNodesWithTag("flashcard-word", useUnmergedTree = true).onFirst().assertTextEquals(word)
         compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithTag("flashcard-next").performClick()
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("2 of 2")
-        compose.onNodeWithTag("flashcard-previous").performClick()
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        accessibleMove("Next word")
+        position("2 of 2")
+        accessibleMove("Previous word")
+        position("1 of 2")
         compose.onNodeWithTag("close-flashcards").performClick()
         compose.onNodeWithTag("words-screen").assertIsDisplayed()
         compose.runOnIdle { assertEquals(before, ArchiveCodec.encode(vm.archive)) }
@@ -128,7 +137,7 @@ class CaptionFlashcardExperienceTest {
         compose.onNode(hasSetTextAction()).performTextInput("кофе")
         compose.onNodeWithText("книга").assertDoesNotExist()
         compose.onNodeWithTag("open-flashcards").performClick()
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        position("1 of 2")
     }
     @Test fun longMeaningScrollsWithoutChangingCards() {
         compose.runOnIdle {
@@ -141,7 +150,7 @@ class CaptionFlashcardExperienceTest {
         val meaning = compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true)
         meaning.assertExists()
         compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeUp() }
-        compose.onNodeWithTag("flashcard-progress").assertTextEquals("1 of 2")
+        position("1 of 2")
         compose.onNodeWithTag("flashcards-modal").assertIsDisplayed()
         compose.onNodeWithTag("close-flashcards").assertIsDisplayed()
     }

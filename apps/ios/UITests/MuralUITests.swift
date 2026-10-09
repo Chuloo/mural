@@ -1113,18 +1113,19 @@ final class MuralUITests: XCTestCase {
         XCTAssertGreaterThan(trigger.frame.minX, heading.frame.maxX)
         XCTAssertEqual(trigger.frame.midY, heading.frame.midY, accuracy: 3)
         trigger.tap()
-        let progress = app.staticTexts["flashcard-progress"]
+        let progress = app.descendants(matching: .any)["flashcard-pager"].firstMatch
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
-        XCTAssertEqual(progress.label, "1 of 4")
+        XCTAssertEqual(progress.value as? String, "1 of 4")
         if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
         let card = app.descendants(matching: .any)["flashcard-pager"].firstMatch
         let shortDrag = card
         let start = shortDrag.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -24, dy: 0)))
-        XCTAssertEqual(progress.label, "1 of 4")
+        XCTAssertEqual(progress.value as? String, "1 of 4")
         shortDrag.swipeRight()
-        XCTAssertEqual(progress.label, "1 of 4")
-        XCTAssertFalse(app.buttons["Previous word"].isEnabled)
+        XCTAssertEqual(progress.value as? String, "1 of 4")
+        XCTAssertFalse(app.buttons["Previous word"].exists)
+        XCTAssertFalse(app.staticTexts["flashcard-progress"].exists)
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
         let originalWord = app.staticTexts["flashcard-word"].label
         app.buttons["reveal-flashcard"].tap()
@@ -1134,20 +1135,21 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
         if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
         card.swipeLeft()
-        XCTAssertEqual(progress.label, "2 of 4")
+        XCTAssertEqual(progress.value as? String, "2 of 4")
         if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
         card.swipeUp()
-        XCTAssertEqual(progress.label, "2 of 4")
+        XCTAssertEqual(progress.value as? String, "2 of 4")
         card.swipeDown()
-        XCTAssertEqual(progress.label, "2 of 4")
+        XCTAssertEqual(progress.value as? String, "2 of 4")
         card.swipeRight()
-        XCTAssertEqual(progress.label, "1 of 4")
+        XCTAssertEqual(progress.value as? String, "1 of 4")
         XCTAssertEqual(app.staticTexts["flashcard-word"].label, originalWord)
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
-        for _ in 0..<3 { app.buttons["Next word"].tap() }
-        XCTAssertEqual(progress.label, "4 of 4")
-        XCTAssertFalse(app.buttons["Next word"].isEnabled)
+        for _ in 0..<3 { card.swipeLeft() }
+        XCTAssertEqual(progress.value as? String, "4 of 4")
+        card.swipeLeft()
+        XCTAssertEqual(progress.value as? String, "4 of 4")
         let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Flashcards on iPhone"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["close-flashcards"].tap()
         XCTAssertTrue(trigger.waitForExistence(timeout: 3))
@@ -1162,8 +1164,8 @@ final class MuralUITests: XCTestCase {
         app.buttons["open-flashcards"].tap()
         XCTAssertTrue(app.staticTexts["flashcard-word"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["close-flashcards"].isHittable)
-        app.buttons["Next word"].tap()
-        XCTAssertEqual(app.staticTexts["flashcard-progress"].label, "2 of 4")
+        app.descendants(matching: .any)["flashcard-pager"].firstMatch.swipeLeft()
+        XCTAssertEqual(app.descendants(matching: .any)["flashcard-pager"].firstMatch.value as? String, "2 of 4")
         app.buttons["close-flashcards"].tap()
         // Screenshot fixtures hold their initial language; use a fresh Russian preview for isolation.
         app.terminate()
@@ -1186,7 +1188,7 @@ final class MuralUITests: XCTestCase {
         let startY = meaning.frame.minY
         app.scrollViews.firstMatch.swipeUp()
         XCTAssertLessThan(meaning.frame.minY, startY - 10)
-        XCTAssertEqual(app.staticTexts["flashcard-progress"].label, "1 of 4")
+        XCTAssertEqual(app.descendants(matching: .any)["flashcard-pager"].firstMatch.value as? String, "1 of 4")
         XCTAssertTrue(app.buttons["close-flashcards"].isHittable)
     }
 

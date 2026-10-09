@@ -51,6 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -349,6 +352,7 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val previous = stringResource(R.string.flashcards_previous)
     val next = stringResource(R.string.flashcards_next)
+    val position = stringResource(R.string.flashcards_progress, selection + 1, deck.words.size)
     fun move(direction: Int) {
         if (advancing) return
         scope.launch {
@@ -380,7 +384,14 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
                     Text(stringResource(R.string.flashcards_empty), Modifier.padding(24.dp))
                 } else {
                     Box(Modifier.weight(1f).fillMaxWidth().testTag("flashcard-pager")
-                        .onSizeChanged { cardWidth = it.width.toFloat() }) {
+                        .onSizeChanged { cardWidth = it.width.toFloat() }
+                        .semantics {
+                            stateDescription = position
+                            customActions = buildList {
+                                if (selection > 0) add(CustomAccessibilityAction(previous) { move(-1); true })
+                                if (selection < deck.words.lastIndex) add(CustomAccessibilityAction(next) { move(1); true })
+                            }
+                        }) {
                         val destination = deck.destination(selection, if (offset.value > 0) -1 else 1)
                         if (destination != selection) {
                             Flashcard(deck.words[destination], selected = false, preview = true, showContent = kotlin.math.abs(offset.value) > 6 * density,
@@ -414,12 +425,6 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
                                     }
                                 })
                         })
-                    }
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                        SoftRoundButton(MuralSymbol.Back, previous, { move(-1) }, enabled = selection > 0 && !advancing, modifier = Modifier.testTag("flashcard-previous"))
-                        Text(stringResource(R.string.flashcards_progress, selection + 1, deck.words.size), style = MaterialTheme.typography.bodyMedium,
-                            color = MuralColors.Secondary, modifier = Modifier.testTag("flashcard-progress"))
-                        SoftRoundButton(MuralSymbol.ChevronRight, next, { move(1) }, enabled = selection < deck.words.lastIndex && !advancing, modifier = Modifier.testTag("flashcard-next"))
                     }
                 }
             }
