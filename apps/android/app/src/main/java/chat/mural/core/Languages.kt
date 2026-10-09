@@ -280,11 +280,51 @@ object LanguageRegistry {
             "cabin" to ConversationTheme("cabin", "Isang maikling bakasyon", "A change of scene", "mountain.2", "Local life", "Plan an imagined weekend in the Philippines. Let the learner choose a city, coast or countryside, then discuss travel, food and activities.", 2),
             "traditions" to ConversationTheme("traditions", "Kuwentuhan sa hapag", "Stay a little longer", "fork.knife", "Local life", "Talk over an imagined meal in the Philippines about routines, family and everyday customs. Compare individual experiences without assuming one religion, language or tradition represents everyone.", 2))
     )
-    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin, serbian, greek, tagalog)
+    private val dutch = LanguageModule(
+        id = "nl",
+        name = "Dutch",
+        nativeName = "Nederlands",
+        variety = "Netherlands",
+        locale = "nl-NL",
+        greeting = "Hoi!",
+        greetingWord = "hoi",
+        speechGuidance = "Use clear, natural Standard Dutch as spoken in the Netherlands, with conversational rhythm, vowel length, the ui and ij/ei diphthongs, and natural g/ch sounds. Accept valid Belgian Dutch and regional pronunciation without treating an accent difference as an error. Use je and jij with friends and u when polite address fits the situation. Never infer a pronunciation error from a transcript alone.",
+        writingGuidance = "Use contemporary Dutch spelling, preserving diacritics and meaningful compounds. Keep separable verb particles and word order natural. Accept valid regional wording, composed and decomposed Unicode, and learner support in another language. Keep exact quotations unchanged. Do not append English translations or pronunciation guides to ordinary replies.",
+        lemmaGuidance = "Give nouns in singular with their dictionary article de or het and verbs in the infinitive, for example de fiets, het huis and fietsen. Group inflected and separated forms such as fietste under fietsen and belt op under opbellen when the sense is supported. Preserve reflexive verbs and useful phrases. Keep observed forms and exact quotations unchanged; omit ambiguous foreign-language evidence.",
+        topicPlaceholder = "Food, cycling, travel, everyday life…",
+        lookupUnavailableReply = "Ik kan dat nu niet controleren. Als je wilt, kunnen we in het algemeen over het onderwerp praten.",
+        teachingFocus = listOf("Greetings, introductions and short useful requests such as hoi, dank je and ik wil graag.", "Everyday questions, de and het, present tense, adjective agreement and basic word order.", "Connected stories, past events, perfect tense, separable verbs and everyday plans.", "Reasons and opinions, subordinate word order, er, modal verbs and practical problem-solving.", "Hypotheticals, idiomatic phrasing, register and nuanced connectors.", "Flexible extended discussion with precise, natural Dutch and appropriate tone."),
+        themeOverrides = mapOf("coffee" to ConversationTheme("coffee", "Een koffie?", "Something warm, please", "cup.and.saucer", "Everyday", "Meet at a café in the Netherlands. Order a drink and chat with suitable polite address.", 0),
+            "groceries" to ConversationTheme("groceries", "Op de markt", "A little of everything", "basket", "Everyday", "Shop at an imagined market in the Netherlands. Practise quantities, prices and friendly requests.", 2),
+            "travel" to ConversationTheme("travel", "Waar gaan we heen?", "Find your way", "tram", "Everyday", "Plan an imagined trip in the Netherlands. Practise directions and tickets without inventing current schedules or fares.", 1),
+            "cabin" to ConversationTheme("cabin", "Een weekend weg", "A change of scene", "mountain.2", "Local life", "Plan an imagined weekend in the Netherlands. Choose a city, coast or countryside together and discuss practical plans.", 2),
+            "traditions" to ConversationTheme("traditions", "Aan tafel", "Stay a little longer", "fork.knife", "Local life", "Talk over an imagined meal in the Netherlands. Compare individual customs without assuming one religion or tradition represents everyone.", 2))
+    )
+    private val russian = LanguageModule(
+        id = "ru",
+        name = "Russian",
+        nativeName = "Русский",
+        variety = "Standard",
+        locale = "ru-RU",
+        greeting = "Привет!",
+        greetingWord = "привет",
+        speechGuidance = "Use clear, natural Standard Russian with conversational intonation, lexical stress, unstressed vowel reduction and appropriate hard and soft consonants. Use ты with friends and вы when polite address fits the situation. Accept valid regional pronunciation without treating an accent difference as an error. Never infer a stress or pronunciation error from a transcript alone.",
+        writingGuidance = "Write contemporary Russian in Cyrillic with natural punctuation. Preserve ё where it clarifies the word and preserve learner-supplied ё and stress marks in quotations. Accept customary е for ё, composed and decomposed Unicode, and transliteration as learner support; model the Cyrillic form without calling the script choice a grammar error. Do not append transliteration, stress marks or English translations to ordinary replies.",
+        lemmaGuidance = "Give nouns in nominative singular, adjectives in masculine nominative singular and verbs in the infinitive, for example кофе, хороший and говорить. Keep perfective and imperfective verbs such as сделать and делать distinct, and retain reflexive endings. Group case-inflected forms such as книгу under книга when supported. Preserve meaningful ё, useful phrases, observed forms and exact quotations. Omit ambiguous transliterated or foreign-language evidence rather than claiming independent Russian production.",
+        topicPlaceholder = "Food, music, travel, everyday life…",
+        lookupUnavailableReply = "Сейчас я не могу это проверить. Если хочешь, мы можем поговорить об этой теме в целом.",
+        teachingFocus = listOf("Greetings, introductions and short useful requests such as привет, спасибо and можно.", "Everyday questions, gender, present forms, basic case uses and polite ты or вы in context.", "Connected stories, past events and plans; case agreement and common verb aspect contrasts.", "Reasons and opinions, verbs of motion, aspect, connected clauses and practical problem-solving.", "Hypotheticals, participial constructions, idiomatic phrasing and changes of register.", "Flexible extended discussion with precise, natural Russian and appropriate aspect, stress and tone."),
+        themeOverrides = mapOf("coffee" to ConversationTheme("coffee", "Выпьем кофе?", "Something warm, please", "cup.and.saucer", "Everyday", "Meet at a café in a Russian-speaking setting. Order a drink and chat with suitable polite address.", 0),
+            "groceries" to ConversationTheme("groceries", "На рынке", "A little of everything", "basket", "Everyday", "Shop at an imagined market in a Russian-speaking setting. Practise quantities, prices and friendly requests.", 2),
+            "travel" to ConversationTheme("travel", "Куда поедем?", "Find your way", "tram", "Everyday", "Plan an imagined trip in a Russian-speaking setting. Practise directions and tickets without inventing current schedules or fares.", 1),
+            "cabin" to ConversationTheme("cabin", "На выходные", "A change of scene", "mountain.2", "Local life", "Plan an imagined weekend in a Russian-speaking setting. Choose a city, coast or countryside together and discuss practical plans.", 2),
+            "traditions" to ConversationTheme("traditions", "За столом", "Stay a little longer", "fork.knife", "Local life", "Talk over an imagined meal in a Russian-speaking setting. Compare individual customs without assuming one religion or tradition represents everyone.", 2))
+    )
+    val all = listOf(norwegian, spanish, english, french, german, italian, portuguese, mandarin, serbian, greek, tagalog, dutch, russian)
     fun get(id: String) = all.firstOrNull { it.id == id }
 }
 
 object MeaningLanguages {
-    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian", "Serbian (Latin)", "Greek", "Tagalog (Filipino)")
-    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!", "Serbian (Latin)" to "Zdravo!", "Greek" to "Γεια σου!", "Tagalog (Filipino)" to "Kumusta!")[language] ?: "Hi!"
+    val all = listOf("English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian", "Serbian (Latin)", "Greek", "Tagalog (Filipino)", "Dutch", "Russian")
+    fun greeting(language: String) = mapOf("English" to "Hi!", "French" to "Salut !", "German" to "Hallo!", "Spanish" to "¡Hola!", "Norwegian" to "Hei!", "Portuguese" to "Olá!", "Italian" to "Ciao!", "Chinese (Simplified)" to "你好！", "Chinese" to "你好！", "Polish" to "Cześć!", "Arabic" to "مرحبًا!", "Ukrainian" to "Привіт!", "Serbian (Latin)" to "Zdravo!", "Greek" to "Γεια σου!", "Tagalog (Filipino)" to "Kumusta!", "Dutch" to "Hoi!", "Russian" to "Привет!")[language] ?: "Hi!"
 }

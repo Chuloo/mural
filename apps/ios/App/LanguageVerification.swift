@@ -123,7 +123,7 @@ extension AudioVerification {
         }
         write()
         coordinator.selectMeaningLanguage("English")
-        coordinator.store.updatePreferences { $0.meaningVisible = true; $0.sessionMinutes = 5 }
+        coordinator.store.updatePreferences { $0.meaningVisible = true; $0.sessionMinutes = ProcessInfo.processInfo.arguments.contains("--verify-short") ? 2 : 5 }
         coordinator.chooseTheme(coordinator.language.themes.first { $0.id == "coffee" })
         // SwiftUI's launch task can run before the first active scene callback.
         report.readyToStart = await waitFor(20) {
@@ -150,7 +150,9 @@ extension AudioVerification {
                 "zh": "如果你开一家咖啡馆，你会怎样在使用本地食材和保持价格合理之间取得平衡？",
                 "sr": "Kad bi otvorio kafić, kako bi pomirio domaće namirnice sa pristupačnim cenama?",
                 "el": "Αν άνοιγες μια καφετέρια, πώς θα κρατούσες προσιτές τις τιμές χρησιμοποιώντας τοπικά υλικά;",
-                "tl": "Kung magbubukas ka ng kapihan, paano mo mapapanatiling abot-kaya ang mga presyo habang gumagamit ng mga lokal na sangkap?"
+                "tl": "Kung magbubukas ka ng kapihan, paano mo mapapanatiling abot-kaya ang mga presyo habang gumagamit ng mga lokal na sangkap?",
+                "nl": "Als je een café zou openen, hoe zou je lokale producten en betaalbare prijzen combineren?",
+                "ru": "Если бы ты открыл кафе, как бы ты использовал местные продукты и сохранял доступные цены?"
             ]
             for reply in ["I am learning. How can I politely order a coffee?", advanced[id] ?? "Tell me more."] {
                 let before = coordinator.session?.fragments.filter { $0.speaker == .assistant }.count ?? 0
@@ -169,7 +171,7 @@ extension AudioVerification {
             }
             report.pinyinAvailable = MandarinPinyin.reading(coordinator.caption) != nil
             report.translated = await waitFor(20) { !coordinator.meaning.isEmpty && !coordinator.translating }
-            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡", "sr": "kafa", "el": "καφές", "tl": "kape"]
+            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡", "sr": "kafa", "el": "καφές", "tl": "kape", "nl": "koffie", "ru": "кофе"]
             do {
                 let result = try await coordinator.lookup(word: lookupWords[id] ?? coordinator.language.greetingWord, sentence: coordinator.caption)
                 report.lookupReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

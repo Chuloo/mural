@@ -615,7 +615,7 @@ import MuralCore
         }
         selectedTheme = language.themes.first { $0.id == "coffee" }
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
-        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "sr": "Volim kafu.", "el": "Μου αρέσει ο καφές.", "tl": "Gusto ko ng kape."]
+        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "sr": "Volim kafu.", "el": "Μου αρέσει ο καφές.", "tl": "Gusto ko ng kape.", "nl": "Ik houd van koffie.", "ru": "Я люблю кофе."]
         record.append(Fragment(speaker: .assistant, text: sample[language.id] ?? language.greeting, startMS: 0, endMS: 1000))
         record.translations[MeaningRequest.cacheKey(revisionKey: record.passages[0].revisionKey, language: "English")] = "I like coffee."
         let arguments = ProcessInfo.processInfo.arguments
@@ -638,6 +638,27 @@ import MuralCore
     }
     #endif
     #if DEBUG && targetEnvironment(simulator)
+    func prepareCaptionFollowingPreview() {
+        guard ProcessInfo.processInfo.arguments.contains("--preview-caption-following") else { return }
+        store.selectLanguage("ru")
+        store.updatePreferences { $0.hasOnboarded = true; $0.meaningVisible = true; $0.meaningLanguage = "English" }
+        var record = SessionRecord(languageID: "ru")
+        record.append(Fragment(id: "caption-first", speaker: .assistant,
+            text: String(repeating: "Я люблю читать книги и разговаривать за чашкой кофе. ", count: 10), startMS: 0, endMS: 1000))
+        record.translations[MeaningRequest.cacheKey(revisionKey: record.passages[0].revisionKey, language: "English")] = String(repeating: "I enjoy reading books and talking over a cup of coffee. ", count: 10)
+        session = record; state = .active
+        scheduleTranslation()
+    }
+    func runCaptionFollowingPreview() async {
+        guard ProcessInfo.processInfo.arguments.contains("--preview-caption-following") else { return }
+        do {
+            try await Task.sleep(for: .seconds(8))
+            session?.correctFragment(id: "caption-first", text: String(repeating: "Я люблю читать книги и разговаривать за чашкой кофе. ", count: 12))
+            try await Task.sleep(for: .seconds(8))
+            session?.append(Fragment(id: "caption-next", speaker: .assistant,
+                text: String(repeating: "Ещё одна история о книгах и кофе. ", count: 10), startMS: 6000, endMS: 7000))
+        } catch {}
+    }
     private var typedReplyPreview: Bool {
         ProcessInfo.processInfo.arguments.contains("--preview") && ProcessInfo.processInfo.arguments.contains("--test-typed-retry")
     }

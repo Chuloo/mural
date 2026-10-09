@@ -227,4 +227,13 @@
     <string name="consent_decline_button">Ahora no</string>
     <string name="error_guest_secure_storage_unavailable">Mural no pudo restaurar los datos guardados de tu prueba gratuita. Tu historial de aprendizaje sigue disponible. Reinicia la aplicación para intentarlo de nuevo.</string>
     <string name="error_sign_in_finishing_startup">Mural aún está guardando tu conversación. Intenta iniciar sesión de nuevo dentro de unos instantes.</string>
+
+    <string name="flashcards_open">Practicar con tarjetas</string>
+    <string name="flashcards_previous">Palabra anterior</string>
+    <string name="flashcards_next">Siguiente palabra</string>
+    <string name="flashcards_reveal">Toca para ver el significado</string>
+    <string name="flashcards_hide">Ocultar significado</string>
+    <string name="flashcards_progress">%1$d de %2$d</string>
+    <string name="flashcards_empty">Aquí aparecerán palabras útiles de tus conversaciones.</string>
+    <string name="talk_caption_scrolling_paused">Desplazamiento automático en pausa</string>
 </resources>

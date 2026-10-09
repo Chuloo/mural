@@ -1,6 +1,8 @@
 package chat.mural.ui
 
 import androidx.annotation.StringRes
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -199,12 +201,24 @@ private fun CurrentTopicDialog(
 fun WordsScreen(vm: MuralViewModel) {
     var search by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<WordState?>(null) }
+    var flashcards by remember { mutableStateOf<chat.mural.core.FlashcardDeck?>(null) }
     val words = vm.learner.words.filter { search.isBlank() || it.lemma.contains(search, true) || it.meaning.contains(search, true) }
     LazyColumn(
         Modifier.fillMaxSize().testTag("words-screen").padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 120.dp),
     ) {
-        item { PageHeading(stringResource(R.string.words_eyebrow, vm.language.name), stringResource(R.string.words_title), stringResource(R.string.words_subtitle), Modifier.padding(top = 20.dp)) }
+        item {
+            Column(Modifier.padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.words_eyebrow, vm.language.name).uppercase(), style = MaterialTheme.typography.labelSmall, color = MuralColors.Secondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.words_title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f).semantics { heading() })
+                    SoftRoundButton(MuralSymbol.Flashcards, stringResource(R.string.flashcards_open), onClick = {
+                        flashcards = chat.mural.core.FlashcardDeck(vm.learner.words, vm.language.id)
+                    }, enabled = vm.learner.words.isNotEmpty(), modifier = Modifier.testTag("open-flashcards"))
+                }
+                Text(stringResource(R.string.words_subtitle), style = MaterialTheme.typography.bodyMedium, color = MuralColors.Secondary)
+            }
+        }
         item {
             MuralSearchField(search, { search = it.take(80) }, stringResource(R.string.words_search_placeholder))
         }
@@ -247,6 +261,7 @@ fun WordsScreen(vm: MuralViewModel) {
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
+    flashcards?.let { FlashcardsDialog(it, onDismiss = { flashcards = null }) }
     selected?.let { word -> WordDialog(word, onRemove = { vm.hideWord(word.id); selected = null }, onDismiss = { selected = null }) }
 }
 
@@ -316,4 +331,65 @@ private fun themeSymbol(id: String) = when (id) {
     "books" -> MuralSymbol.Words
     "today", "travel", "travelstories" -> MuralSymbol.Globe
     else -> MuralSymbol.Sparkles
+}
+
+
+@Composable
+internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: () -> Unit) {
+    val pager = androidx.compose.foundation.pager.rememberPagerState(pageCount = { deck.words.size })
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val previous = stringResource(R.string.flashcards_previous)
+    val next = stringResource(R.string.flashcards_next)
+    fun move(direction: Int) {
+        scope.launch {
+            val destination = deck.destination(pager.currentPage, direction)
+            if (android.animation.ValueAnimator.areAnimatorsEnabled()) pager.animateScrollToPage(destination)
+            else pager.scrollToPage(destination)
+        }
+    }
+    Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxWidth().padding(16.dp).heightIn(max = 620.dp).testTag("flashcards-modal"),
+            shape = RoundedCornerShape(32.dp), color = MuralColors.Cream) {
+            Column(Modifier.padding(vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.words_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    SoftRoundButton(MuralSymbol.Close, stringResource(R.string.common_close), onDismiss, modifier = Modifier.testTag("close-flashcards"))
+                }
+                if (deck.words.isEmpty()) {
+                    Text(stringResource(R.string.flashcards_empty), Modifier.padding(24.dp))
+                } else {
+                    androidx.compose.foundation.pager.HorizontalPager(state = pager, modifier = Modifier.weight(1f).testTag("flashcard-pager")) { page ->
+                        Flashcard(deck.words[page], selected = pager.currentPage == page)
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        SoftRoundButton(MuralSymbol.Back, previous, { move(-1) }, enabled = pager.currentPage > 0, modifier = Modifier.testTag("flashcard-previous"))
+                        Text(stringResource(R.string.flashcards_progress, pager.currentPage + 1, deck.words.size), style = MaterialTheme.typography.bodyMedium,
+                            color = MuralColors.Secondary, modifier = Modifier.testTag("flashcard-progress"))
+                        SoftRoundButton(MuralSymbol.ChevronRight, next, { move(1) }, enabled = pager.currentPage < deck.words.lastIndex, modifier = Modifier.testTag("flashcard-next"))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Flashcard(word: WordState, selected: Boolean) {
+    var revealed by remember(word.id) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(selected) { revealed = false }
+    val reveal = stringResource(if (revealed) R.string.flashcards_hide else R.string.flashcards_reveal)
+    Surface(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 4.dp), shape = RoundedCornerShape(28.dp), color = MuralColors.Surface.copy(alpha = .85f)) {
+        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).clickable(onClickLabel = reveal) { revealed = !revealed }
+            .padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(26.dp, Alignment.CenterVertically)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("flashcard-proficiency")) {
+                RecallBars(word.bars); Text(wordLabel(word.label), color = MuralColors.Secondary, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(word.lemma, style = MaterialTheme.typography.headlineLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag("flashcard-word"))
+            androidx.compose.animation.AnimatedVisibility(visible = revealed, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
+                Text(word.meaning, style = MaterialTheme.typography.titleLarge, color = MuralColors.Secondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag("flashcard-meaning"))
+            }
+            MuralTextButton(onClick = { revealed = !revealed }, modifier = Modifier.testTag("reveal-flashcard")) { Text(reveal) }
+        }
+    }
 }

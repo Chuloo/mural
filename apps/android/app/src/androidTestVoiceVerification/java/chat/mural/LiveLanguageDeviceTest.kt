@@ -299,5 +299,7 @@ class LiveLanguageDeviceTest {
     }
     @Test fun serbian() = verify("sr", "Kako da ljubazno naručim kafu?", "kafa")
     @Test fun greek() = verify("el", "Πώς μπορώ να παραγγείλω ευγενικά έναν καφέ;", "καφές")
+    @Test fun dutch() = verify("nl", "Hoe kan ik beleefd koffie bestellen?", "koffie")
+    @Test fun russian() = verify("ru", "Как вежливо заказать кофе?", "кофе")
     @Test fun tagalog() = verify("tl", "Paano po ako magalang na oorder ng kape?", "kape")
 }

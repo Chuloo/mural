@@ -93,12 +93,28 @@ struct WordsView: View {
     @State private var search = ""
     @State private var selected: WordState?
     @State private var sessions = false
+    @State private var flashcards: FlashcardSession?
     private var learner: LearnerState { coordinator.store.learner }
     private var words: [WordState] { learner.words.filter { search.isEmpty || $0.lemma.localizedCaseInsensitiveContains(search) || $0.meaning.localizedCaseInsensitiveContains(search) } }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                PageHeading(eyebrow: "Little by little · \(coordinator.language.name)", title: "Your words.", subtitle: "Familiar words, ready for another conversation.")
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Little by little · \(coordinator.language.name)".uppercased())
+                        .font(.system(.caption, design: .rounded, weight: .medium)).tracking(1.5).foregroundStyle(MuralColor.secondary)
+                    HStack(spacing: 16) {
+                        Text("Your words.").font(.system(.largeTitle, design: .rounded, weight: .semibold)).tracking(-1)
+                            .accessibilityAddTraits(.isHeader)
+                        Spacer(minLength: 0)
+                        Button {
+                            flashcards = FlashcardSession(deck: FlashcardDeck(words: learner.words, languageID: coordinator.language.id))
+                        } label: {
+                            Image(systemName: "rectangle.on.rectangle").font(.system(size: 20)).frame(width: 48, height: 48).modifier(SoftGlass())
+                        }.buttonStyle(.plain).accessibilityLabel("Practice flashcards").accessibilityIdentifier("open-flashcards")
+                            .disabled(learner.words.isEmpty)
+                    }
+                    Text("Familiar words, ready for another conversation.").font(.subheadline).foregroundStyle(MuralColor.secondary)
+                }
                 if words.isEmpty {
                     VStack(alignment: .leading, spacing: 18) {
                         Image(systemName: "leaf").font(.system(size: 34, weight: .light))
@@ -136,6 +152,7 @@ struct WordsView: View {
         }.foregroundStyle(MuralColor.ink).searchable(text: $search, prompt: "Find a word")
             .sheet(item: $selected) { word in WordDetailView(word: word, store: coordinator.store) }
             .sheet(isPresented: $sessions) { SessionHistoryView(store: coordinator.store) }
+            .sheet(item: $flashcards) { session in FlashcardsView(deck: session.deck) }
     }
 }
 
@@ -664,4 +681,79 @@ struct LearningLanguagePicker: View {
         .disabled(coordinator.isRunning)
         .accessibilityIdentifier("learning-language-picker")
     }
+}
+
+
+private struct FlashcardSession: Identifiable {
+    let id = UUID()
+    let deck: FlashcardDeck
+}
+
+private struct FlashcardsView: View {
+    let deck: FlashcardDeck
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selection = 0
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                if deck.words.isEmpty {
+                    ContentUnavailableView("No words yet", systemImage: "leaf", description: Text("Useful words from your conversations will appear here."))
+                } else {
+                    TabView(selection: $selection) {
+                        ForEach(Array(deck.words.enumerated()), id: \.element.id) { index, word in
+                            FlashcardView(word: word, selected: selection == index).padding(.horizontal, 24).tag(index)
+                        }
+                    }.tabViewStyle(.page(indexDisplayMode: .never)).accessibilityIdentifier("flashcard-pager")
+                    HStack(spacing: 24) {
+                        navigationButton("Previous word", symbol: "chevron.left", direction: -1)
+                        Text("\(selection + 1) of \(deck.words.count)").font(.subheadline).monospacedDigit()
+                            .foregroundStyle(MuralColor.secondary).accessibilityIdentifier("flashcard-progress")
+                        navigationButton("Next word", symbol: "chevron.right", direction: 1)
+                    }.padding(.bottom, 24)
+                }
+            }.padding(.top, 16).background(MuralColor.cream).foregroundStyle(MuralColor.ink)
+                .navigationTitle("Your words").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("close-flashcards") } }
+        }.tint(MuralColor.ink).presentationDetents([.large]).presentationDragIndicator(.hidden).interactiveDismissDisabled()
+    }
+    private func navigationButton(_ label: String, symbol: String, direction: Int) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { selection = deck.destination(from: selection, direction: direction) }
+        } label: {
+            Image(systemName: symbol).frame(width: 48, height: 48).modifier(SoftGlass())
+        }.buttonStyle(.plain).accessibilityLabel(label)
+            .disabled(deck.destination(from: selection, direction: direction) == selection)
+    }
+}
+
+private struct FlashcardView: View {
+    let word: WordState
+    let selected: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var revealed = false
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 28) {
+                HStack(spacing: 10) { RecallBars(count: word.bars); Text(word.label).font(.subheadline).foregroundStyle(MuralColor.secondary) }
+                    .accessibilityElement(children: .combine).accessibilityIdentifier("flashcard-proficiency")
+                Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                    .multilineTextAlignment(.center).textSelection(.enabled).accessibilityIdentifier("flashcard-word")
+                if revealed {
+                    Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
+                        .accessibilityIdentifier("flashcard-meaning").transition(.opacity)
+                }
+                Button(revealed ? "Hide meaning" : "Tap to reveal meaning") { reveal() }
+                    .font(.subheadline).foregroundStyle(MuralColor.secondary).frame(minHeight: 44)
+                    .accessibilityIdentifier("reveal-flashcard")
+            }.padding(28).frame(maxWidth: .infinity, minHeight: 320)
+                .background(.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 32))
+                .overlay(RoundedRectangle(cornerRadius: 32).strokeBorder(MuralColor.peach.opacity(0.65), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 32)).onTapGesture { reveal() }
+                .accessibilityAction(named: revealed ? "Hide meaning" : "Reveal meaning") { reveal() }
+                .padding(.vertical, 12)
+        }.scrollIndicators(.hidden)
+            .onChange(of: selected) { _, _ in revealed = false }
+    }
+    private func reveal() { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { revealed.toggle() } }
 }

@@ -18,6 +18,7 @@ struct RootView: View {
         if let screen = ScreenshotPreview.screen { coordinator.prepareScreenshot(screen) }
         coordinator.prepareTypedReplyPreview()
         coordinator.prepareConversationPolicyPreview()
+        coordinator.prepareCaptionFollowingPreview()
         _tab = State(initialValue: ScreenshotPreview.tab)
         #endif
         _coordinator = State(initialValue: coordinator)
@@ -95,6 +96,7 @@ struct RootView: View {
             if AudioVerification.requested { await AudioVerification.run(coordinator) }
             else if ProcessInfo.processInfo.arguments.contains("--ended-conversation") { coordinator.prepareConversationPreview(active: false) }
             else if ProcessInfo.processInfo.arguments.contains("--active-conversation") { coordinator.prepareConversationPreview(active: true) }
+            if ProcessInfo.processInfo.arguments.contains("--preview-caption-following") { await coordinator.runCaptionFollowingPreview() }
         }
         #endif
     }
@@ -114,6 +116,9 @@ struct RootView: View {
 struct TalkView: View {
     @Bindable var coordinator: ConversationCoordinator
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .title2) private var targetLineHeight = 30.0
+    @ScaledMetric(relativeTo: .subheadline) private var meaningLineHeight = 21.0
     @State private var typing = false
     @State private var conversationChoice = false
     @State private var openAccountAfterContinuation = false
@@ -175,7 +180,7 @@ struct TalkView: View {
             .tint(MuralColor.ink).presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .animation(.smooth(duration: 0.35), value: coordinator.state)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: coordinator.state)
         .sheet(item: $transcript) { session in
             TranscriptView(session: session, meaningLanguage: coordinator.store.preferences.meaningLanguage)
         }
@@ -217,6 +222,7 @@ struct TalkView: View {
                 }.font(.caption)
             }.frame(minHeight: compact ? 28 : 42).accessibilityHidden(coordinator.state != .active && coordinator.session == nil)
         }.padding(.horizontal, 30).frame(maxWidth: .infinity)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.5), value: hasLongPassage)
     }
     private func captionArea(scrollPage: Bool) -> some View {
         VStack(spacing: 12) {
@@ -226,11 +232,13 @@ struct TalkView: View {
                     if coordinator.store.preferences.meaningVisible { meaningPassage }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                if scrollPage { targetPassage }
-                else { scrollingPassage { targetPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("target-passage-scroll") }
+                followingPassage(text: coordinator.caption) { targetPassage }
+                    .frame(height: targetLineHeight * 3 + (coordinator.language.id == "zh" ? 58 : 0))
+                    .accessibilityIdentifier("target-passage-scroll")
                 if coordinator.store.preferences.meaningVisible {
-                    if scrollPage { meaningPassage }
-                    else { scrollingPassage { meaningPassage }.frame(maxHeight: .infinity).accessibilityIdentifier("meaning-passage-scroll") }
+                    followingPassage(text: coordinator.meaning) { meaningPassage }
+                        .frame(height: meaningLineHeight * 3 + (coordinator.meaningError == nil ? 0 : 60))
+                        .accessibilityIdentifier("meaning-passage-scroll")
                 }
             }
             if let user = coordinator.userPassage {
@@ -277,12 +285,8 @@ struct TalkView: View {
             }
         }.font(.footnote).frame(maxWidth: .infinity)
     }
-    private func scrollingPassage<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
-        GeometryReader { geometry in
-            ScrollView {
-                content().frame(maxWidth: .infinity).frame(minHeight: geometry.size.height)
-            }.scrollIndicators(.hidden)
-        }
+    private func followingPassage<Content: View>(text: String, @ViewBuilder content: @escaping () -> Content) -> some View {
+        FollowingPassage(passageID: coordinator.session.map { $0.id.uuidString + ":" + (coordinator.assistantPassage?.id ?? "") }, text: text, content: content)
     }
     private var linkedCaption: AttributedString {
         var result = AttributedString()
@@ -396,5 +400,62 @@ struct TypedReplyView: View {
             }
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }.presentationDetents([.medium, .large]).onAppear { coordinator.typedReplyError = nil; coordinator.noteTypingActivity(); focused = true }
+    }
+}
+
+
+/// The viewport stays put; the text advances at a reading pace until touched.
+private struct FollowingPassage<Content: View>: View {
+    let passageID: String?
+    let text: String
+    @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @State private var following = CaptionFollowing()
+    @State private var position = ScrollPosition(y: 0)
+    @State private var offset = 0.0
+    @State private var maximum = 0.0
+    private var followingValue: String {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--preview-caption-following") {
+            return "\(Int(offset))|\(following.interrupted ? "paused" : "following")"
+        }
+        #endif
+        return following.interrupted ? "Automatic scrolling paused" : ""
+    }
+    var body: some View {
+        GeometryReader { viewport in
+            ScrollView {
+                content().frame(maxWidth: .infinity).frame(minHeight: viewport.size.height)
+            }
+            .scrollPosition($position)
+            .scrollIndicators(.hidden)
+            .onScrollGeometryChange(for: Double.self) { geometry in
+                max(0, geometry.contentSize.height - geometry.containerSize.height)
+            } action: { _, value in maximum = value }
+            .onScrollGeometryChange(for: Double.self) { $0.contentOffset.y } action: { _, value in offset = value }
+            .onScrollPhaseChange { _, phase in
+                if phase == .tracking || phase == .interacting || phase == .decelerating { following.interrupt() }
+            }
+            .accessibilityValue(followingValue)
+            .task(id: passageID) {
+                following.receive(passageID)
+                position.scrollTo(y: 0)
+                guard passageID != nil else { return }
+                do {
+                    try await Task.sleep(for: .milliseconds(900))
+                    while !Task.isCancelled {
+                        if !voiceOver && !following.interrupted {
+                            let next = following.nextOffset(current: offset, maximum: maximum, elapsed: 0.05, reducedMotion: reduceMotion)
+                            if next > offset + 0.01 {
+                                if reduceMotion { position.scrollTo(y: next) }
+                                else { withAnimation(.linear(duration: 0.05)) { position.scrollTo(y: next) } }
+                            }
+                        }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                } catch { /* Passage change or view dismissal cancels following. */ }
+            }
+        }
     }
 }
