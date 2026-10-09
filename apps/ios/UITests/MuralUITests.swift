@@ -1117,7 +1117,8 @@ final class MuralUITests: XCTestCase {
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
         XCTAssertEqual(progress.label, "1 of 4")
         if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
-        let shortDrag = app.staticTexts["flashcard-word"]
+        let card = app.descendants(matching: .any)["flashcard-pager"].firstMatch
+        let shortDrag = card
         let start = shortDrag.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -24, dy: 0)))
         XCTAssertEqual(progress.label, "1 of 4")
@@ -1132,16 +1133,15 @@ final class MuralUITests: XCTestCase {
         app.buttons["reveal-flashcard"].tap()
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
         if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
-        let card = app.staticTexts["flashcard-word"]
         card.swipeLeft()
         XCTAssertEqual(progress.label, "2 of 4")
         if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
-        app.staticTexts["flashcard-word"].swipeUp()
+        card.swipeUp()
         XCTAssertEqual(progress.label, "2 of 4")
-        app.staticTexts["flashcard-word"].swipeDown()
+        card.swipeDown()
         XCTAssertEqual(progress.label, "2 of 4")
-        app.staticTexts["flashcard-word"].swipeRight()
+        card.swipeRight()
         XCTAssertEqual(progress.label, "1 of 4")
         XCTAssertEqual(app.staticTexts["flashcard-word"].label, originalWord)
         XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
