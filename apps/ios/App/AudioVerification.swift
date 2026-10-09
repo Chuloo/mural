@@ -40,6 +40,31 @@ extension AudioVerification {
         let wasIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
         UIApplication.shared.isIdleTimerDisabled = !ProcessInfo.processInfo.arguments.contains("--verify-background")
         defer { UIApplication.shared.isIdleTimerDisabled = wasIdleTimerDisabled }
+        if ProcessInfo.processInfo.arguments.contains("--verify-connectivity") {
+            // Nonbillable preflight: no account, provider session, or conversation request.
+            var result: [String: Any] = ["providerCalls": false]
+            do {
+                let (_, response) = try await ManagedAccountHTTP().send(URLRequest(url: URL(string: "https://api.mural.chat/healthz")!))
+                result["httpStatus"] = (response as? HTTPURLResponse)?.statusCode
+                let member = try ManagedAccountConfiguration.load().flatMap { try ManagedAccountKeychain(scope: $0.storageScope).load() }
+                let owner = try await GuestAccess.shared.owner(member: member)
+                result["verificationAccountID"] = owner.accountID.uuidString
+                result["hostedAvailable"] = try await HostedClient.shared?.available(owner)
+                result["canStart"] = try await HostedClient.shared?.balance(owner).canStart
+            } catch let error as URLError {
+                result["networkErrorCode"] = error.code.rawValue
+            } catch {
+                result["unexpectedFailure"] = true
+                result["failureType"] = String(describing: type(of: error))
+                if let account = error as? ManagedAccountError { result["accountFailure"] = String(describing: account) }
+                if let hosted = error as? HostedError { result["hostedFailure"] = String(describing: hosted) }
+                result["networkErrorCode"] = UserDefaults.standard.object(forKey: "verificationNetworkErrorCode")
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: result) {
+                try? data.write(to: URL.documentsDirectory.appendingPathComponent("connectivity-verification.json"), options: .atomic)
+            }
+            return
+        }
         if ProcessInfo.processInfo.arguments.contains("--record-spanish-demo") {
             await recordSpanishDemo(coordinator)
             return

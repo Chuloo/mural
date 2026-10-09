@@ -107,6 +107,35 @@
         "tayo",
         "aalis"
       ]
+    },
+    {
+      "language": "nl",
+      "text": " IJsselmeer, één fiets.\n",
+      "lookups": [
+        "IJsselmeer",
+        "één",
+        "fiets"
+      ]
+    },
+    {
+      "language": "ru",
+      "text": " «Ещё чай, пожалуйста!»\n",
+      "lookups": [
+        "Ещё",
+        "чай",
+        "пожалуйста"
+      ]
+    },
+    {
+      "language": "ru",
+      "text": "Я читаю книгу. А ты?",
+      "lookups": [
+        "Я",
+        "читаю",
+        "книгу",
+        "А",
+        "ты"
+      ]
     }
   ]
 }

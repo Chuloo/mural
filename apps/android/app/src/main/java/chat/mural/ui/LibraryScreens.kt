@@ -1,8 +1,11 @@
 package chat.mural.ui
 
 import androidx.annotation.StringRes
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +48,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -199,12 +209,24 @@ private fun CurrentTopicDialog(
 fun WordsScreen(vm: MuralViewModel) {
     var search by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<WordState?>(null) }
+    var flashcards by remember { mutableStateOf<chat.mural.core.FlashcardDeck?>(null) }
     val words = vm.learner.words.filter { search.isBlank() || it.lemma.contains(search, true) || it.meaning.contains(search, true) }
     LazyColumn(
         Modifier.fillMaxSize().testTag("words-screen").padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 120.dp),
     ) {
-        item { PageHeading(stringResource(R.string.words_eyebrow, vm.language.name), stringResource(R.string.words_title), stringResource(R.string.words_subtitle), Modifier.padding(top = 20.dp)) }
+        item {
+            Column(Modifier.padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.words_eyebrow, vm.language.name).uppercase(), style = MaterialTheme.typography.labelSmall, color = MuralColors.Secondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.words_title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f).semantics { heading() })
+                    SoftRoundButton(MuralSymbol.Flashcards, stringResource(R.string.flashcards_open), onClick = {
+                        flashcards = chat.mural.core.FlashcardDeck(vm.learner.words, vm.language.id)
+                    }, enabled = vm.learner.words.isNotEmpty(), modifier = Modifier.testTag("open-flashcards"))
+                }
+                Text(stringResource(R.string.words_subtitle), style = MaterialTheme.typography.bodyMedium, color = MuralColors.Secondary)
+            }
+        }
         item {
             MuralSearchField(search, { search = it.take(80) }, stringResource(R.string.words_search_placeholder))
         }
@@ -247,6 +269,7 @@ fun WordsScreen(vm: MuralViewModel) {
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
+    flashcards?.let { FlashcardsDialog(it, onDismiss = { flashcards = null }) }
     selected?.let { word -> WordDialog(word, onRemove = { vm.hideWord(word.id); selected = null }, onDismiss = { selected = null }) }
 }
 
@@ -316,4 +339,127 @@ private fun themeSymbol(id: String) = when (id) {
     "books" -> MuralSymbol.Words
     "today", "travel", "travelstories" -> MuralSymbol.Globe
     else -> MuralSymbol.Sparkles
+}
+
+
+@Composable
+internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: () -> Unit) {
+    val density = LocalDensity.current.density
+    var selection by remember { mutableStateOf(0) }
+    var advancing by remember { mutableStateOf(false) }
+    val offset = remember { androidx.compose.animation.core.Animatable(0f) }
+    var cardWidth by remember { mutableStateOf(1000f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val previous = stringResource(R.string.flashcards_previous)
+    val next = stringResource(R.string.flashcards_next)
+    val position = stringResource(R.string.flashcards_progress, selection + 1, deck.words.size)
+    fun move(direction: Int) {
+        if (advancing) return
+        scope.launch {
+            val destination = deck.destination(selection, direction)
+            if (destination == selection) {
+                offset.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = .82f))
+                return@launch
+            }
+            advancing = true
+            try {
+                if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                    offset.animateTo(if (direction > 0) -cardWidth * 1.2f else cardWidth * 1.2f,
+                        androidx.compose.animation.core.tween(200))
+                }
+                selection = destination
+                offset.snapTo(0f)
+            } finally { advancing = false }
+        }
+    }
+    Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxWidth().padding(16.dp).heightIn(max = 620.dp).testTag("flashcards-modal"),
+            shape = RoundedCornerShape(32.dp), color = MuralColors.Cream) {
+            Column(Modifier.padding(vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.words_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    SoftRoundButton(MuralSymbol.Close, stringResource(R.string.common_close), onDismiss, modifier = Modifier.testTag("close-flashcards"))
+                }
+                if (deck.words.isEmpty()) {
+                    Text(stringResource(R.string.flashcards_empty), Modifier.padding(24.dp))
+                } else {
+                    Box(Modifier.weight(1f).fillMaxWidth().testTag("flashcard-pager")
+                        .onSizeChanged { cardWidth = it.width.toFloat() }
+                        .semantics {
+                            stateDescription = position
+                            customActions = buildList {
+                                if (selection > 0) add(CustomAccessibilityAction(previous) { move(-1); true })
+                                if (selection < deck.words.lastIndex) add(CustomAccessibilityAction(next) { move(1); true })
+                            }
+                        }) {
+                        val destination = deck.destination(selection, if (offset.value > 0) -1 else 1)
+                        if (destination != selection) {
+                            Flashcard(deck.words[destination], selected = false, preview = true, showContent = kotlin.math.abs(offset.value) > 6 * density,
+                                modifier = Modifier.graphicsLayer {
+                                    val scale = .94f + (kotlin.math.abs(offset.value) / cardWidth).coerceIn(0f, 1f) * .06f
+                                    scaleX = scale; scaleY = scale; translationY = 12.dp.toPx(); alpha = .7f
+                                }.clearAndSetSemantics {})
+                        }
+                        Flashcard(deck.words[selection], selected = true, modifier = Modifier.graphicsLayer {
+                            translationX = offset.value
+                            rotationZ = if (android.animation.ValueAnimator.areAnimatorsEnabled()) offset.value / cardWidth * 12f else 0f
+                        }.pointerInput(selection) {
+                            val velocity = androidx.compose.ui.input.pointer.util.VelocityTracker()
+                            detectHorizontalDragGestures(
+                                onDragStart = { velocity.resetTracking() },
+                                onDragEnd = {
+                                    val fling = kotlin.math.abs(offset.value) > cardWidth * .08f && kotlin.math.abs(velocity.calculateVelocity().x) > 800.dp.toPx()
+                                    if (kotlin.math.abs(offset.value) > cardWidth * .22f || fling) move(if (offset.value < 0) 1 else -1)
+                                    else scope.launch { offset.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = .82f)) }
+                                },
+                                onDragCancel = { if (!advancing) scope.launch { offset.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = .82f)) } },
+                                onHorizontalDrag = { change, amount ->
+                                    if (!advancing) {
+                                        velocity.addPosition(change.uptimeMillis, change.position)
+                                        change.consume()
+                                        scope.launch {
+                                            val candidate = offset.value + amount
+                                            val target = deck.destination(selection, if (candidate < 0) 1 else -1)
+                                            offset.snapTo(if (target == selection) candidate * .2f else candidate)
+                                        }
+                                    }
+                                })
+                        })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Flashcard(word: WordState, selected: Boolean, modifier: Modifier = Modifier, preview: Boolean = false, showContent: Boolean = true) {
+    androidx.compose.runtime.key(word.id) { FlashcardFace(word, selected, modifier, preview, showContent) }
+}
+
+@Composable
+private fun FlashcardFace(word: WordState, selected: Boolean, modifier: Modifier, preview: Boolean, showContent: Boolean) {
+    var revealed by remember(word.id) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(selected) { revealed = false }
+    val angle by androidx.compose.animation.core.animateFloatAsState(if (revealed) 180f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(if (android.animation.ValueAnimator.areAnimatorsEnabled()) 480 else 0), label = "card flip")
+    val back = angle >= 90f
+    val reveal = stringResource(if (back) R.string.flashcards_hide else R.string.flashcards_reveal)
+    Surface(Modifier.fillMaxSize().then(modifier).padding(horizontal = 20.dp, vertical = 4.dp).graphicsLayer {
+        rotationY = if (back) angle - 180f else angle
+        cameraDistance = 12 * density
+    }, shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
+        Column(Modifier.graphicsLayer { alpha = if (showContent) 1f else 0f }.verticalScroll(androidx.compose.foundation.rememberScrollState()).clickable(enabled = !preview, onClickLabel = reveal) { revealed = !revealed }
+            .padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(26.dp, Alignment.CenterVertically)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag(if (preview) "flashcard-preview-proficiency" else "flashcard-proficiency")) {
+                RecallBars(word.bars); Text(wordLabel(word.label), color = MuralColors.Secondary, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(word.lemma, style = MaterialTheme.typography.headlineLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag(if (preview) "flashcard-preview-word" else "flashcard-word"))
+            if (back) {
+                Text(word.meaning, style = MaterialTheme.typography.titleLarge, color = MuralColors.Secondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag("flashcard-meaning"))
+            }
+            if (!preview) MuralTextButton(onClick = { revealed = !revealed }, modifier = Modifier.testTag("reveal-flashcard")) { Text(reveal) }
+        }
+    }
 }

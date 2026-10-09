@@ -1,5 +1,7 @@
 package chat.mural.ui
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.stateDescription
 import android.os.Build
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.text.buildAnnotatedString
@@ -111,6 +113,8 @@ fun TalkScreen(
     val targetScroll = remember(assistantPassage?.id) { ScrollState(0) }
     val meaningScroll = remember(assistantPassage?.id, vm.archive.preferences.meaningLanguage) { ScrollState(0) }
     val textMeasurer = rememberTextMeasurer()
+    val targetFollowing = FollowCaption(targetScroll, assistantPassage?.id, vm.targetCaptionFollowing) { vm.targetCaptionFollowing = it }
+    val meaningFollowing = FollowCaption(meaningScroll, assistantPassage?.id, vm.meaningCaptionFollowing) { vm.meaningCaptionFollowing = it }
 
     BoxWithConstraints(Modifier.fillMaxSize().testTag("talk-screen")) {
     val scrollPage = LocalDensity.current.fontScale > 1.3f || maxHeight < 480.dp
@@ -186,7 +190,7 @@ fun TalkScreen(
             verticalArrangement = Arrangement.Center,
         ) {
         Column(
-            modifier = (if (scrollPage || passage == null) Modifier else Modifier.weight(if (compactReading) 3f else 1f, fill = false).passageScroll(targetScroll))
+            modifier = (if (passage == null) Modifier else Modifier.height(with(LocalDensity.current) { 90.dp * fontScale } + (if (hasMandarinReading) 58.dp else 0.dp)).passageScroll(targetScroll).then(targetFollowing))
                 .fillMaxWidth().testTag("target-passage-scroll"),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -205,7 +209,7 @@ fun TalkScreen(
         if (vm.archive.preferences.meaningVisible) {
             Spacer(Modifier.height(10.dp))
             Column(
-                modifier = (if (scrollPage || passage == null) Modifier else Modifier.weight(.72f, fill = false).passageScroll(meaningScroll))
+                modifier = (if (passage == null) Modifier else Modifier.height(with(LocalDensity.current) { 66.dp * fontScale } + (if (vm.meaningFailed) 60.dp else 0.dp)).passageScroll(meaningScroll).then(meaningFollowing))
                     .fillMaxWidth().testTag("meaning-passage-scroll"),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -330,6 +334,49 @@ fun TalkScreen(
     if (lookup) WordLookupSheet(lookupWord, lookupSentence, vm.language.id, vm.lookupResult, vm.lookupError, vm.lookupLoading,
         onDismiss = { vm.clearLookup(); lookup = false; lookupWord = "" })
     transcript?.let { TranscriptDialog(vm, it, onDismiss = { transcript = null }) }
+}
+
+@Composable
+internal fun FollowCaption(state: ScrollState, passageID: String?, following: chat.mural.core.CaptionFollowing,
+    onFollowingChanged: (chat.mural.core.CaptionFollowing) -> Unit): Modifier {
+    val latestFollowing by androidx.compose.runtime.rememberUpdatedState(following)
+    fun interrupt() = onFollowingChanged(latestFollowing.receive(passageID).interrupt())
+    val density = LocalDensity.current.density
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val accessibility = remember(context) { context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager }
+    var touchExploration by remember(accessibility) { mutableStateOf(accessibility.isTouchExplorationEnabled) }
+    androidx.compose.runtime.DisposableEffect(accessibility) {
+        val listener = android.view.accessibility.AccessibilityManager.TouchExplorationStateChangeListener { touchExploration = it }
+        accessibility.addTouchExplorationStateChangeListener(listener)
+        onDispose { accessibility.removeTouchExplorationStateChangeListener(listener) }
+    }
+    val pausedDescription = stringResource(R.string.talk_caption_scrolling_paused)
+    val connection = remember(passageID) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput && available.y != 0f) interrupt()
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+    }
+    LaunchedEffect(state, passageID) {
+        onFollowingChanged(latestFollowing.receive(passageID))
+        state.interactionSource.interactions.collect { interaction ->
+            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) interrupt()
+        }
+    }
+    LaunchedEffect(state, passageID, following.interrupted, touchExploration) {
+        if (passageID == null || following.interrupted || touchExploration) return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        while (true) {
+            val next = latestFollowing.nextOffset(state.value.toDouble() / density, state.maxValue.toDouble() / density, .05,
+                reducedMotion = !android.animation.ValueAnimator.areAnimatorsEnabled()) * density
+            if (next > state.value) state.scrollTo(next.toInt())
+            kotlinx.coroutines.delay(50)
+        }
+    }
+    return Modifier.nestedScroll(connection)
+        .semantics { stateDescription = if (following.interrupted) pausedDescription else "" }
 }
 
 private fun Modifier.passageScroll(state: ScrollState): Modifier = this

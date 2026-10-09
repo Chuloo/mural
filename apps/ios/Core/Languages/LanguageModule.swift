@@ -27,13 +27,13 @@ public struct LanguageModule: Identifiable, Sendable {
 
 public enum LanguageRegistry {
     public static let defaultID = "nb"
-    public static let all: [LanguageModule] = [.norwegian, .spanish, .english, .french, .german, .italian, .portuguese, .mandarin, .serbian, .greek, .tagalog]
+    public static let all: [LanguageModule] = [.norwegian, .spanish, .english, .french, .german, .italian, .portuguese, .mandarin, .serbian, .greek, .tagalog, .dutch, .russian]
     public static func module(for id: String) -> LanguageModule? { all.first { $0.id == id } }
 }
 
 public enum MeaningLanguages {
-    public static let all = ["English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian", "Serbian (Latin)", "Greek", "Tagalog (Filipino)"]
+    public static let all = ["English", "French", "German", "Spanish", "Norwegian", "Portuguese", "Italian", "Chinese (Simplified)", "Polish", "Arabic", "Ukrainian", "Serbian (Latin)", "Greek", "Tagalog (Filipino)", "Dutch", "Russian"]
     public static func greeting(in language: String) -> String {
-        ["English": "Hi!", "French": "Salut !", "German": "Hallo!", "Spanish": "¡Hola!", "Norwegian": "Hei!", "Portuguese": "Olá!", "Italian": "Ciao!", "Chinese (Simplified)": "你好！", "Chinese": "你好！", "Polish": "Cześć!", "Arabic": "مرحبًا!", "Ukrainian": "Привіт!", "Serbian (Latin)": "Zdravo!", "Greek": "Γεια σου!", "Tagalog (Filipino)": "Kumusta!"][language] ?? "Hi!"
+        ["English": "Hi!", "French": "Salut !", "German": "Hallo!", "Spanish": "¡Hola!", "Norwegian": "Hei!", "Portuguese": "Olá!", "Italian": "Ciao!", "Chinese (Simplified)": "你好！", "Chinese": "你好！", "Polish": "Cześć!", "Arabic": "مرحبًا!", "Ukrainian": "Привіт!", "Serbian (Latin)": "Zdravo!", "Greek": "Γεια σου!", "Tagalog (Filipino)": "Kumusta!", "Dutch": "Hoi!", "Russian": "Привет!"][language] ?? "Hi!"
     }
 }

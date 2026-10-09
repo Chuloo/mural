@@ -275,7 +275,8 @@ class CaptionParityTest {
             Triple("de", "Ich möchte Kaffee.", "Kaffee"), Triple("it", "Vorrei un caffè.", "caffè"),
             Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"),
             Triple("sr", "Hoću jednu kafu.", "kafu"), Triple("el", "Θα ήθελα έναν καφέ.", "καφέ"),
-            Triple("tl", "Gusto ko ng kape.", "kape"))
+            Triple("tl", "Gusto ko ng kape.", "kape"),
+            Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
@@ -298,7 +299,9 @@ class CaptionParityTest {
             "zh" to listOf("我", "喜欢", "学习", "中文。"),
             "sr" to listOf("Volim da uči", "m srp", "ski."),
             "el" to listOf("Πώς εί", "σαι; Μα", "ΐου."),
-            "tl" to listOf("Mag-", "aaral ako araw-", "araw."))
+            "tl" to listOf("Mag-", "aaral ako araw-", "araw."),
+            "nl" to listOf("Ik fiets ", "elke dag naar ", "huis."),
+            "ru" to listOf("Я чита", "ю интересную ", "книгу."))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.keys)
         for ((language, parts) in samples) {
             show(language, "", "")
@@ -500,10 +503,15 @@ class CaptionParityTest {
     @Test fun captionsAndLookupRemainReachableWithLargeSystemText() {
         val sentence = "我想去银行，然后去旅行。"
         show("zh", sentence, "I want to go to the bank, then travel.")
+        // At accessibility sizes, reveal the caption viewport in the page before
+        // scrolling a control inside that viewport.
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-caption").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("pinyin-reading").assertDoesNotExist()
+        compose.onNodeWithTag("meaning-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("meaning-caption").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-caption").performScrollTo()
         tap("银行", sentence)
         compose.onNodeWithTag("word-lookup-explanation").performScrollTo().assertIsDisplayed()
@@ -516,13 +524,16 @@ class CaptionParityTest {
 
         // Large text uses the page scroller. A long reply and its reading must stay
         // reachable without requiring both languages to fit on screen at once.
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         show("zh", sentence + "今天我们可以聊一聊你的生活。你喜欢喝咖啡还是喝茶？如果你有时间，我们可以一起去附近的咖啡馆，再去商店买一点儿东西。你觉得怎么样？你也可以告诉我你最喜欢的食物，或者说说你明天想做什么。",
             "I want to go to the bank, then travel. We can talk about your life, visit a café, and buy a few things. What would you like to do tomorrow?")
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-caption").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-reading").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("pinyin-reading").assertDoesNotExist()
+        compose.onNodeWithTag("meaning-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("meaning-caption").performScrollTo().assertIsDisplayed()
         if (!microphone.isDisplayed()) microphone.performScrollTo()
         microphone.assertIsDisplayed()

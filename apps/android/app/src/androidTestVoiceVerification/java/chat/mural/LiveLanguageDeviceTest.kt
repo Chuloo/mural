@@ -70,7 +70,7 @@ class LiveLanguageDeviceTest {
             return
         }
         try {
-            waitFor(40_000, "Hosted minutes must be ready") { vm.hostedReadiness.ready }
+            waitFor(40_000, "Hosted minutes must be ready") { vm.hostedReadiness.ready && !vm.accountChangeBlocked }
         } catch (failure: AssertionError) {
             // Only status flags, never account identifiers or installation credentials.
             val diagnostics = main { JSONObject()
@@ -147,9 +147,13 @@ class LiveLanguageDeviceTest {
         }
         write()
         try {
-            main { vm.selectLanguage(id); vm.chooseTheme(vm.language.themes.first { it.id == "coffee" }); vm.start() }
+            main { vm.resetConversation(); vm.selectLanguage(id); vm.chooseTheme(vm.language.themes.first { it.id == "coffee" }); vm.start() }
             waitFor(45_000, "Voice must connect") { vm.state == "active" }
             main { vm.toggleMute() }
+            // Exercise a real typed greeting so this silent-input check does not
+            // depend on the provider choosing to open the conversation itself.
+            main { vm.sendTyped("Say one short greeting in ${vm.language.name}.") }
+            report.put("greetingInput", "synthetic typed turn")
             var peak = 0.0
             waitFor(25_000, "Greeting audio and caption must arrive") {
                 peak = maxOf(peak, vm.outputLevel)
@@ -299,5 +303,7 @@ class LiveLanguageDeviceTest {
     }
     @Test fun serbian() = verify("sr", "Kako da ljubazno naručim kafu?", "kafa")
     @Test fun greek() = verify("el", "Πώς μπορώ να παραγγείλω ευγενικά έναν καφέ;", "καφές")
+    @Test fun dutch() = verify("nl", "Hoe kan ik beleefd koffie bestellen?", "koffie")
+    @Test fun russian() = verify("ru", "Как вежливо заказать кофе?", "кофе")
     @Test fun tagalog() = verify("tl", "Paano po ako magalang na oorder ng kape?", "kape")
 }
