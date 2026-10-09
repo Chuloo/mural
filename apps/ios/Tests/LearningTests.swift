@@ -217,4 +217,69 @@ final class LearningTests: XCTestCase {
         XCTAssertNotNil(SourceLink(title: "good", url: "https://www.nrk.no/").safeURL)
     }
     func testTwentyFourDistinctThemes() { XCTAssertEqual(Set(LanguageModule.norwegian.themes.map(\.id)).count, 24) }
+    func evidence(lemma: String, meaning: String, day: Double) -> SessionRecord {
+        var s = fixture(day: day)
+        s.assessments[0].words[0].lemma = lemma; s.assessments[0].words[0].meaning = meaning
+        return s
+    }
+    func testParaphrasedMeaningsShareOneWord() {
+        let words = LearningEngine.project([evidence(lemma: "å gå", meaning: "to go", day: 0), evidence(lemma: "å gå", meaning: "to walk or go", day: 1), evidence(lemma: "å gå", meaning: "to go on foot", day: 2)]).words
+        XCTAssertEqual(words.count, 1)
+        XCTAssertEqual(words.first?.independentCount, 3)
+        XCTAssertEqual(words.first?.meaning, "to go on foot")
+    }
+    func testLeadingArticlesAndCaseDoNotSplitAWord() {
+        let words = LearningEngine.project([evidence(lemma: "å gå", meaning: "to go", day: 0), evidence(lemma: "Gå", meaning: "to go", day: 1), evidence(lemma: "  å  gå ", meaning: "to go", day: 2)]).words
+        XCTAssertEqual(words.map(\.id), ["nb|gå"])
+        XCTAssertEqual(words.first?.lemma, "  å  gå ")
+    }
+    func testWordKeysDropEachLanguagesLeadingArticles() {
+        func key(_ language: String, _ lemma: String) -> String { WordProposal(lemma: lemma, meaning: "m", form: "f", kind: .independent, confidence: 0.9, sourceIDs: ["x"], quote: "q", language: language).key }
+        XCTAssertEqual(key("en", "a version"), "en|version"); XCTAssertEqual(key("en", "the version"), "en|version"); XCTAssertEqual(key("en", "version"), "en|version")
+        XCTAssertEqual(key("nb", "å gå"), "nb|gå"); XCTAssertEqual(key("nb", "en tur"), "nb|tur")
+        XCTAssertEqual(key("fr", "l'ami"), "fr|ami"); XCTAssertEqual(key("fr", "l’ami"), "fr|ami"); XCTAssertEqual(key("fr", "une maison"), "fr|maison")
+        XCTAssertEqual(key("de", "das Haus"), "de|haus"); XCTAssertEqual(key("it", "lo studente"), "it|studente"); XCTAssertEqual(key("pt", "o pão"), "pt|pão")
+        XCTAssertEqual(key("zh", "洗澡"), "zh|洗澡")
+        XCTAssertEqual(key("en", "a"), "en|a"); XCTAssertEqual(key("es", "el"), "es|el")
+        XCTAssertEqual(key("en", "apple"), "en|apple"); XCTAssertEqual(key("en", "another"), "en|another")
+    }
+    func session(_ language: String, lemma: String, day: Double = 0) -> SessionRecord {
+        let date = Date(timeIntervalSince1970: 1_780_000_000 + day * 86400)
+        var s = SessionRecord(languageID: language)
+        s.startedAt = date
+        s.append(Fragment(id: "t", speaker: .user, text: lemma, startMS: 5000, endMS: 6000, receivedAt: date))
+        let p = s.passages[0]
+        s.assessments = [Assessment(passageID: p.id, revisionKey: p.revisionKey, outcome: .success, suggestedLevel: 2, nextGoal: "goal", capability: "capability", words: [WordProposal(lemma: lemma, meaning: "meaning", form: lemma, kind: .independent, confidence: 0.95, sourceIDs: ["t"], quote: lemma, language: language)], createdAt: date)]
+        return s
+    }
+    func testHidingAProjectedIdHidesThatWordOnly() {
+        let sessions = [session("pt", lemma: "um a um"), session("pt", lemma: "um", day: 1)]
+        XCTAssertEqual(LearningEngine.project(sessions, languageID: "pt").words.map(\.id).sorted(), ["pt|a um", "pt|um"])
+        XCTAssertEqual(LearningEngine.project(sessions, languageID: "pt", hiddenWords: ["pt|a um"]).words.map(\.id), ["pt|um"])
+    }
+    func testWordKeysDropIndefinitePluralsPartitivesAndElidedUn() {
+        let key = WordProposal.key(language:lemma:)
+        XCTAssertEqual(key("es", "unas vacaciones"), "es|vacaciones"); XCTAssertEqual(key("es", "unos amigos"), "es|amigos")
+        XCTAssertEqual(key("pt", "umas férias"), "pt|férias"); XCTAssertEqual(key("pt", "uns amigos"), "pt|amigos")
+        XCTAssertEqual(key("it", "un'amica"), "it|amica"); XCTAssertEqual(key("it", "un’amica"), "it|amica")
+        XCTAssertEqual(key("fr", "du pain"), "fr|pain"); XCTAssertEqual(key("fr", "de la confiture"), "fr|confiture")
+        XCTAssertEqual(key("de", "den Hund"), "de|hund"); XCTAssertEqual(key("de", "dem Kind"), "de|kind"); XCTAssertEqual(key("de", "des Tages"), "de|tages")
+        XCTAssertEqual(key("de", "einen Freund"), "de|freund"); XCTAssertEqual(key("de", "einer Frau"), "de|frau")
+    }
+    func testWordKeysStayComposedAfterLowercasing() {
+        XCTAssertEqual(Array(WordProposal.key(language: "en", lemma: "J\u{030C}").unicodeScalars), Array(WordProposal.key(language: "en", lemma: "\u{01F0}").unicodeScalars))
+        let sessions = [session("en", lemma: "J\u{030C}"), session("en", lemma: "\u{01F0}", day: 1)]
+        XCTAssertEqual(LearningEngine.project(sessions, languageID: "en").words.count, 1)
+        XCTAssertTrue(LearningEngine.project(sessions, languageID: "en", hiddenWords: [WordProposal.key(language: "en", lemma: "J\u{030C}")]).words.isEmpty)
+    }
+    func testWordKeysTreatEveryUnicodeWhitespaceAlike() {
+        XCTAssertEqual(WordProposal.key(language: "zh", lemma: "\u{0085}洗澡"), "zh|洗澡")
+        XCTAssertEqual(WordProposal.key(language: "en", lemma: "\u{0085}a\u{00A0}version\u{2003}"), "en|version")
+    }
+    func testLegacyAndCurrentHiddenKeysBothHideTheWord() {
+        let sessions = [evidence(lemma: "å gå", meaning: "to go", day: 0), evidence(lemma: "gå", meaning: "to walk", day: 1)]
+        XCTAssertTrue(LearningEngine.project(sessions, hiddenWords: ["nb|å gå|to go"]).words.isEmpty)
+        XCTAssertTrue(LearningEngine.project(sessions, hiddenWords: ["nb|gå"]).words.isEmpty)
+        XCTAssertEqual(LearningEngine.project(sessions, hiddenWords: ["nb|en tur|a trip"]).words.count, 1)
+    }
 }

@@ -12,6 +12,7 @@ public struct LanguageModule: Identifiable, Sendable {
     public let speechGuidance: String
     public let writingGuidance: String
     public let lemmaGuidance: String
+    public let lemmaPrefixes: [String]
     public let teachingFocus: [String]
     public let topicPlaceholder: String
     public let lookupUnavailableReply: String

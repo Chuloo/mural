@@ -7,6 +7,7 @@ extension LanguageModule {
         speechGuidance: "Use clear, broadly intelligible English with a consistent, natural pronunciation. Accept valid regional accents, vocabulary and grammar, including British and American forms. Do not treat an accent difference as an error or require imitation of a native accent. Correct pronunciation only when meaning is unclear and the audio supports the correction.",
         writingGuidance: "Use standard English spelling and punctuation. Keep one spelling convention within your own reply, but accept valid regional spelling and usage from the learner.",
         lemmaGuidance: "Give countable nouns in the singular and verbs in the base form, for example a journey and go. Keep meaningful phrasal verbs such as look after together. Use a short, plain English definition as the stable sense rather than repeating the word itself.",
+        lemmaPrefixes: ["a", "an", "the"],
         teachingFocus: [
             "Greetings, introductions and useful everyday chunks such as I'd like and my name is.",
             "Everyday questions, present forms, articles and common countable and uncountable nouns.",
