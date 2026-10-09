@@ -709,7 +709,7 @@ private struct FlashcardsView: View {
                         let destination = deck.destination(from: selection, direction: direction)
                         ZStack {
                             if destination != selection {
-                                FlashcardView(word: deck.words[destination], selected: false)
+                                FlashcardView(word: deck.words[destination], selected: false, showContent: abs(dragOffset) > 6)
                                     .padding(.horizontal, 24).scaleEffect(0.94 + min(abs(dragOffset) / geometry.size.width, 1) * 0.06)
                                     .offset(y: 12).opacity(0.7).allowsHitTesting(false).accessibilityHidden(true)
                             }
@@ -784,6 +784,7 @@ private struct FlashcardView: View {
     let word: WordState
     let selected: Bool
     var canReveal: () -> Bool = { true }
+    var showContent = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
     var body: some View {
@@ -808,8 +809,8 @@ private struct FlashcardView: View {
                 Button(back ? "Hide meaning" : "Tap to reveal meaning") { reveal() }
                     .font(.subheadline).foregroundStyle(MuralColor.secondary).frame(minHeight: 44)
                     .accessibilityIdentifier("reveal-flashcard")
-            }.padding(28).frame(maxWidth: .infinity, minHeight: 320)
-                .background(.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 32))
+            }.opacity(showContent ? 1 : 0).padding(28).frame(maxWidth: .infinity, minHeight: 320)
+                .background(.white, in: RoundedRectangle(cornerRadius: 32))
                 .overlay(RoundedRectangle(cornerRadius: 32).strokeBorder(MuralColor.peach.opacity(0.65), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 32)).onTapGesture { reveal() }
                 .accessibilityAction(named: back ? "Hide meaning" : "Reveal meaning") { reveal() }

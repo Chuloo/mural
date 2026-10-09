@@ -341,6 +341,7 @@ private fun themeSymbol(id: String) = when (id) {
 
 @Composable
 internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: () -> Unit) {
+    val density = LocalDensity.current.density
     var selection by remember { mutableStateOf(0) }
     var advancing by remember { mutableStateOf(false) }
     val offset = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -382,7 +383,7 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
                         .onSizeChanged { cardWidth = it.width.toFloat() }) {
                         val destination = deck.destination(selection, if (offset.value > 0) -1 else 1)
                         if (destination != selection) {
-                            Flashcard(deck.words[destination], selected = false, preview = true,
+                            Flashcard(deck.words[destination], selected = false, preview = true, showContent = kotlin.math.abs(offset.value) > 6 * density,
                                 modifier = Modifier.graphicsLayer {
                                     val scale = .94f + (kotlin.math.abs(offset.value) / cardWidth).coerceIn(0f, 1f) * .06f
                                     scaleX = scale; scaleY = scale; translationY = 12.dp.toPx(); alpha = .7f
@@ -427,12 +428,12 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
 }
 
 @Composable
-private fun Flashcard(word: WordState, selected: Boolean, modifier: Modifier = Modifier, preview: Boolean = false) {
-    androidx.compose.runtime.key(word.id) { FlashcardFace(word, selected, modifier, preview) }
+private fun Flashcard(word: WordState, selected: Boolean, modifier: Modifier = Modifier, preview: Boolean = false, showContent: Boolean = true) {
+    androidx.compose.runtime.key(word.id) { FlashcardFace(word, selected, modifier, preview, showContent) }
 }
 
 @Composable
-private fun FlashcardFace(word: WordState, selected: Boolean, modifier: Modifier, preview: Boolean) {
+private fun FlashcardFace(word: WordState, selected: Boolean, modifier: Modifier, preview: Boolean, showContent: Boolean) {
     var revealed by remember(word.id) { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(selected) { revealed = false }
     val angle by androidx.compose.animation.core.animateFloatAsState(if (revealed) 180f else 0f,
@@ -442,8 +443,8 @@ private fun FlashcardFace(word: WordState, selected: Boolean, modifier: Modifier
     Surface(Modifier.fillMaxSize().then(modifier).padding(horizontal = 20.dp, vertical = 4.dp).graphicsLayer {
         rotationY = if (back) angle - 180f else angle
         cameraDistance = 12 * density
-    }, shape = RoundedCornerShape(28.dp), color = MuralColors.Surface.copy(alpha = .85f)) {
-        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).clickable(enabled = !preview, onClickLabel = reveal) { revealed = !revealed }
+    }, shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
+        Column(Modifier.graphicsLayer { alpha = if (showContent) 1f else 0f }.verticalScroll(androidx.compose.foundation.rememberScrollState()).clickable(enabled = !preview, onClickLabel = reveal) { revealed = !revealed }
             .padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(26.dp, Alignment.CenterVertically)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag(if (preview) "flashcard-preview-proficiency" else "flashcard-proficiency")) {
                 RecallBars(word.bars); Text(wordLabel(word.label), color = MuralColors.Secondary, style = MaterialTheme.typography.bodyMedium)
