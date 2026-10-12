@@ -22,7 +22,7 @@ jobs:
         run: python3 -m unittest scripts.tests.test_check_android_release -v
       - name: Validate listing copy and available store assets
         run: python3 scripts/check_android_release.py --output /tmp/android-release-files.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: android-release-file-checks
@@ -50,12 +50,12 @@ jobs:
         run: ./gradlew --no-daemon -Pmural.liveDeviceVerification=true -Pmural.apiOrigin=https://api.mural.chat -Pmural.minutePurchasesEnabled=false :app:assembleVoiceVerification :app:assembleVoiceVerificationAndroidTest
       - name: Inspect unsigned release bundle and native library layout
         run: python3 scripts/check_android_release.py --aab apps/android/app/build/outputs/bundle/release/app-release.aab --output /tmp/android-release-native-checks.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mural-android-debug
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: mural-android-unsigned-bundle
@@ -63,7 +63,7 @@ jobs:
             apps/android/app/build/outputs/bundle/release/app-release.aab
             /tmp/android-release-native-checks.json
           retention-days: 14
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: android-test-reports
@@ -118,7 +118,7 @@ jobs:
               cp -a "$report" apps/android/build/device-diagnostics/
             fi
           done
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: android-device-test-reports
