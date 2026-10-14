@@ -42,7 +42,10 @@ struct AddMinutesView: View {
                     }
                 }.disabled(purchases.busy || purchases.pending)
                 if purchases.busy { ProgressView("Checking minutes…") }
-                if let message = purchases.message { Text(message).font(.callout).foregroundStyle(MuralColor.secondary) }
+                if let message = purchases.message {
+                    Text(message).font(.callout).foregroundStyle(MuralColor.secondary)
+                        .accessibilityIdentifier(purchases.catalogDiagnosticIdentifier)
+                }
                 Text("One-time purchase. No subscription. Unused purchased minutes don’t expire. Each conversation has a 15-second minimum charge.")
                     .font(.footnote).foregroundStyle(MuralColor.secondary)
                 Button("Check purchases") { Task { await purchases.checkPurchases(); await account.refreshAndWait() } }
