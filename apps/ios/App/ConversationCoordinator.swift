@@ -250,36 +250,39 @@ import MuralCore
     }
     func clearPersonalKeyFailure() { personalKeyFailure = nil }
     /// Checks the hosted wallet without selecting it or opening a voice lease.
-    func hostedBalanceForSwitch() async -> HostedBalance? {
+    func hostedBalanceForSwitch() async throws -> HostedBalance {
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("--preview") {
+            if ProcessInfo.processInfo.arguments.contains("--preview-hosted-sign-in") { throw HostedError.signInRequired }
+            if ProcessInfo.processInfo.arguments.contains("--preview-hosted-unavailable") { throw HostedError.unavailable }
             if ProcessInfo.processInfo.arguments.contains("--preview-paid-member") ||
                 ProcessInfo.processInfo.arguments.contains("--preview-paid-only") ||
                 ProcessInfo.processInfo.arguments.contains("--preview-paid-reserved") {
-                return HostedBalance.preview(paidOnly: !ProcessInfo.processInfo.arguments.contains("--preview-paid-member"),
-                                             reserved: ProcessInfo.processInfo.arguments.contains("--preview-paid-reserved"))
+                guard let balance = HostedBalance.preview(paidOnly: !ProcessInfo.processInfo.arguments.contains("--preview-paid-member"),
+                                                          reserved: ProcessInfo.processInfo.arguments.contains("--preview-paid-reserved"))
+                else { throw HostedError.invalidResponse }
+                return balance
             }
-            return try? HostedBalance(["unit": "milliseconds", "billingBasis": "connected-conversation-time",
+            return try HostedBalance(["unit": "milliseconds", "billingBasis": "connected-conversation-time",
                                        "balanceMilliseconds": 534_000, "reservedMilliseconds": 0,
                                        "availableMilliseconds": 534_000])
         }
         #endif
-        guard !isRunning, let client = HostedClient.shared else { return nil }
-        do {
-            let member: ManagedAccountSession?
-            if let config = ManagedAccountConfiguration.load() {
-                member = try ManagedAccountKeychain(scope: config.storageScope).load()
-            } else { member = nil }
-            let owner = try await GuestAccess.shared.owner(member: member)
-            let balance = try await client.balance(owner)
-            guard !isRunning, conversationProvider == .personalKey else { return nil }
-            let currentMember: ManagedAccountSession?
-            if let config = ManagedAccountConfiguration.load() {
-                currentMember = try ManagedAccountKeychain(scope: config.storageScope).load()
-            } else { currentMember = nil }
-            guard try await GuestAccess.shared.owner(member: currentMember).accountID == owner.accountID else { return nil }
-            return balance
-        } catch { return nil }
+        guard !isRunning else { throw CancellationError() }
+        guard let client = HostedClient.shared else { throw HostedError.unavailable }
+        let member: ManagedAccountSession?
+        if let config = ManagedAccountConfiguration.load() {
+            member = try ManagedAccountKeychain(scope: config.storageScope).load()
+        } else { member = nil }
+        let owner = try await GuestAccess.shared.owner(member: member)
+        let balance = try await client.balance(owner)
+        guard !isRunning, conversationProvider == .personalKey else { throw CancellationError() }
+        let currentMember: ManagedAccountSession?
+        if let config = ManagedAccountConfiguration.load() {
+            currentMember = try ManagedAccountKeychain(scope: config.storageScope).load()
+        } else { currentMember = nil }
+        guard try await GuestAccess.shared.owner(member: currentMember).accountID == owner.accountID else { throw CancellationError() }
+        return balance
     }
     var hasAIConsent: Bool {
         store.preferences.aiConsentVersion == AIProcessingConsent.version || AudioVerification.requested

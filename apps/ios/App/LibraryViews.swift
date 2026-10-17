@@ -433,7 +433,7 @@ struct SettingsView: View {
                 OpenAIKeyView(coordinator: coordinator, hasKey: $hasKey, useAfterSave: saveAndUseKey)
             }
         }
-        .sheet(isPresented: $showingHostedSwitch) { HostedAccessSwitchView(coordinator: coordinator) }
+        .sheet(isPresented: $showingHostedSwitch) { HostedAccessSwitchView(coordinator: coordinator, account: account) }
         .sheet(isPresented: $showingAIProcessing) {
             AIProcessingSettingsView(coordinator: coordinator)
         }
@@ -558,10 +558,12 @@ private struct OpenAIKeyView: View {
 
 private struct HostedAccessSwitchView: View {
     let coordinator: ConversationCoordinator
+    let account: ManagedAccountStore
     @Environment(\.dismiss) private var dismiss
     @State private var available: HostedBalance?
     @State private var checking = true
     @State private var failed = false
+    @State private var failure: HostedError?
     @State private var switchTask: Task<Void, Never>?
     var body: some View {
         NavigationStack {
@@ -575,24 +577,19 @@ private struct HostedAccessSwitchView: View {
                                  "Not enough minutes to start a conversation.")
                         }
                     }
-                    else { Text("Couldn’t check your minutes. Try again.") }
+                    else { Text(failure?.localizedDescription ?? "Couldn’t check your minutes. Try again.") }
                     if failed { Text("Your minutes changed. Check again before switching.").foregroundStyle(MuralColor.secondary) }
-                    if !checking && available == nil { Button("Try again") { Task { await check() } } }
+                    if !checking && available == nil {
+                        if failure?.needsSignInRecovery == true {
+                            NavigationLink("Sign in to Mural") {
+                                ManagedAccountView(coordinator: coordinator, store: account)
+                            }.accessibilityIdentifier("hosted-switch-sign-in")
+                        } else { Button("Try again") { Task { await check() } } }
+                    }
                 } header: { Text("Mural minutes") } footer: { Text("Your saved OpenAI key will remain on this iPhone. Switching changes the next conversation only.") }
                 if let available, available.canStart, !checking {
                     Section {
-                        Button("Use Mural minutes") {
-                            switchTask = Task {
-                                checking = true
-                                guard let latest = await coordinator.hostedBalanceForSwitch(), latest.canStart,
-                                      !Task.isCancelled, coordinator.conversationProvider == .personalKey,
-                                      !coordinator.isRunning else {
-                                    self.available = nil; failed = true; checking = false; return
-                                }
-                                coordinator.selectConversationProvider(.hosted)
-                                dismiss()
-                            }
-                        }.frame(maxWidth: .infinity).fontWeight(.semibold)
+                        Button("Use Mural minutes", action: confirmSwitch).frame(maxWidth: .infinity).fontWeight(.semibold)
                     }
                 }
             }.scrollContentBackground(.hidden).background(MuralColor.cream)
@@ -600,11 +597,29 @@ private struct HostedAccessSwitchView: View {
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
         .task { await check() }
+        .onChange(of: account.session?.accessToken) { _, _ in Task { await check() } }
         .onDisappear { switchTask?.cancel() }
     }
+    private func confirmSwitch() {
+        switchTask = Task {
+            checking = true; failed = false; failure = nil
+            defer { checking = false }
+            do {
+                let latest = try await coordinator.hostedBalanceForSwitch()
+                guard !Task.isCancelled, coordinator.conversationProvider == .personalKey,
+                      !coordinator.isRunning else { return }
+                guard latest.canStart else { available = latest; failed = true; return }
+                coordinator.selectConversationProvider(.hosted)
+                dismiss()
+            } catch is CancellationError { return }
+            catch { available = nil; failure = (error as? HostedError) ?? .unavailable }
+        }
+    }
     private func check() async {
-        checking = true; failed = false
-        available = await coordinator.hostedBalanceForSwitch()
+        checking = true; failed = false; failure = nil
+        do { available = try await coordinator.hostedBalanceForSwitch() }
+        catch is CancellationError { checking = false; return }
+        catch { available = nil; failure = (error as? HostedError) ?? .unavailable }
         checking = false
     }
 }

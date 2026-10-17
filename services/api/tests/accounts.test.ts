@@ -255,12 +255,23 @@ integration('concurrent signup for the same subject creates one account and wall
 integration('new and existing subjects can sign in after ten thousand active accounts', async () => {
   const subject = randomUUID(), existing = await session(subject);
   const count = Number((await db!.query('SELECT count(*) AS count FROM accounts WHERE deleted_at IS NULL')).rows[0].count);
-  const inserted = await db!.query('INSERT INTO accounts(id) SELECT gen_random_uuid() FROM generate_series(1,$1) RETURNING id', [10_000 - count]);
+  const inserted: string[] = [];
   try {
+    // Bulk fixture setup can exceed the normal statement deadline on a shared
+    // CI runner. Keep real signup requests under that deadline and batch only
+    // fixture insertion/cleanup, including cleanup after a partial setup failure.
+    for (let remaining = 10_000 - count; remaining > 0;) {
+      const size = Math.min(500, remaining);
+      const batch = await db!.query('INSERT INTO accounts(id) SELECT gen_random_uuid() FROM generate_series(1,$1) RETURNING id', [size]);
+      inserted.push(...batch.rows.map(row => row.id)); remaining -= size;
+    }
     assert.notEqual((await session()).accountID, existing.accountID);
     assert.equal((await session(subject)).accountID, existing.accountID);
     assert.equal(Number((await db!.query('SELECT count(*) AS count FROM accounts WHERE deleted_at IS NULL')).rows[0].count), 10_001);
-  } finally { await db!.query('DELETE FROM accounts WHERE id=ANY($1::uuid[])', [inserted.rows.map(row => row.id)]); }
+  } finally {
+    for (let offset = 0; offset < inserted.length; offset += 500)
+      await db!.query('DELETE FROM accounts WHERE id=ANY($1::uuid[])', [inserted.slice(offset, offset + 500)]);
+  }
 });
 integration('revoked sessions cannot authorize a later delete, and a failed Apple revoke leaves the account intact', async () => {
   const value = await session(), authorization = `Bearer ${value.accessToken}`;

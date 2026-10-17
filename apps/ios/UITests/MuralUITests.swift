@@ -699,6 +699,43 @@ final class MuralUITests: XCTestCase {
         XCTAssertTrue(access.label.contains("Mural minutes"))
     }
 
+    func testLinkedGuestSwitchOffersSignInWithoutChangingProvider() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key", "--preview-hosted-sign-in"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        let access = app.buttons["settings-conversation-access"]
+        XCTAssertTrue(access.waitForExistence(timeout: 5))
+        access.tap(); app.buttons["Mural minutes"].tap()
+        let signIn = app.buttons["hosted-switch-sign-in"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Use Mural minutes"].exists)
+        XCTAssertFalse(app.staticTexts["Couldn’t check your minutes. Try again."].exists)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Linked guest sign-in recovery"; screen.lifetime = .keepAlways; add(screen)
+        signIn.tap()
+        XCTAssertTrue(app.staticTexts["Welcome to Mural"].waitForExistence(timeout: 5))
+        app.buttons["BackButton"].tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(access.label.contains("My API key"))
+    }
+
+    func testUnavailableGuestSwitchCanRetryWithoutRequiringSignIn() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key", "--preview-hosted-unavailable"]
+        app.launch(); app.buttons["Settings"].tap()
+        let access = app.buttons["settings-conversation-access"]
+        XCTAssertTrue(access.waitForExistence(timeout: 5))
+        access.tap(); app.buttons["Mural minutes"].tap()
+        XCTAssertTrue(app.buttons["Try again"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["hosted-switch-sign-in"].exists)
+        XCTAssertFalse(app.buttons["Use Mural minutes"].exists)
+        app.buttons["Try again"].tap()
+        XCTAssertTrue(app.buttons["Try again"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(access.label.contains("My API key"))
+    }
+
     func testReservedPaidMinutesAreNotShownAsSpendable() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-paid-reserved"]

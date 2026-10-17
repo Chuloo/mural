@@ -98,7 +98,7 @@ integration('Apple finishes a recent paginated window when the clock advances be
   const f=await fixture(),started=Date.now();let now=started;
   const clock=mock.method(Date,'now',()=>now),calls:Array<{start:number;end:number;token?:string}>=[];
   try {
-    await f.db.query("INSERT INTO apple_notification_cursors(environment,merchant,completed_through_ms) VALUES('live','chat.mural.ios',$1)",[started-600_000]);
+    await f.db.query("INSERT INTO apple_notification_cursors(environment,merchant,completed_through_ms,next_poll_after) VALUES('live','chat.mural.ios',$1,now()-interval '1 second')",[started-600_000]);
     const cursor=new AppleHistoryReconciler(f.db,{environment:'live',merchant:'chat.mural.ios',pollHistory:async(start,end,token)=>{
       calls.push({start,end,token});return {scheduled:0,nextPageToken:token?undefined:'last-page'};
     }});
