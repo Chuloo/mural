@@ -36,6 +36,23 @@ def png(path, width, height, color=2, transparency=False):
     path.write_bytes(body)
 
 
+def dex_with_names(names, method_name_indexes):
+    strings_offset = 112
+    methods_offset = strings_offset + len(names) * 4
+    data = bytearray(methods_offset + len(method_name_indexes) * 8)
+    data[:8] = b"dex\n039\0"
+    struct.pack_into("<II", data, 36, 112, 0x12345678)
+    struct.pack_into("<II", data, 56, len(names), strings_offset)
+    struct.pack_into("<II", data, 88, len(method_name_indexes), methods_offset)
+    for index, name in enumerate(names):
+        struct.pack_into("<I", data, strings_offset + index * 4, len(data))
+        data += bytes([len(name)]) + name + b"\0"
+    for index, name_index in enumerate(method_name_indexes):
+        struct.pack_into("<I", data, methods_offset + index * 8 + 4, name_index)
+    struct.pack_into("<I", data, 32, len(data))
+    return bytes(data)
+
+
 class AndroidReleaseTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -202,6 +219,32 @@ class AndroidReleaseTests(unittest.TestCase):
             with self.assertRaises(release.InvalidRelease):
                 release.check_aab(path, ["LICENSE.txt"])
 
+    def test_secret_scan_distinguishes_compiler_method_names_from_key_strings(self):
+        generated = b"$r8$lambda$abcsk-" + b"x" * 21
+        self.assertEqual(len(generated), 38)
+        path = self.bundle()
+        with zipfile.ZipFile(path, "a") as archive:
+            archive.writestr("base/dex/classes2.dex", dex_with_names([generated], [0]))
+        result = release.check_aab(path, ["LICENSE.txt"])["embeddedSecretScan"]
+        self.assertEqual(result["findings"], 0)
+        self.assertEqual(result["verifiedCompilerMethodNameMatches"], 1)
+        key = b"sk-" + b"x" * 50
+        for content in (dex_with_names([generated, key], [0]), dex_with_names([generated], []),
+                        dex_with_names([key], [0]), generated, b"x" + dex_with_names([generated], [0])):
+            with self.subTest(content_length=len(content)):
+                path = self.bundle()
+                with zipfile.ZipFile(path, "a") as archive:
+                    archive.writestr("base/dex/classes2.dex", content)
+                with self.assertRaises(release.InvalidRelease):
+                    release.check_aab(path, ["LICENSE.txt"])
+
+    def test_invalid_dex_method_table_does_not_hide_a_secret(self):
+        generated = b"$r8$lambda$abcsk-" + b"x" * 21
+        for offset, value in ((32, 1), (36, 1), (40, 0), (60, 0xFFFFFFFF), (92, 0xFFFFFFFF), (120, 0xFFFFFFFF)):
+            content = bytearray(dex_with_names([generated], [0]))
+            struct.pack_into("<I", content, offset, value)
+            self.assertEqual(release.dex_lambda_name_spans(bytes(content)), [])
+
     def test_public_oauth_id_is_allowed_but_credential_files_are_not(self):
         path = self.bundle()
         with zipfile.ZipFile(path, "a") as archive:
@@ -345,22 +388,40 @@ class AndroidReleaseTests(unittest.TestCase):
                 self.assertEqual(status, 1)
                 self.assertFalse(result["passed"])
 
-    def test_checked_in_specs_separate_current_default_direct_and_historical_versions(self):
+    def test_checked_in_specs_separate_sandbox_production_direct_and_historical_versions(self):
         directory = release.ROOT / "release/android"
         current = json.loads((directory / "release-spec.json").read_text())
-        direct = json.loads((directory / "specs/direct-v8.json").read_text())
-        previous_direct = json.loads((directory / "specs/direct-v7.json").read_text())
+        production = json.loads((directory / "specs/play-v15.json").read_text())
+        sandbox = json.loads((directory / "specs/play-v14.json").read_text())
+        previous_play = json.loads((directory / "specs/play-v11.json").read_text())
+        direct = json.loads((directory / "specs/direct-v10.json").read_text())
+        previous_direct = json.loads((directory / "specs/direct-v9.json").read_text())
         historical = json.loads((directory / "specs/play-v4.json").read_text())
         submitted = json.loads((directory / "evidence/play-submission-2026-09-14.json").read_text())
         build = (release.ROOT / "apps/android/app/build.gradle.kts").read_text()
-        self.assertRegex(build, rf"versionCode\s*=\s*{current['versionCode']}\b")
+        self.assertRegex(build, rf'mural\.versionCode"\)\.ifBlank\s*\{{\s*"{current["versionCode"]}"\s*\}}')
+        self.assertRegex(build, r"versionCode\s*=\s*muralVersionCode\b")
         self.assertEqual(historical["versionCode"], submitted["versionCode"])
         self.assertEqual(historical["scope"], "hosted-guest-preview")
-        self.assertEqual(previous_direct["versionCode"], 7)
-        self.assertEqual(direct["versionCode"], 8)
-        self.assertEqual(current["versionCode"], direct["versionCode"])
+        self.assertEqual(previous_direct["versionCode"], 9)
+        self.assertEqual(direct["versionCode"], 10)
+        self.assertEqual(current, production)
+        self.assertEqual(production["versionCode"], 15)
+        self.assertEqual(sandbox["versionCode"], 14)
+        self.assertEqual(previous_play["versionCode"], 11)
+        self.assertEqual(sandbox["candidate"], {
+            "track": "internal-testing", "purchaseChannel": "play", "purchaseEnvironment": "test",
+            "apiOrigin": "https://sandbox-api.mural.chat", "productionEligible": False,
+        })
+        self.assertEqual(production["candidate"], {
+            "track": "production", "purchaseChannel": "play", "purchaseEnvironment": "live",
+            "apiOrigin": "https://api.mural.chat", "productionEligible": True,
+        })
+        self.assertGreater(current["versionCode"], direct["versionCode"])
         self.assertGreater(current["versionCode"], previous_direct["versionCode"])
         self.assertGreater(previous_direct["versionCode"], historical["versionCode"])
+        self.assertEqual(production["scope"], "hosted-minute-release")
+        self.assertEqual(sandbox["scope"], "hosted-minute-release")
         self.assertEqual(previous_direct["scope"], "hosted-minute-release")
         self.assertEqual(direct["scope"], "hosted-minute-release")
 

@@ -2,6 +2,7 @@
 """Capture actual offline Play screens from prebuilt isolated test APKs; never build or upload."""
 from pathlib import Path
 import argparse, subprocess, json, hashlib, datetime, os, re, tempfile
+from play_capture_publish import publish_capture_assets
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
@@ -45,14 +46,16 @@ evidence = {'recordedAtUTC': datetime.datetime.now(datetime.timezone.utc).isofor
             'serial': args.serial, 'originalDeviceSettings': original,
             'uiTestAPK': {'sha256': digest(app_apk)},
             'testAPK': {'sha256': digest(test_apk)},
-            'fixture': {'path': 'apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt',
-                        'sha256': digest(root/'apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt'),
-                        'syntheticConversationAndVocabulary': True, 'providerCalls': False, 'purchaseCalls': False},
+            'fixtures': [{'path': str(p), 'sha256': digest(root/p)} for p in [
+                Path('apps/android/app/src/androidTest/java/chat/mural/PlayStoreCaptureTest.kt'),
+                Path('apps/android/app/src/androidTest/java/chat/mural/CaptionParityTest.kt')]],
+            'syntheticConversationAndVocabulary': True, 'providerCalls': False, 'purchaseCalls': False,
             'sourceBaseline': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().strip(),
             'cleanSourceBuildClaimed': False,
             'sourceSnapshotAfterBuild': [{'path': str(p.relative_to(root)), 'sha256': digest(p)}
                 for p in sorted((root/'apps/android/app/src/main').rglob('*')) if p.is_file()],
             'assets': []}
+asset_payloads = []
 try:
     device('install', '-r', str(app_apk))
     device('install', '-r', str(test_apk))
@@ -62,20 +65,46 @@ try:
     shell('am','broadcast','-a','com.android.systemui.demo','--es','command','clock','--es','hhmm','0900')
     shell('am','broadcast','-a','com.android.systemui.demo','--es','command','battery','--es','level','100','--es','plugged','false')
     shell('am','broadcast','-a','com.android.systemui.demo','--es','command','notifications','--es','visible','false')
+    # API 36 can show an emulator satellite icon even in SystemUI demo mode.
+    shell('cmd', 'statusbar', 'send-disable-flag', 'system-icons', 'notification-icons')
     result = device('shell','am','instrument','-w','-e','class',
-        'chat.mural.PlayStoreCaptureTest,chat.mural.PlayFeatureGraphicTest,chat.mural.LargeTypeOnboardingTest',
-        'chat.mural.android.uitest.test/androidx.test.runner.AndroidJUnitRunner', check=False, timeout=120)
+        'chat.mural.PlayStoreCaptureTest,chat.mural.PlayFeatureGraphicTest,chat.mural.LargeTypeOnboardingTest,'
+        'chat.mural.CaptionParityTest#mandarinCaptionToggleAndContextualLookupMatchIOS,'
+        'chat.mural.CaptionParityTest#spanishCaptionAndContextualLookupMatchIOS',
+        'chat.mural.android.uitest.test/androidx.test.runner.AndroidJUnitRunner', check=False, timeout=180)
     (work/'capture-test.log').write_bytes(result.stdout + result.stderr)
     print(result.stdout.decode(), flush=True)
-    assert b'OK (5 tests)' in result.stdout, 'Capture and layout tests did not all pass.'
-    for name in ['01-greeting.png','02-conversation.png','03-themes.png','04-words.png','05-languages.png','06-settings.png','feature-graphic.png']:
-        output = output_root/'assets'/('' if name=='feature-graphic.png' else 'en-US')/name
-        output.parent.mkdir(parents=True,exist_ok=True)
-        png = device('exec-out','run-as','chat.mural.android.uitest','cat','files/play-store/'+name).stdout
+    assert b'OK (9 tests)' in result.stdout, 'Capture and layout tests did not all pass.'
+    captures = [
+        ('play-store', '02-conversation.png', '01-conversation.png'),
+        ('caption-parity', 'spanish-lookup.png', '02-word-meaning.png'),
+        ('play-store', 'listing-03-mandarin.png', '03-mandarin.png'),
+        ('play-store', '03-themes.png', '04-themes.png'),
+        ('play-store', '04-words.png', '05-words.png'),
+        ('play-store', 'listing-07-history-detail.png', '06-conversation-history.png'),
+        ('play-store', 'listing-08-italian.png', '07-italian.png'),
+        ('play-store', '05-languages.png', '08-languages.png'),
+    ]
+    for source, name, final_name in captures:
+        png = device('exec-out','run-as','chat.mural.android.uitest','cat',f'files/{source}/{name}').stdout
         assert png.startswith(b'\x89PNG\r\n\x1a\n')
-        output.write_bytes(png)
-        evidence['assets'].append({'path':str(output.relative_to(output_root)),'sha256':digest(output),'bytes':len(png)})
+        assert (int.from_bytes(png[16:20], 'big'), int.from_bytes(png[20:24], 'big')) == (1080, 1920)
+        assert png[25] == 2, 'Play phone screenshots must be opaque RGB PNGs.'
+        raw = Path('assets/raw/en-US')/name
+        output = Path('assets/en-US')/final_name
+        asset_payloads.extend([(raw, png), (output, png)])
+        evidence['assets'].append({'path':str(output), 'source':str(raw),
+                                   'sha256':hashlib.sha256(png).hexdigest(),'bytes':len(png)})
+    feature = device('exec-out','run-as','chat.mural.android.uitest','cat','files/play-store/feature-graphic.png').stdout
+    assert feature.startswith(b'\x89PNG\r\n\x1a\n')
+    assert (int.from_bytes(feature[16:20], 'big'), int.from_bytes(feature[20:24], 'big')) == (1024, 500)
+    assert feature[25] == 2
+    feature_path = Path('assets/feature-graphic.png')
+    asset_payloads.append((feature_path, feature))
+    evidence['assets'].append({'path':str(feature_path),
+                               'sha256':hashlib.sha256(feature).hexdigest(),'bytes':len(feature)})
 finally:
+    device('shell','cmd','statusbar','send-disable-flag','none',check=False)
     device('shell','am','broadcast','-a','com.android.systemui.demo','--es','command','exit',check=False)
     if original['demoAllowed']=='null':
         device('shell','settings','delete','global','sysui_demo_allowed',check=False)
@@ -88,5 +117,13 @@ finally:
         'user':shell('am','get-current-user'),'fontScale':shell('settings','get','system','font_scale'),
         'demoAllowed':shell('settings','get','global','sysui_demo_allowed')}
     evidence['testLogSHA256'] = digest(work/'capture-test.log') if (work/'capture-test.log').exists() else None
-    (work/'capture-evidence.json').write_text(json.dumps(evidence,indent=2)+'\n')
-    print('Capture evidence: ' + str(work/'capture-evidence.json'), flush=True)
+
+# Publish the images and evidence together after every capture passed and the
+# emulator was restored. A failed run leaves the last successful set intact.
+assert len(evidence['assets']) == 9, 'Incomplete Play capture.'
+assert evidence['restoredDeviceSettings'] == {key: original[key] for key in
+    ('size', 'density', 'user', 'fontScale', 'demoAllowed')}, 'Emulator settings were not restored.'
+evidence_path = output_root/'assets'/'capture-evidence.json'
+asset_payloads.append((Path('assets/capture-evidence.json'), (json.dumps(evidence,indent=2)+'\n').encode()))
+publish_capture_assets(output_root, asset_payloads)
+print('Capture evidence: ' + str(evidence_path), flush=True)

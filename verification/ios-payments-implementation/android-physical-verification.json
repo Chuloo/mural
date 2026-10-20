@@ -1,0 +1,68 @@
+{
+  "device": "Samsung Galaxy S9 SM-G960F",
+  "android": "10",
+  "previousVersionCode": 9,
+  "sandboxVersionCode": 10,
+  "sameSigningCertificate": true,
+  "learningDataCleared": false,
+  "privateBackupRetained": true,
+  "productionGuestCredentialPreservedSeparately": true,
+  "observedAccountBalanceBeforeCall": "About 479 min",
+  "observedAccountBalanceAfterCall": "About 478 min",
+  "observedAccountBalanceAfterStripePurchase": "About 515 min",
+  "applePurchaseSpentOnAndroid": true,
+  "stripeSandboxPurchase": {
+    "orderID": "66b15cfe-9f0b-412a-beda-07574a715ffc",
+    "quantity": 1,
+    "totalMinor": 500,
+    "currency": "USD",
+    "grantedNanoUSD": "3690000000"
+  },
+  "checkoutTests": {
+    "physicalSamsung": {
+      "passed": 6,
+      "skipped": 1,
+      "skipReason": "Spanish app-locales test requires Android 13; covered by Android 16 emulator"
+    },
+    "android16Emulator": {
+      "passed": 7,
+      "skipped": 0
+    }
+  },
+  "testCardCleanup": "User will delete the synthetic saved Chrome Visa ending 4242 later.",
+  "observedBalanceAfterRelaunch": "About 515 min",
+  "largeTextAndReducedAnimation": {
+    "fontScale": 1.6,
+    "animationsDisabled": true,
+    "screens": [
+      "Talk",
+      "Settings",
+      "Account",
+      "Add Mural minutes"
+    ],
+    "allPurchaseControlsReachableByScroll": true,
+    "originalSettingsRestored": true,
+    "screenReaderWalkthroughCompleted": false
+  },
+  "sameAccountBalanceAfterNewNorwayPurchase": "About 552 min on both physical phones",
+  "freeToPaidBoundary": {
+    "freeSecondsGranted": 40,
+    "remainingFreeSecondsAfterFirstSettlement": 2,
+    "checkpointSurvivedRelaunch": true,
+    "serverCloseRaceVerified": true,
+    "paidContinuationSeconds": 40,
+    "paidContinuationSessionID": "0e565942-99e2-47be-9dd2-1167750677ab"
+  },
+  "minimalTalk": {
+    "nativeSheetContainsExplanationAndChoices": true,
+    "orangeContinue": true,
+    "dismissalLeavesOriginalTalkLayout": true,
+    "microphoneReopensWithoutStartingCall": true
+  },
+  "coldLaunch": {
+    "staticSplashRemoved": true,
+    "separateAnimatedSplashRemoved": true,
+    "creamDirectlyToTalk": true,
+    "recording": "android-physical/cold-launch.mp4"
+  }
+}

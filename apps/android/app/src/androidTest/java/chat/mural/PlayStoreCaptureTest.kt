@@ -148,6 +148,7 @@ class PlayStoreCaptureTest {
 
         compose.onNodeWithTag("tab-topics").performClick()
         compose.onNodeWithTag("topics-screen").assertIsDisplayed()
+        compose.onNodeWithTag("topics-screen").performScrollToIndex(2)
         capture("03-themes.png")
         compose.onNodeWithTag("tab-words").performClick()
         compose.onNodeWithText("café", substring = false).assertExists()
@@ -159,6 +160,10 @@ class PlayStoreCaptureTest {
         compose.runOnIdle { vm.updatePreferences(vm.archive.preferences.copy(hasOnboarded = false)) }
         assertControlFullyVisible("onboarding-language-picker")
         capture("05-languages.png")
+        compose.onNodeWithTag("onboarding-language-picker").performClick()
+        compose.onNodeWithTag("onboarding-language-es").assertIsDisplayed()
+        capture("listing-08-languages.png")
+        compose.onNodeWithTag("onboarding-language-es").performClick()
         compose.onNodeWithTag("onboarding-continue").performClick()
         assertControlFullyVisible("onboarding-meaning-picker")
         assertCaptionFullyVisible("onboarding-meaning-example")
@@ -171,6 +176,56 @@ class PlayStoreCaptureTest {
         compose.onNodeWithTag("conversation-status").assertTextEquals("Te escucho")
         assertCaptionFullyVisible("target-caption")
         assertCaptionFullyVisible("meaning-caption")
+    }
+
+    @Test fun listingMandarinAndItalianConversation() {
+        compose.runOnIdle {
+            vm.updatePreferences(vm.archive.preferences.copy(learningLanguageID = "zh"))
+            fixtureState("session", SessionRecord(languageID = "zh", title = "在咖啡馆", fragments = mutableListOf(
+                Fragment(speaker = Speaker.user, text = "我想买一杯咖啡。", startMS = 0, endMS = 1800),
+                Fragment(speaker = Speaker.assistant, text = "好的。你想喝什么？", startMS = 2400, endMS = 5100))))
+            fixtureState("meaning", "Of course. What would you like to drink?")
+            fixtureState("state", "active")
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("pinyin-reading").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("target-caption").assertTextEquals("好的。你想喝什么？")
+        assertCaptionFullyVisible("pinyin-reading")
+        val reading = compose.onNodeWithTag("pinyin-reading").getUnclippedBoundsInRoot()
+        val targetRegion = compose.onNodeWithTag("target-passage-scroll").getUnclippedBoundsInRoot()
+        assertTrue("Pinyin extends below its visible target region: reading=$reading target=$targetRegion",
+            reading.top >= targetRegion.top - 1.dp && reading.bottom <= targetRegion.bottom + 1.dp)
+        // Let the first layout and the orb settle before taking the system screenshot.
+        Thread.sleep(700)
+        capture("listing-03-mandarin.png")
+
+        compose.runOnIdle {
+            fixtureState("session", null)
+            fixtureState("state", "idle")
+            fixtureState("meaning", "")
+            vm.updatePreferences(vm.archive.preferences.copy(learningLanguageID = "it"))
+            fixtureState("session", SessionRecord(languageID = "it", title = "Un caffè", fragments = mutableListOf(
+                Fragment(speaker = Speaker.user, text = "Un caffè, per favore.", startMS = 0, endMS = 1800),
+                Fragment(speaker = Speaker.assistant, text = "Certo. Lo preferisci con latte?", startMS = 2400, endMS = 5100))))
+            fixtureState("meaning", "Certainly. Would you prefer it with milk?")
+            fixtureState("state", "active")
+        }
+        compose.onNodeWithTag("target-caption").assertTextEquals("Certo. Lo preferisci con latte?")
+        Thread.sleep(700)
+        capture("listing-08-italian.png")
+    }
+
+    @Test fun listingSavedConversation() {
+        compose.onNodeWithTag("tab-settings").performClick()
+        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-data"))
+        compose.onNodeWithTag("settings-data").performClick()
+        compose.onNodeWithTag("settings-history").performClick()
+        compose.onNodeWithTag("settings-history-list").assertIsDisplayed()
+        Thread.sleep(500)
+        capture("listing-07-history.png")
+        compose.onNodeWithText("Un café", substring = false).performClick()
+        compose.onNodeWithText("Un café, por favor.", substring = false).assertIsDisplayed()
+        Thread.sleep(500)
+        capture("listing-07-history-detail.png")
     }
 
     @Test fun longSpanishReplyKeepsMeaningVisibleAndBothPassagesCanScroll() {
@@ -280,13 +335,18 @@ private fun savePlayBitmap(bitmap: Bitmap, name: String) {
 private fun vocabularyFixtures(): List<SessionRecord> {
     val words = listOf("café" to "coffee", "leche" to "milk", "pan" to "bread", "gracias" to "thank you",
         "mañana" to "tomorrow", "viajar" to "to travel")
-    val line = "Un café con leche y pan, por favor. Muchas gracias. Mañana quiero viajar."
-    return listOf(8 to 2, 2 to 4, 0 to 6).mapIndexed { index, (days, count) ->
+    return listOf(8 to 2, 2 to 4, 0 to 0).mapIndexed { index, (days, count) ->
         val whenSpoken = nowSeconds() - days * 86400 - 600
+        val line = if (index == 2) "Un café, por favor."
+            else "Un café con leche y pan, por favor. Muchas gracias. Mañana quiero viajar."
         val fragment = Fragment(speaker = Speaker.user, text = line, startMS = 0, endMS = 6000, receivedAt = whenSpoken)
         SessionRecord(languageID = "es", startedAt = whenSpoken, endedAt = whenSpoken + 60,
-            themeID = if (index == 1) "groceries" else "coffee", title = "Práctica de español",
-            fragments = mutableListOf(fragment), usageFinal = true).apply {
+            themeID = if (index == 1) "groceries" else "coffee",
+            title = listOf("Planes para el fin de semana", "En el mercado", "Un café")[index],
+            fragments = mutableListOf(fragment).apply {
+                if (index == 2) add(Fragment(speaker = Speaker.assistant,
+                    text = "Claro. ¿Lo quieres con leche?", startMS = 6500, endMS = 9300, receivedAt = whenSpoken))
+            }, usageFinal = true).apply {
             assessments += Assessment(fragment.id, "${fragment.id}:0", Outcome.success, 1,
                 "Keep practising familiar everyday phrases.", "Everyday conversation",
                 words.take(count).map { (form, meaning) -> WordProposal(form, meaning, form, EvidenceKind.independent,

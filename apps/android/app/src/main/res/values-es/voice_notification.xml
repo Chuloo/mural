@@ -1,0 +1,6 @@
+<resources>
+    <string name="voice_notification_channel">Conversaciones de voz</string>
+    <string name="voice_notification_title">Conversación de Mural activa</string>
+    <string name="voice_notification_detail">Escuchando y hablando. Toca para volver.</string>
+    <string name="voice_notification_end">Terminar conversación</string>
+</resources>

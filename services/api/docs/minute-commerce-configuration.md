@@ -12,14 +12,16 @@ All flags accept only `true` or `false`. All file paths are absolute. Files are 
 | `MURAL_MINUTE_SALES_ENABLED` | `false` | Enables catalog visibility and new purchases. Requires commerce enabled and catalog approval. Existing payment reconciliation remains available with sales disabled. |
 | `MURAL_MINUTE_ALLOW_LIVE` | `false` | Permits a manifest with environment `live`. A test manifest with this flag true is rejected. |
 | `MURAL_MINUTE_COMMERCE_CONFIG_FILE` | absent | Required manifest, at most 64 KiB. |
-| `MURAL_MINUTE_CATALOG_FILE` | absent | Required canonical product catalog, at most 256 KiB. |
+| `MURAL_MINUTE_CATALOG_FILE` | absent | Required canonical product catalog, at most 8 MiB. |
 | `MURAL_MINUTE_CATALOG_APPROVED_SHA256` | absent | Lowercase SHA-256 of the exact catalog file bytes. Required for sales. A supplied digest must match even when sales are disabled. |
 | `MURAL_MINUTE_RECEIPT_KEYS_FILE` | absent | Required receipt encryption key ring, at most 64 KiB. |
 | `MURAL_MINUTE_STRIPE_CREDENTIALS_FILE` | absent | Required exactly when the manifest includes Stripe. |
 | `MURAL_MINUTE_PLAY_SERVICE_ACCOUNT_FILE` | absent | Required exactly when the manifest includes Play. |
 | `MURAL_MINUTE_PLAY_BINDING_KEY_FILE` | absent | Required exactly when the manifest includes Play. |
+| `MURAL_MINUTE_APPLE_CREDENTIALS_FILE` | absent | Required exactly when the manifest includes Apple. |
+| `MURAL_MINUTE_APPLE_QUANTITY_ENABLED` | `false` | Enables Apple quantities 1–10 when true; otherwise quantity 1. |
 
-Sales enabled while commerce is disabled is an error. Missing, partial or mismatched active configuration raises `minute_commerce_configuration_invalid` with status 503. Separate test and live configurations cannot share a database containing receipts from both environments.
+Sales enabled while commerce is disabled is an error. Missing, partial or mismatched active configuration raises `minute_commerce_configuration_invalid` with status 503. Each retained receipt and order requires its configured provider scope. Apple can explicitly configure both production and sandbox scopes in a live runtime; Stripe and Play retain the manifest environment.
 
 ## File formats
 
@@ -29,18 +31,32 @@ The manifest contains `version: 1`, `environment: "test" | "live"`, at least one
 | --- | --- |
 | `webOrigin` | HTTPS origin without credentials, port, query, fragment or non-root path. Required for Stripe. |
 | `stripe` | `{ "accountID": "acct_…", "managedPayments": false }`; mode defaults to `false` and accepts only a boolean. |
-| `play` | `{ "packageName": "chat.mural.android", "currencyExponents": { "usd": 2 } }` |
+| `play` | `{ "packageName": "chat.mural.android", "currencyExponents": { "usd": 2 } }`; optional `notifications` is described below. |
+| `apple` | `{ "bundleID": "chat.mural.ios", "appAppleID": 6816001011, "sandboxEnabled": true }`; `sandboxEnabled` is optional and accepted only in a live manifest. |
 | `runner` | Optional limits listed below. |
 
 `chat.mural.android` is the permanent Play package. Each configured Play currency has an explicit exponent from 0 to 3. Catalog currency names use lowercase ISO-style three-letter identifiers.
 
-The active catalog contains `{ "version": 2, "products": [...] }`. It has at most 100 canonical `AIValueProduct` objects and no default price. Generate each product with `makeAIValueProduct` from `src/ai-value-purchases.ts`; do not manually calculate or insert the derived fields. Each product has exactly these fields:
+Play notifications use a private Pub/Sub pull subscription. Add `play.notifications` to the protected manifest only after Cloud Pub/Sub and Play Console are ready:
+
+```json
+"notifications": {
+  "topic": "projects/<service-account-project_id>/topics/mural-play-purchases",
+  "subscription": "projects/<service-account-project_id>/subscriptions/mural-play-api"
+}
+```
+
+Both resources must belong to the project in `MURAL_MINUTE_PLAY_SERVICE_ACCOUNT_FILE`, and the subscription must point to that topic. The resource names above are examples; the configured names are pinned at startup. Grant `google-play-developer-notifications@system.gserviceaccount.com` Pub/Sub Publisher on the topic. Grant the Play service-account identity the exact subscription permissions to get its configuration, pull, modify acknowledgment deadlines and acknowledge messages. Scoped Pub/Sub Subscriber plus Pub/Sub Viewer grants work; a custom role with those permissions is also suitable. In Play Console, set that topic for Mural and enable one-time-product notifications. Configure an isolated test subscription and manifest first. A Play Console test notification checks routing, but production activation also requires an observed license-tester one-time purchase notification and successful server reconciliation from that subscription. A test and a live backend may have separate subscriptions on the same topic; each checks the purchase state with Google and ignores tokens that Google identifies as belonging to the other environment.
+
+The commerce runner validates the subscription's topic on each pull, reads at most five messages, extends their acknowledgment deadline, and acknowledges each only after provider verification, encrypted receipt capture and ledger reconciliation commit. An unknown token or provider failure remains unacknowledged for retry. A successful pull opens the account-deletion gate for three minutes; failure or stale health closes it. Receiptless Play orders then use the existing 24-hour abandonment window. Saved receipts, pending payments, paid value and refund debt continue to block deletion. No public webhook or additional environment variable is needed.
+
+The active catalog contains `{ "version": 2, "products": [...] }`. It has at most 4096 canonical `AIValueProduct` objects and no default price. Generate each product with `makeAIValueProduct` from `src/ai-value-purchases.ts`; do not manually calculate or insert the derived fields. Each product has exactly these fields:
 
 | Field | Accepted value |
 | --- | --- |
-| `provider` | `stripe` or `play` |
+| `provider` | `stripe`, `play` or `apple` |
 | `environment` | The configured provider environment |
-| `merchant` | The pinned Stripe account ID or Play package |
+| `merchant` | The pinned Stripe account ID, Play package or Apple bundle ID |
 | `sku` | Server SKU, 1–128 characters using letters, numbers, `.`, `_`, `:`, `-` |
 | `providerProduct` | Actual Stripe Price ID or Play product ID, at most 200 characters |
 | `currency` | Three lowercase letters |
@@ -63,7 +79,9 @@ The `quote` fields are:
 | `exchangeRateNumerator`, `exchangeRateDenominator`, `exchangeRateVersion` | Positive decimal integer strings and an operator-reviewed version; USD major units per checkout-currency major unit |
 | `estimatedNanoUSDPerMinute`, `estimateRateVersion` | Positive decimal integer string and version for the displayed duration estimate |
 
-The factory input is `AIValueProductInput`: `provider`, `environment`, `merchant`, `sku`, `providerProduct`, `currency`, `currencyExponent`, `aiValueMinor`, `policyVersion`, `serviceFeeBasisPoints`, `processing: { rateBasisPoints, fixedMinor, bufferBasisPoints }`, `exchangeRate: { numerator, denominator, version }`, and `estimate: { nanoUSDPerMinute, rateVersion }`. USD requires exponent 2 and a 1:1 exchange rate. The application currently displays estimates using 100,000,000 nano-USD per minute; use the matching reviewed rate/version for the catalog or update both together.
+The percentage-priced factory input is `AIValueProductInput`: `provider`, `environment`, `merchant`, `sku`, `providerProduct`, `currency`, `currencyExponent`, `aiValueMinor`, `policyVersion`, `serviceFeeBasisPoints`, `processing: { rateBasisPoints, fixedMinor, bufferBasisPoints }`, `exchangeRate: { numerator, denominator, version }`, and `estimate: { nanoUSDPerMinute, rateVersion }`. USD requires exponent 2 and a 1:1 exchange rate. The application currently displays estimates using 100,000,000 nano-USD per minute; use the matching reviewed rate/version for the catalog or update both together.
+
+For fixed Google Play prices, use `makePlayAIValueProduct` with the same account, AI allocation, exchange-rate, policy and estimate fields plus a `play` snapshot. The snapshot records the exact unit price, currency/exponent, schedule version, and reviewed tax, commission and residual amounts. Its commission and tax are conservative planning assumptions, not proof of a settled payout. The factory verifies that the listed price equals the AI allocation, service fee, tax, commission and residual. Its canonical quote preserves these parts, so price or fee tampering fails catalog validation. Review [the proposed US and Norway prices](../../../release/android/play-pricing-plan.md) before adding Play rows to a protected live catalog.
 
 Version 1 retains the historical `minutes` integer field instead of AI entitlement and quote fields. It is accepted only with sales disabled. Enabling version 1 sales fails configuration validation; historical fixed-minute test products must never become launch offers.
 
@@ -103,6 +121,8 @@ Migration 013 adds `minute_play_void_cursors`. A transaction-scoped advisory loc
 The initial sweep covers the previous 29 days, leaving time to complete pagination within Google's 30-day boundary. Subsequent completed sweeps wait 15 minutes and overlap the prior checkpoint by five minutes. Each window ends one minute before the current time. Partial pagination resumes its exact stored window. A stalled token or an expired history window fails without advancing the checkpoint. The completed watermark cannot move backward.
 
 The cursor stores only environment, package, pagination token, timestamps and watermark; it stores no user or purchase tokens. Receipt reconciliation every six hours also refetches individual provider orders. Google applies void time filters to when its systems observe the void and supports token pagination. [Google Play voided purchases API](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.voidedpurchases/list).
+
+Apple credentials, dual environment routing and hosted funding are defined in the [Apple funding scope reference](apple-funding-scope.md).
 
 Related: [How to enable minute commerce](enable-minute-commerce.md), [provider integration](minute-provider-integration.md), [minute purchase accounting](minute-purchases.md).
 

@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-enum class MuralSymbol { Wave, Themes, Words, Settings, Mic, MicOff, Captions, Transcript, End,
+enum class MuralSymbol { Flashcards, Wave, Themes, Words, Settings, Mic, MicOff, Captions, Transcript, End,
     Keyboard, Sparkles, ArrowUp, ChevronDown, Back, Search, Close, Check, Leaf, ChevronRight, Coffee, Globe, Sun, Food, Music }
 
 /** Original, consistently weighted artwork; no platform-dependent text glyphs. */
@@ -30,6 +30,11 @@ fun MuralIcon(symbol: MuralSymbol, modifier: Modifier = Modifier, color: Color =
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, Offset(x1,y1), Offset(x2,y2), stroke.width, StrokeCap.Round)
             fun path(block: Path.() -> Unit) = drawPath(Path().apply(block), color, style = stroke)
             when (symbol) {
+                MuralSymbol.Flashcards -> {
+                    path { moveTo(6f,5f); lineTo(6f,3f); lineTo(21f,3f); lineTo(21f,17f); lineTo(19f,17f) }
+                    drawRoundRect(color, Offset(3f,7f), Size(14f,14f), CornerRadius(2f), style = stroke)
+                    line(7f,12f,13f,12f); line(7f,16f,11f,16f)
+                }
                 MuralSymbol.Wave -> listOf(4f to 5f, 8f to 13f, 12f to 20f, 16f to 14f, 20f to 7f).forEach { (x,h) -> line(x,12-h/2,x,12+h/2) }
                 MuralSymbol.Themes -> listOf(3f to 3f,14f to 3f,3f to 14f,14f to 14f).forEach { (x,y) ->
                     if (filled) drawRoundRect(color, Offset(x,y), Size(7f,7f), CornerRadius(1.7f))

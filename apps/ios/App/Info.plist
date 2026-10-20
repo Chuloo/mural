@@ -10,7 +10,9 @@
 <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 <key>LSRequiresIPhoneOS</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>Mural listens while you practise speaking. Your voice is sent to the AI provider you select during a conversation.</string>
+<key>NSCameraUsageDescription</key><string>Mural's voice connection framework includes camera access. Mural's current conversations are voice only and do not capture photos or video.</string>
 <key>UIUserInterfaceStyle</key><string>Light</string>
+<key>UIBackgroundModes</key><array><string>audio</string></array>
 <key>UILaunchScreen</key><dict/>
 <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
@@ -21,6 +23,9 @@
 <key>MuralGoogleClientID</key><string>$(MURAL_GOOGLE_CLIENT_ID)</string>
 <key>MuralAppleSignInEnabled</key><string>$(MURAL_APPLE_SIGN_IN_ENABLED)</string>
 <key>MuralAppleClientID</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+<key>MuralApplePurchasesEnabled</key><string>$(MURAL_APPLE_PURCHASES_ENABLED)</string>
+<key>MuralApplePurchaseEnvironment</key><string>$(MURAL_APPLE_PURCHASE_ENVIRONMENT)</string>
+<key>SKIncludeConsumableInAppPurchaseHistory</key><true/>
 <key>CFBundleURLTypes</key><array><dict>
 <key>CFBundleTypeRole</key><string>Editor</string>
 <key>CFBundleURLName</key><string>Google sign-in</string>

@@ -117,6 +117,7 @@ class HostedAPIClient internal constructor(
                     ?: throw HostedFailure.InvalidResponse
                 if ((!paid && result["billingBasis"] != JsonPrimitive(BILLING_BASIS)) || result["experimental"] != JsonPrimitive(true) ||
                     reserved <= 0 || deadline <= now() || deadline - now() > 86_400_000) throw HostedFailure.InvalidResponse
+                lease.paid = paid
                 lease.deadlineMilliseconds = deadline
                 lease.reservedMilliseconds = reserved
                 val minimum = billingMinimum(result)
@@ -130,6 +131,7 @@ class HostedAPIClient internal constructor(
     /** The lease captures its creating account; another signed-in account cannot read or use it. */
     inner class HostedLease internal constructor(override val sessionID: String, private val owner: AccountSession) : LiveSessionLease {
         init { if (!UUID_PATTERN.matches(sessionID)) throw HostedFailure.InvalidRequest }
+        var paid: Boolean = false; internal set
         var deadlineMilliseconds: Long = 0; internal set
         var reservedMilliseconds: Long = 0; internal set
         var minimumChargeMilliseconds: Long? = null; internal set

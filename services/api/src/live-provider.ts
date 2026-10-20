@@ -40,7 +40,14 @@ export interface LiveProvider {
 const languages: Record<string, string> = { 'nb-NO': 'Norwegian Bokmål with an Eastern Norwegian pronunciation',
   'es-ES': 'Spanish from Spain', 'en': 'English', 'en-US': 'English', 'fr-FR': 'French from France',
   'de-DE': 'Standard German as spoken in Germany', 'it-IT': 'Italian as spoken in Italy',
-  'pt-BR': 'Brazilian Portuguese', 'zh-CN': 'Standard Mandarin with Simplified Chinese writing' };
+  'pt-BR': 'Brazilian Portuguese', 'zh-CN': 'Standard Mandarin with Simplified Chinese writing',
+  'th-TH': 'Central Thai as spoken in Thailand, with natural tones, vowel length, final consonants and context-appropriate polite particles; write in Thai script and accept valid regional pronunciation',
+  'sr-Latn-RS': 'Standard Serbian as spoken in Serbia, with ekavian forms and the Latin script',
+
+  'el-GR': 'Modern Standard Greek as spoken in Greece, with modern pronunciation and monotonic Greek spelling',
+  'tl-PH': 'Tagalog as spoken in the Philippines, using natural everyday wording and polite po/opo when appropriate; accept valid regional Tagalog and established loanwords',
+  'nl-NL': 'Standard Dutch as spoken in the Netherlands, with natural vowel length and diphthongs; accept valid Belgian and regional Dutch',
+  'ru-RU': 'Standard Russian with Cyrillic writing, natural lexical stress, vowel reduction and hard and soft consonants; accept valid regional pronunciation' };
 export const supportsLanguage = (language: string) => Object.hasOwn(languages, language);
 const sessionPath = (id: string) => {
   if (!id || id.length > 256 || /[\x00-\x20]/.test(id)) throw new ServiceError('invalid_provider_session', 502);
@@ -120,39 +127,55 @@ export class OpenAILiveProvider implements LiveProvider {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url, { headers: { Authorization: `Bearer ${this.key}` },
         handshakeTimeout: this.timeout, maxPayload: 524_288, perMessageDeflate: false, followRedirects: false });
-      let intentional = false, opened = false, lossReported = false;
+      let intentional = false, opened = false, lossReported = false, finalized = false, closeSent = false;
       let pongAt = Date.now();
       const heartbeat = setInterval(() => {
         if (!opened) return;
-        if (Date.now() - pongAt > 15_000) { lost(); socket.terminate(); }
+        if (Date.now() - pongAt > 15_000) { lost('provider_heartbeat_timeout'); socket.terminate(); }
         else if (socket.readyState === WebSocket.OPEN) socket.ping();
       }, 5_000);
       heartbeat.unref();
       socket.on('pong', () => { pongAt = Date.now(); });
-      const lost = () => { if (!intentional && !lossReported) { lossReported = true; onLoss(); } };
-      socket.on('error', () => { if (!opened) reject(new ServiceError('provider_attach_failed', 502)); lost(); });
-      socket.on('close', () => { clearInterval(heartbeat); if (!opened) reject(new ServiceError('provider_attach_failed', 502)); lost(); });
+      const lost = (code: string, providerStatus?: number) => {
+        if (!intentional && !finalized && !lossReported) {
+          lossReported = true;
+          this.diagnostics.record('provider_failed', { operation: 'voice.attach', providerStatus }, new ServiceError(code, 502));
+          onLoss();
+        }
+      };
+      socket.on('unexpected-response', (_request, response) => {
+        response.resume();
+        reject(new ServiceError('provider_attach_failed', 502));
+        lost('provider_attach_failed', response.statusCode); clearInterval(heartbeat); socket.terminate();
+      });
+      socket.on('error', () => { if (!opened) reject(new ServiceError('provider_attach_failed', 502)); lost('provider_socket_error'); });
+      socket.on('close', () => { clearInterval(heartbeat); if (!opened) reject(new ServiceError('provider_attach_failed', 502)); lost('provider_socket_closed'); });
       socket.on('message', (bytes, binary) => {
         try {
           if (binary) throw new Error();
           const event = JSON.parse(bytes.toString());
-          // GPT-Live rejects queued context when closing begins. This command failure
-          // is not a transport failure: keep the receiver alive for session.closed.
-          if (event.type === 'error' && event.error?.code === 'context_injection_incomplete') return;
-          if (event.type === 'error') throw new Error();
+          // Command rejection and moderation errors can precede session.closed.
+          // They never prove a transport failure or final usage. Keep draining.
+          if (event.type === 'error') {
+            this.diagnostics.record('provider_failed', { operation: 'voice.command' }, new ServiceError('provider_command_rejected', 502));
+            return;
+          }
           // Reflected audio, transcripts, prompts and session snapshots are discarded here.
           if (event.type !== 'session.usage.updated' && event.type !== 'session.closed') return;
           const seconds = event.usage?.seconds;
           if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0 || seconds > Number.MAX_SAFE_INTEGER / 1000) throw new Error();
           if (event.session?.id !== undefined && event.session.id !== sessionID) throw new Error();
           onUsage({ type: event.type, usage: { seconds } });
-        } catch { lost(); socket.terminate(); }
+          if (event.type === 'session.closed') { finalized = true; clearInterval(heartbeat); }
+        } catch { lost('invalid_provider_usage'); socket.terminate(); }
       });
       socket.once('open', () => {
         opened = true;
         resolve({ closeSession() {
+          if (closeSent || finalized) return;
           if (socket.readyState !== WebSocket.OPEN) throw new ServiceError('provider_connection_lost', 502);
           socket.send(JSON.stringify({ type: 'session.close', event_id: randomUUID() }));
+          closeSent = true;
         }, disconnect() { intentional = true; socket.terminate(); } });
       });
     });

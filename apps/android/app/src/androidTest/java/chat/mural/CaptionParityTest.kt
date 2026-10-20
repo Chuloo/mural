@@ -35,6 +35,8 @@ class CaptionParityTest {
     private lateinit var vm: MuralViewModel
     private lateinit var original: String
     private lateinit var originalAPI: APIClient
+    private lateinit var originalProvider: ConversationProvider
+    private lateinit var originalReadiness: HostedReadiness
     private var originalHasKey = false
     private val requests = LinkedBlockingQueue<String>()
     @Volatile private var responseGate: CountDownLatch? = null
@@ -49,6 +51,7 @@ class CaptionParityTest {
         vm = compose.awaitHistoryLoaded()
         compose.runOnIdle {
             original = ArchiveCodec.encode(vm.archive); originalHasKey = vm.hasKey
+            originalProvider = vm.conversationProvider; originalReadiness = vm.hostedReadiness
             val field = MuralViewModel::class.java.getDeclaredField("api").apply { isAccessible = true }
             originalAPI = field.get(vm) as APIClient
             // An application interceptor returns before DNS or a socket can be used. No provider key or network is involved.
@@ -115,6 +118,8 @@ class CaptionParityTest {
             MuralViewModel::class.java.getDeclaredField("voiceSession").apply { isAccessible = true }.setBoolean(vm, false)
             MuralViewModel::class.java.getDeclaredField("api").apply { isAccessible = true }.set(vm, originalAPI)
             state("hasKey", originalHasKey)
+            state("conversationProvider", originalProvider)
+            state("hostedReadiness", originalReadiness)
             val restored = ArchiveCodec.decode(original)
             state("archive", restored); vm.updatePreferences(restored.preferences)
         }
@@ -128,8 +133,16 @@ class CaptionParityTest {
             state("meaning", meaning)
             // Written fixture: the microphone is off throughout the recording.
             state("state", "active")
+            assertEquals("Caption fixture language was not applied", language, vm.language.id)
+            assertEquals(language, vm.session?.languageID)
         }
-        compose.waitForIdle()
+        // Wait for this fixture's captions, not just an idle frame of the previous language.
+        // The Mandarin reading is produced off the Compose test clock.
+        val displayedCaption = text.ifBlank { LanguageRegistry.get(language)!!.greeting }
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(hasTestTag("target-caption") and hasText(displayedCaption)).fetchSemanticsNodes().size == 1 &&
+                compose.onAllNodes(hasTestTag("meaning-caption") and hasText(meaning)).fetchSemanticsNodes().size == 1
+        }
         if (language == "zh") compose.waitUntil(10_000) {
             compose.onAllNodesWithTag("pinyin-reading").fetchSemanticsNodes().isNotEmpty()
         }
@@ -189,6 +202,42 @@ class CaptionParityTest {
         Thread.sleep(800); recorder?.close(); recorder = null
     }
 
+    @Test fun compactIdleGreetingAndMeaningStayFullyVisibleWithMicStateChange() {
+        compose.runOnIdle {
+            state("session", null)
+            state("state", "idle")
+            state("conversationProvider", ConversationProvider.HOSTED_MINUTES)
+            state("hostedReadiness", HostedReadiness("guest", 534_000, enabled = true, verified = true))
+            vm.updatePreferences(vm.archive.preferences.copy(learningLanguageID = "nb", meaningLanguage = "English",
+                meaningVisible = true))
+        }
+        compose.onNodeWithTag("target-caption").assertTextEquals("Hei!")
+        compose.onNodeWithTag("meaning-caption").assertTextEquals("Hi!")
+        compose.onNodeWithTag("talk-guest-minutes").assertDoesNotExist()
+        compose.onNodeWithText("8 min 54 sec of Mural minutes remaining").assertDoesNotExist()
+        compose.onNodeWithText("Microphone off").assertDoesNotExist()
+        compose.onNodeWithText("Reply in whichever language comes to you.").assertDoesNotExist()
+        compose.onNodeWithTag("start-conversation").assertContentDescriptionEquals("Start conversation")
+        assertTextVisible("target-caption", true)
+        assertTextVisible("meaning-caption", true)
+        val target = compose.onNodeWithTag("target-caption").fetchSemanticsNode().boundsInRoot
+        val meaning = compose.onNodeWithTag("meaning-caption").fetchSemanticsNode().boundsInRoot
+        val microphone = compose.onNodeWithTag("start-conversation").fetchSemanticsNode().boundsInRoot
+        val orb = compose.onNodeWithTag("talk-orb").fetchSemanticsNode().boundsInRoot
+        capture("compact-idle-greeting")
+        assertTrue("Greeting and meaning overlap: target=$target meaning=$meaning", target.bottom <= meaning.top)
+        assertTrue("Meaning overlaps microphone: meaning=$meaning microphone=$microphone", meaning.bottom <= microphone.top)
+        assertTrue("Orb shrank below 120 dp", orb.width / compose.density.density >= 119f)
+        compose.runOnIdle { state("hostedReadiness", HostedReadiness()) }
+        compose.onNodeWithText("Couldn’t check your Mural minutes.").assertDoesNotExist()
+        compose.runOnIdle {
+            MuralViewModel::class.java.getDeclaredField("voiceSession").apply { isAccessible = true }.setBoolean(vm, true)
+            state("state", "active")
+        }
+        compose.onNodeWithTag("start-conversation").assertContentDescriptionEquals("Mute microphone")
+        capture("active-voice-mic")
+    }
+
     @Test fun mandarinCaptionToggleAndContextualLookupMatchIOS() {
         val sentence = "我想去银行，然后去旅行。"
         show("zh", sentence, "I want to go to the bank, then travel.")
@@ -207,6 +256,8 @@ class CaptionParityTest {
     }
 
     @Test fun spanishCaptionAndContextualLookupMatchIOS() {
+        show("zh", "我想去银行。", "I want to go to the bank.")
+        compose.onNodeWithTag("pinyin-toggle").assertExists()
         val sentence = "Quiero un café con leche."
         show("es", sentence, "I want a coffee with milk.")
         response = "Café means ‘coffee’ in this sentence. Un café con leche is a coffee with milk."
@@ -217,15 +268,19 @@ class CaptionParityTest {
         compose.onNodeWithTag("word-lookup-close").performClick(); pause()
     }
 
-    @Test fun allEightLanguagesSendTheTappedWordWithItsOriginalSentence() {
+    @Test fun allLanguagesSendTheTappedWordWithItsOriginalSentence() {
         val samples = listOf(
             Triple("nb", "Jeg vil ha kaffe.", "kaffe"), Triple("es", "Quiero un café.", "café"),
             Triple("en", "I would like coffee.", "coffee"), Triple("fr", "Je voudrais du café.", "café"),
             Triple("de", "Ich möchte Kaffee.", "Kaffee"), Triple("it", "Vorrei un caffè.", "caffè"),
-            Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"))
+            Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"),
+            Triple("sr", "Hoću jednu kafu.", "kafu"), Triple("el", "Θα ήθελα έναν καφέ.", "καφέ"),
+            Triple("tl", "Gusto ko ng kape.", "kape"),
+            Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
+            if (language != "zh") compose.onNodeWithTag("pinyin-toggle").assertDoesNotExist()
             compose.onNodeWithTag("target-caption").performScrollTo()
             tap(word, sentence)
             compose.onNodeWithTag("word-lookup-close").performClick()
@@ -241,7 +296,12 @@ class CaptionParityTest {
             "de" to listOf("Das ist eine Sprach", "lern", "anwendung."),
             "it" to listOf("È una conver", "sazione interes", "sante."),
             "pt" to listOf("Estou apren", "dendo portu", "guês."),
-            "zh" to listOf("我", "喜欢", "学习", "中文。"))
+            "zh" to listOf("我", "喜欢", "学习", "中文。"),
+            "sr" to listOf("Volim da uči", "m srp", "ski."),
+            "el" to listOf("Πώς εί", "σαι; Μα", "ΐου."),
+            "tl" to listOf("Mag-", "aaral ako araw-", "araw."),
+            "nl" to listOf("Ik fiets ", "elke dag naar ", "huis."),
+            "ru" to listOf("Я чита", "ю интересную ", "книгу."))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.keys)
         for ((language, parts) in samples) {
             show(language, "", "")
@@ -443,10 +503,15 @@ class CaptionParityTest {
     @Test fun captionsAndLookupRemainReachableWithLargeSystemText() {
         val sentence = "我想去银行，然后去旅行。"
         show("zh", sentence, "I want to go to the bank, then travel.")
+        // At accessibility sizes, reveal the caption viewport in the page before
+        // scrolling a control inside that viewport.
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-caption").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("pinyin-reading").assertDoesNotExist()
+        compose.onNodeWithTag("meaning-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("meaning-caption").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-caption").performScrollTo()
         tap("银行", sentence)
         compose.onNodeWithTag("word-lookup-explanation").performScrollTo().assertIsDisplayed()
@@ -459,13 +524,16 @@ class CaptionParityTest {
 
         // Large text uses the page scroller. A long reply and its reading must stay
         // reachable without requiring both languages to fit on screen at once.
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         show("zh", sentence + "今天我们可以聊一聊你的生活。你喜欢喝咖啡还是喝茶？如果你有时间，我们可以一起去附近的咖啡馆，再去商店买一点儿东西。你觉得怎么样？你也可以告诉我你最喜欢的食物，或者说说你明天想做什么。",
             "I want to go to the bank, then travel. We can talk about your life, visit a café, and buy a few things. What would you like to do tomorrow?")
+        compose.onNodeWithTag("target-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("target-caption").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-reading").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("pinyin-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("pinyin-reading").assertDoesNotExist()
+        compose.onNodeWithTag("meaning-passage-scroll").revealPageViewport()
         compose.onNodeWithTag("meaning-caption").performScrollTo().assertIsDisplayed()
         if (!microphone.isDisplayed()) microphone.performScrollTo()
         microphone.assertIsDisplayed()
@@ -477,6 +545,8 @@ class CaptionParityTest {
         android.util.Log.i("MuralCaptionCheck", "Long caption: render")
         show("zh", sentence, "Hello! Nice to meet you. Your Chinese is good. We can go to a café, then the bank, and buy a few things. What do you think?")
         assertTextVisible("target-caption", false); assertTextVisible("meaning-caption", false)
+        val orb = compose.onNodeWithTag("talk-orb").fetchSemanticsNode().boundsInRoot
+        assertTrue("Orb shrank below 120 dp", orb.width / compose.density.density >= 119f)
         android.util.Log.i("MuralCaptionCheck", "Long caption: capture")
         capture("mandarin-long-caption")
         android.util.Log.i("MuralCaptionCheck", "Long caption: scroll reading")

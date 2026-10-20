@@ -33,14 +33,19 @@ class StripeCheckoutURL private constructor(val value: String, val environment: 
     override fun toString() = "StripeCheckoutURL(redacted)"
 }
 class StripeMinuteOrder(val orderID: String, val currency: String, val totalMinor: Long,
-    val checkout: StripeCheckoutURL, val aiValue: AIValueEntitlement) {
-    init { require(minuteUUID.matches(orderID) && currency == aiValue.quote.currency && totalMinor == aiValue.quote.totalMinor) }
-    fun matches(product: MinuteProduct) = currency == product.currency && totalMinor == product.totalMinor && aiValue == product.aiValue
+    val checkout: StripeCheckoutURL, val aiValue: AIValueEntitlement, val quantity: Int = 1) {
+    init { require(minuteUUID.matches(orderID) && quantity in 1..10 && quantity == aiValue.quote.quantity && currency == aiValue.quote.currency && totalMinor == aiValue.quote.totalMinor) }
+    fun matches(product: MinuteProduct, requestedQuantity: Int = 1) = quantity == requestedQuantity && currency == product.currency &&
+        totalMinor == product.totalMinor * requestedQuantity && aiValue == product.aiValue?.multiplied(requestedQuantity)
     override fun toString() = "StripeMinuteOrder(redacted)"
 }
 interface StripeCommerceService {
     suspend fun catalog(): MinuteCatalog
     suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder
+    suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String, quantity: Int): StripeMinuteOrder {
+        if (quantity != 1) throw MinuteCommerceFailure.Unavailable
+        return createStripe(session, sku, idempotencyKey)
+    }
     suspend fun findStripeOrder(session: AccountSession, idempotencyKey: String): String?
     suspend fun status(session: AccountSession, orderID: String): MinutePurchaseStatus
     suspend fun balance(session: AccountSession): MinuteBalance
@@ -48,9 +53,9 @@ interface StripeCommerceService {
 
 /** Only recovery identifiers are persisted; never checkout URLs, account bearers or card details. */
 @Serializable
-data class StripePurchaseAttempt(val accountID: String, val sku: String, val key: String, val orderID: String? = null) {
+data class StripePurchaseAttempt(val accountID: String, val sku: String, val key: String, val orderID: String? = null, val quantity: Int = 1) {
     init { require(minuteUUID.matches(accountID) && sku.length <= 128 && minuteIdentifier.matches(sku) && minuteUUID.matches(key) &&
-        (orderID == null || minuteUUID.matches(orderID))) }
+        (orderID == null || minuteUUID.matches(orderID)) && quantity in 1..10) }
     override fun toString() = "StripePurchaseAttempt(redacted)"
 }
 interface StripePurchaseAttemptStorage {
@@ -113,11 +118,12 @@ class StripeMinutePurchaseController(
         }
     }
     suspend fun refresh() = onForeground()
-    suspend fun buy(sku: String, launch: (StripeCheckoutURL) -> MinuteStoreOutcome) = operation {
+    suspend fun buy(sku: String, quantity: Int = 1, launch: (StripeCheckoutURL) -> MinuteStoreOutcome) = operation {
         val member = member() ?: throw MinuteCommerceFailure.SignInRequired
         select(member)
         val shown = products[sku] ?: throw MinuteCommerceFailure.Unavailable
         loadCatalog()
+        if (quantity !in 1..mutable.value.maximumQuantity) throw MinuteCommerceFailure.Unavailable
         val product = products[sku] ?: throw MinuteCommerceFailure.PriceChanged
         if (shown != product) throw MinuteCommerceFailure.PriceChanged
         current(member)
@@ -136,8 +142,8 @@ class StripeMinutePurchaseController(
                 }
             }
         }
-        if (existing != null && existing.sku != sku) throw MinuteCommerceFailure.Unavailable
-        val attempt = existing ?: StripePurchaseAttempt(member.accountID, sku, UUID.randomUUID().toString()).also {
+        if (existing != null && (existing.sku != sku || existing.quantity != quantity)) throw MinuteCommerceFailure.Unavailable
+        val attempt = existing ?: StripePurchaseAttempt(member.accountID, sku, UUID.randomUUID().toString(), quantity = quantity).also {
             // Durable before contacting the server: retries cannot create duplicate orders.
             storage.save(it)
         }
@@ -145,7 +151,7 @@ class StripeMinutePurchaseController(
         if (attempt.orderID != null && attempt.orderID != order.orderID) throw MinuteCommerceFailure.InvalidResponse
         storage.save(attempt.copy(orderID = order.orderID))
         current(member)
-        if (!order.matches(product)) throw MinuteCommerceFailure.PriceChanged
+        if (!order.matches(product, quantity)) throw MinuteCommerceFailure.PriceChanged
         if (expectedEnvironment != order.checkout.environment) throw MinuteCommerceFailure.InvalidResponse
         when (launch(order.checkout)) {
             MinuteStoreOutcome.OPENED -> mutable.value = mutable.value.copy(notice = MinutePurchaseNotice.PENDING)
@@ -157,7 +163,7 @@ class StripeMinutePurchaseController(
     fun dismissNotice() { mutable.value = mutable.value.copy(notice = null) }
     fun close() { stopped = true; products = emptyMap(); mutable.value = emptyState() }
     private suspend fun createOrder(member: AccountSession, attempt: StripePurchaseAttempt): StripeMinuteOrder = try {
-        api.createStripe(member, attempt.sku, attempt.key)
+        api.createStripe(member, attempt.sku, attempt.key, attempt.quantity)
     } catch (error: MinuteCommerceFailure.Http) {
         // These catalog errors occur only after the server checks for an existing order,
         // and before inserting one. Other errors can follow a committed payable order.
@@ -180,7 +186,7 @@ class StripeMinutePurchaseController(
         val catalog = api.catalog(); open()
         if (catalog.products.any { it.environment != expectedEnvironment || it.aiValue == null }) throw MinuteCommerceFailure.InvalidResponse
         products = catalog.products.associateBy { it.sku }
-        mutable.value = mutable.value.copy(available = catalog.available, packs = catalog.products.map { product ->
+        mutable.value = mutable.value.copy(available = catalog.available, maximumQuantity = catalog.maximumQuantity, packs = catalog.products.map { product ->
             val quote = product.aiValue!!.quote
             val price = NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance(quote.currency.uppercase(Locale.ROOT)) }
                 .format(BigDecimal.valueOf(product.totalMinor, quote.currencyExponent))

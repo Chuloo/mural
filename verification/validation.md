@@ -191,3 +191,20 @@ Lint also identified a missing microphone-permission check at audio startup. Per
 - **113 Swift core tests** and **54 Python tests** passed. Android content export and cross-platform checks passed. `git diff --check` passed.
 
 The local checks used no provider credentials and made no live AI requests. Physical-device microphone and live bidirectional audio were not retested here. No server deployment is required: the fix changes the direct Android-to-Google connection and local permission handling without changing a backend contract.
+
+## PR #129 upstream synchronization
+
+20 October 2026 (Asia/Hong_Kong)
+
+Integrated upstream `main` at `607c3bbc28f22cfbc3b109fff28cb4d2f62ace9a` into the feature branch based on `a08af8f`, resolving the Android/iOS settings, consent, language, credential and conversation conflicts. No merge commit or push has been made yet; those require the owner's approval.
+
+The resolution preserves upstream's reorganized settings/account screens, flashcards, additional languages and background voice behavior. Personal-key provider selection remains in Advanced settings, separate from Mural minutes versus personal-key conversation access. Hosted conversations and helpers still use the hosted OpenAI path even when Google is the selected personal-key provider. Both native registries now contain 14 languages. OpenAI helper metadata follows upstream's `gpt-6-luna` setting; Google's requested models remain unchanged.
+
+The first Swift build exposed the five newly imported modules missing the branch's required `usesPlatformWordSegmentation` initializer argument. Supplying `false` for those space-separated languages, regenerating Android content, and rerunning both Swift and native iOS builds resolved that failure. Newly imported Android device-test setups now use the current consent constant rather than hard-coded version 1.
+
+- **401 Android unit tests passed**, with no failures, errors or skips. Debug lint passed with zero errors, 63 warnings and 5 hints. The debug app and isolated UI-test APK compiled successfully.
+- **204 Swift core tests passed**, with no failures. The native iOS Simulator app and UI-test bundle compiled successfully (`build-for-testing`). Existing SDK/deprecation/concurrency warnings remain; no UI/device tests were executed in this synchronization pass.
+- **91 Python tests passed**. Android content export verification, cross-platform checks and Git whitespace checks passed.
+- API TypeScript checks passed. The API suite reported **140 passes, zero failures and 396 database-dependent skips**, with `TEST_DATABASE_URL` unset. The included local mock-provider tests verify admission and regional speech prompts for every native locale, including `th-TH`.
+
+No provider credentials, live AI requests, purchases, production database access or deployment were used. Thai now has matching server language admission in source; that server revision must be deployed before a release enables Thai with Mural minutes. Direct Google personal-key support itself needs no server migration or deployment. This is PR integration work, not an authorized app/server release.

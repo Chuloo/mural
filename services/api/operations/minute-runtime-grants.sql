@@ -26,3 +26,5 @@ REVOKE INSERT, UPDATE, DELETE ON ai_pricing_policy, ai_pricing_audit FROM mural_
 -- Accepted guest ownership and finalization receipts are append-only; never runtime-editable.
 REVOKE ALL ON minute_guest_link_intents,minute_guest_link_completions FROM mural_runtime;
 GRANT SELECT,INSERT ON minute_guest_link_intents,minute_guest_link_completions TO mural_runtime;
+REVOKE ALL ON deployment_environment FROM mural_runtime;
+GRANT SELECT ON deployment_environment TO mural_runtime;

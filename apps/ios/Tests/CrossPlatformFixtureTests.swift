@@ -11,6 +11,37 @@ final class CrossPlatformFixtureTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
+    func testAccountAccessMatchesSharedBalanceAndFailureCases() throws {
+        let data = try Data(contentsOf: directory.appendingPathComponent("account-access-cases.json"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let balances = try XCTUnwrap(root["balances"] as? [[String: Any]])
+        let failures = try XCTUnwrap(root["providerFailures"] as? [[String: Any]])
+        XCTAssertFalse(balances.isEmpty); XCTAssertFalse(failures.isEmpty)
+        for item in balances {
+            let milliseconds = try XCTUnwrap(item["milliseconds"] as? Int)
+            XCTAssertEqual(MinuteBalanceTime.roundedSeconds(milliseconds), item["seconds"] as? Int)
+            XCTAssertEqual(MinuteBalanceTime.isEligible(milliseconds), item["eligible"] as? Bool)
+        }
+        for item in failures {
+            let status = try XCTUnwrap(item["status"] as? Int)
+            let code = try XCTUnwrap(item["code"] as? String)
+            XCTAssertEqual(ProviderFailureKind.classify(status: status, code: code).rawValue,
+                           item["kind"] as? String, code)
+        }
+    }
+
+    func testNewLanguageTextMatchesSharedWordLinksWithoutChangingSourceScalars() throws {
+        let data = try Data(contentsOf: directory.appendingPathComponent("language-text-cases.json"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        for item in try XCTUnwrap(root["cases"] as? [[String: Any]]) {
+            let id = try XCTUnwrap(item["language"] as? String)
+            let text = try XCTUnwrap(item["text"] as? String)
+            let segments = CaptionWords.segments(text, languageID: id)
+            XCTAssertEqual(segments.map(\.text).joined().unicodeScalars.map(\.value), text.unicodeScalars.map(\.value))
+            XCTAssertEqual(segments.compactMap(\.lookup), item["lookups"] as? [String], id)
+        }
+    }
+
     func testRedirectDecisionsMatchTheSharedCases() throws {
         let data = try Data(contentsOf: directory.appendingPathComponent("redirect-cases.json"))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

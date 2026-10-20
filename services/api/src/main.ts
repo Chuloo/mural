@@ -16,6 +16,9 @@ import { configuredMinuteCommerce } from './minute-commerce-config.js';
 import { HostedHelpers } from './hosted-helpers.js';
 import { OpenAIHostedResponses } from './hosted-responses-transport.js';
 import { InstallationGuestMinuteAttestor } from './guest-minutes.js';
+import { webPurchaseConfig } from './web-purchase-config.js';
+import { ResendPurchaseEmails } from './web-purchase-email.js';
+import { WebPurchases } from './web-purchases.js';
 
 const diagnostics = new Diagnostics(record => { console.log(JSON.stringify(record)); });
 const databaseURL = process.env.DATABASE_URL;
@@ -35,7 +38,15 @@ try {
   const appleRevoker = appleClient && appleTeam && appleKey && appleFile ? new AppleTokenRevoker(db,
     { clientID: appleClient, teamID: appleTeam, keyID: appleKey, privateKeyPEM: await readFile(appleFile, 'utf8') }) : undefined;
   await appleRevoker?.validateConfiguration();
-  minuteCommerce = await configuredMinuteCommerce(db, process.env, { onFailure: code => diagnostics.record('background_failed', { operation: 'commerce.reconcile' }, new ServiceError(code)) });
+  minuteCommerce = await configuredMinuteCommerce(db, process.env, { onFailure: (code, providerStatus, scope) =>
+    diagnostics.record('background_failed', { operation: scope ? `commerce.reconcile.${scope.provider}.${scope.environment}` : 'commerce.reconcile', providerStatus }, new ServiceError(code)),
+    onPlayNotificationHandled: eventType => diagnostics.record('provider_completed', { operation: `play.notification.${eventType}` }) });
+  const deploymentEnvironment=(await db.query('SELECT environment FROM deployment_environment WHERE singleton')).rows[0]?.environment;
+  if (!['live','test'].includes(deploymentEnvironment)) throw new Error('Missing deployment environment.');
+  if (deploymentEnvironment==='test' && (origin.origin!=='https://sandbox-api.mural.chat' ||
+      new URL(databaseURL).pathname!=='/mural_sandbox' || minuteCommerce?.environment!=='test'))
+    throw new Error('Sandbox funding requires the isolated sandbox database, origin and commerce bindings.');
+  if (deploymentEnvironment==='live' && origin.hostname==='sandbox-api.mural.chat') throw new Error('Sandbox database was not provisioned.');
   const accessMode = process.env.HOSTED_VOICE_ACCESS ?? 'restricted-test';
   if (!['restricted-test','public-minutes'].includes(accessMode)) throw new Error('Invalid hosted access mode.');
   const publicMinuteAccess = accessMode==='public-minutes';
@@ -61,6 +72,7 @@ try {
     if (process.env.HOSTED_HELPERS_EXPERIMENTAL === 'true') {
       hostedHelpers = new HostedHelpers(db, new OpenAIHostedResponses(process.env.OPENAI_API_KEY ?? '', fetch, diagnostics), {
         accountAllowlist: accounts, aggregateFundingCapNano: lifetimeFundingCapNano,publicMinuteAccess,publicPaidAccess,
+        restrictToAllowlist:deploymentEnvironment==='test',
         helperBudgetNanoPerMinute: BigInt(process.env.HOSTED_HELPER_BUDGET_PER_MINUTE_NANO ?? '50000000'),
         maxRequestsPerMinute: Number(process.env.HOSTED_HELPER_REQUESTS_PER_MINUTE ?? '24'),
         maxSearchesPerSession: Number(process.env.HOSTED_HELPER_SEARCHES_PER_SESSION ?? '0'),
@@ -71,6 +83,8 @@ try {
     }
     hosted = new HostedVoice(db, new OpenAILiveProvider(process.env.OPENAI_API_KEY ?? '', { diagnostics }),
       { accountAllowlist: accounts, billingUnit, lifetimeFundingCapNano,publicMinuteAccess,publicPaidAccess, helpers: hostedHelpers,
+        restrictToAllowlist:deploymentEnvironment==='test',
+        maximumSessionMilliseconds:deploymentEnvironment==='test'?60_000:undefined,
         diagnostics });
     await hosted.start();
   }
@@ -78,6 +92,14 @@ try {
   const accessRequests = accessConfig ? new AccessRequests(db, accessConfig) : undefined;
   const accountsConfig = accountAdmissionConfig(process.env);
   const accounts = accountsConfig ? { admission: new AuthAdmission(db, accountsConfig) } : undefined;
+  const webConfig = await webPurchaseConfig(process.env);
+  if (webConfig && (deploymentEnvironment !== 'live' || !accountsConfig || minuteCommerce?.environment !== 'live' ||
+      !minuteCommerce.salesEnabled || minuteCommerce.stripe?.environment !== 'live' ||
+      !minuteCommerce.aiPurchases.products('stripe','live').length))
+    throw new Error('Website purchases require live Stripe sales and trusted account admission.');
+  const webPurchases = webConfig && accountsConfig ? new WebPurchases(db,webConfig,accountsConfig,
+    new ResendPurchaseEmails(webConfig),retryable => diagnostics.record('background_failed',
+      { operation:retryable?'web_purchase.email_retry':'web_purchase.email_rejected' })) : undefined;
   if (process.env.GUEST_MINUTES_ENABLED==='true' && (!accounts || !hosted?.publicMinuteAccess || !hostedHelpers))
     throw new Error('Guest minutes require public minute voice, teaching and trusted admission.');
   const guestMinuteAttestor = process.env.GUEST_MINUTES_ENABLED==='true' ? new InstallationGuestMinuteAttestor() : undefined;
@@ -86,30 +108,41 @@ try {
   await pruneAccessRequests(db);
   await pruneAuthenticationRecords(db);
   await pruneAIReports(db);
+  await webPurchases?.prune();
   const googleAndroidClientIDs = (process.env.GOOGLE_ANDROID_CLIENT_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
+  const googleIOSClientIDs = (process.env.GOOGLE_IOS_CLIENT_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
   const googleAndroidServerClientID = process.env.GOOGLE_ANDROID_SERVER_CLIENT_ID;
   if (Boolean(googleAndroidServerClientID) !== Boolean(googleAndroidClientIDs.length) || googleAndroidClientIDs.length > 10 ||
     [googleAndroidServerClientID, ...googleAndroidClientIDs].filter(Boolean).some(id => !/^[A-Za-z0-9-]+\.apps\.googleusercontent\.com$/.test(id!)))
     throw new Error('Android Google identity configuration is incomplete.');
-  if (accounts && !hasGoogleSignIn({ googleClientID: process.env.GOOGLE_CLIENT_ID, googleAndroidServerClientID, googleAndroidClientIDs }) &&
+  if (googleIOSClientIDs.length > 5 || googleIOSClientIDs.some(id => !/^[A-Za-z0-9-]+\.apps\.googleusercontent\.com$/.test(id)))
+    throw new Error('iOS Google identity configuration is invalid.');
+  if (accounts && !hasGoogleSignIn({ googleClientID: process.env.GOOGLE_CLIENT_ID, googleIOSClientIDs, googleAndroidServerClientID, googleAndroidClientIDs }) &&
     !(appleClient && appleRevoker)) throw new Error('No account identity provider configured.');
-  const app = createApp({ db, auth: { googleClientID: process.env.GOOGLE_CLIENT_ID, appleClientID: appleClient,
+  const app = createApp({ db, auth: { googleClientID: process.env.GOOGLE_CLIENT_ID, googleIOSClientIDs, appleClientID: appleClient,
     googleAndroidServerClientID, googleAndroidClientIDs }, payments, appleRevoker, hosted, hostedHelpers,
-    minuteCommerce, accessRequests, accounts, aiReports,guestMinuteAttestor,
+    minuteCommerce, accessRequests, accounts, aiReports,guestMinuteAttestor,webPurchases,
     diagnostics });
   const cleanup = setInterval(() => {
     void pruneAuthenticationRecords(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.accounts' }, error); });
     void pruneAccessRequests(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.access_requests' }, error); });
     void pruneAIReports(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.reports' }, error); });
-    void hostedHelpers?.expireBudgets().catch(error => { diagnostics.record('background_failed', { operation: 'helpers.expire' }, error); });
+    void webPurchases?.prune().catch(error => { diagnostics.record('background_failed', { operation: 'retention.web_purchases' }, error); });
   }, 15 * 60_000);
   cleanup.unref();
+  const helperExpiry=setInterval(()=>{
+    void hostedHelpers?.expireBudgets().catch(error=>{diagnostics.record('background_failed',{operation:'helpers.expire'},error);});
+  },15_000);helperExpiry.unref();
   let guestLinkFlight:Promise<unknown>|undefined;
   const retryGuestLinks=()=>{if(!guestLinkFlight)guestLinkFlight=finalizeDeferredGuestLinks(db)
     .catch(error=>{diagnostics.record('background_failed', { operation: 'guest.transfer' }, error);}).finally(()=>{guestLinkFlight=undefined;});};
   const guestLinkCleanup=setInterval(retryGuestLinks,60_000);guestLinkCleanup.unref();retryGuestLinks();
+  const emailDelivery = setInterval(() => {
+    void webPurchases?.drainDeliveries().catch(error => { diagnostics.record('background_failed',{operation:'web_purchase.email_delivery'},error); });
+  },1000); emailDelivery.unref();
   const close = async () => {
-    clearInterval(cleanup);clearInterval(guestLinkCleanup);await guestLinkFlight; await app.close(); await hosted?.stop(); await minuteCommerce?.runner.stop();
+    clearInterval(cleanup);clearInterval(helperExpiry);clearInterval(guestLinkCleanup);clearInterval(emailDelivery);
+    await guestLinkFlight; await app.close(); await webPurchases?.drainDeliveries(); await hosted?.stop(); await minuteCommerce?.runner.stop();
     await db.end(); process.exit(0);
   };
   process.on('SIGTERM', close); process.on('SIGINT', close);

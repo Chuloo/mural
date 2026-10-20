@@ -1,11 +1,11 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
-import { createApp } from '../src/app.js';
+import { createApp, type Services } from '../src/app.js';
 import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
-import { accountProfile, authenticate, createChallenge, deleteAccount, digest, exchangeIdentity, pruneAuthenticationRecords, signOut, verifyIdentity } from '../src/auth.js';
+import { accountProfile, authenticate, createChallenge, connectGoogleIdentity, deleteAccount, digest, exchangeIdentity, pruneAuthenticationRecords, signOut, verifyIdentity } from '../src/auth.js';
 import { accountAdmissionConfig, AuthAdmission } from '../src/auth-admission.js';
 import { appendEntry } from '../src/ledger.js';
 
@@ -34,6 +34,75 @@ async function session(subject = randomUUID(), provider: 'google' | 'apple' = 'g
 function app(appleRevoker?: { revoke: () => Promise<void> }) {
   return createApp({ db: db!, auth: config, accounts: { admission: new AuthAdmission(db!, admissionConfig), identityVerifier: verifier }, appleRevoker });
 }
+
+integration('Apple delivery and recovery share durable admission limits before authentication and provider work', async () => {
+  const account = randomUUID(), order = randomUUID();
+  let authentications = 0, deliveries = 0;
+  const authenticationDB = { query: async () => {
+    authentications++; return { rows: [{ account_id: account }] };
+  } } as unknown as Services['db'];
+  const create = () => createApp({ db: authenticationDB, auth: config,
+    accounts: { admission: new AuthAdmission(db!, admissionConfig) },
+    minuteCommerce: { apple: {}, fulfillment: { reconcile: async () => {
+      deliveries++; return { state: 'purchased' };
+    } } } as unknown as Services['minuteCommerce'],
+  });
+  let service = create();
+  const authenticated = { ...headers, authorization: `Bearer ${randomBytes(32).toString('base64url')}` };
+  const request = (index: number) => ({ method: 'POST' as const,
+    url: [`/v1/minutes/orders/${order}/apple`, '/v1/minutes/apple/recover',
+      `/v1/minutes/orders/${order}/%61pple`, '/v1/minutes/%61pple/recover'][index % 4]!,
+    headers: { ...authenticated, 'x-forwarded-for': `203.0.113.${index % 250 + 1}` },
+    payload: { transactionID: '1000001' } });
+  try {
+    for (let i = 0; i < 600; i++) {
+      const accepted = await service.inject(request(i));
+      assert.equal(accepted.statusCode, 200, accepted.body);
+    }
+    assert.equal(authentications, 600); assert.equal(deliveries, 600);
+    // Recreating the app must not reset the database-backed account allowance.
+    await service.close(); service = create();
+    for (const i of [600, 601, 602, 603]) {
+      const denied = await service.inject(request(i));
+      assert.equal(denied.statusCode, 429);
+      assert.equal(denied.json().error.code, 'rate_limit');
+      assert.equal(denied.headers['retry-after'], '3600');
+    }
+    assert.equal(authentications, 600); assert.equal(deliveries, 600);
+    const forged = await service.inject({ ...request(604), headers: { ...authenticated, 'x-mural-proxy-token': 'wrong' } });
+    assert.equal(forged.statusCode, 503); assert.equal(authentications, 600);
+    const other = await service.inject({ ...request(605), headers: { ...authenticated, 'x-mural-client-ip': '192.0.2.43' } });
+    assert.equal(other.statusCode, 200); assert.equal(deliveries, 601);
+  } finally { await service.close(); }
+});
+
+integration('connecting Google requires two fresh identities and preserves the Apple account and balance',async()=>{
+  const appleSubject=randomUUID(),googleSubject=randomUUID(),owner=await session(appleSubject,'apple');
+  await transaction(db!,sql=>appendEntry(sql,owner.accountID,`link-funded:${randomUUID()}`,'purchase',3_690_000_000n,0n));
+  const apple=await createChallenge(db!),google=await createChallenge(db!);
+  const proofs={appleChallengeID:apple.challengeID,appleToken:await jwt(apple.nonce,appleSubject,'apple'),
+    googleChallengeID:google.challengeID,googleToken:await jwt(google.nonce,googleSubject,'google')};
+  const linked=await connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,proofs,config,verifier);
+  assert.deepEqual(linked,{accountID:owner.accountID,connected:true});
+  assert.equal((await session(googleSubject)).accountID,owner.accountID);
+  assert.deepEqual((await accountProfile(db!,`Bearer ${owner.accessToken}`)).providers,['apple','google']);
+  assert.equal((await db!.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[owner.accountID])).rows[0].balance_nano,'3690000000');
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,proofs,config,verifier),/invalid_challenge/);
+});
+integration('Google linking refuses wrong Apple owners, same emails and another funded Google account',async()=>{
+  const appleSubject=randomUUID(),owner=await session(appleSubject,'apple'),googleSubject=randomUUID(),other=await session(googleSubject);
+  await transaction(db!,sql=>appendEntry(sql,other.accountID,`other-funded:${randomUUID()}`,'purchase',5_000_000_000n,0n));
+  async function proofs(source=appleSubject,target=googleSubject) {
+    const apple=await createChallenge(db!),google=await createChallenge(db!);
+    return {appleChallengeID:apple.challengeID,appleToken:await jwt(apple.nonce,source,'apple'),googleChallengeID:google.challengeID,googleToken:await jwt(google.nonce,target)};
+  }
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,await proofs(randomUUID()),config,verifier),/same_account_required/);
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,await proofs(),config,verifier),/identity_link_conflict/);
+  const expired=await proofs(appleSubject,randomUUID());await db!.query('UPDATE auth_challenges SET expires_at=now()-interval \'1 second\' WHERE id=$1',[expired.appleChallengeID]);
+  await assert.rejects(connectGoogleIdentity(db!,`Bearer ${owner.accessToken}`,expired,config,verifier),/invalid_challenge/);
+  assert.deepEqual((await accountProfile(db!,`Bearer ${owner.accessToken}`)).providers,['apple']);
+  assert.equal((await db!.query('SELECT balance_nano FROM wallets WHERE account_id=$1',[other.accountID])).rows[0].balance_nano,'5000000000');
+});
 
 test('accounts remain disabled without an explicit switch and independent valid secrets', () => {
   assert.equal(accountAdmissionConfig({}), undefined);
@@ -295,4 +364,17 @@ integration('public read throttling uses authenticated client networks instead o
     const other = await service.inject({ method: 'GET', url: '/v1/auth/providers', headers: { ...headers, 'x-mural-client-ip': '198.51.100.73' } });
     assert.equal(other.statusCode, 200); assert.deepEqual(other.json(), { google: true, googleAndroid: false, apple: false });
   } finally { await service.close(); }
+});
+
+
+integration('Google sessions on linked Apple accounts must revoke the linked Apple authorization before deletion',async()=>{
+  const owner=await session(randomUUID(),'apple'),googleSubject=randomUUID();
+  const appleSubject=(await db!.query("SELECT subject FROM identities WHERE account_id=$1 AND provider='apple'",[owner.accountID])).rows[0].subject;
+  await db!.query("INSERT INTO identities(account_id,provider,subject) VALUES($1,'google',$2)",[owner.accountID,googleSubject]);
+  const google=await session(googleSubject);
+  await assert.rejects(deleteAccount(db!,owner.accountID,undefined,undefined,`Bearer ${google.accessToken}`,new Date(),false,true),{code:'apple_revocation_not_configured'});
+  let revokedSubject:string|undefined;
+  await deleteAccount(db!,owner.accountID,{revoke:async(_id,_code,subject)=>{revokedSubject=subject;}},'fresh-code',`Bearer ${google.accessToken}`,new Date(),false,true);
+  assert.equal(revokedSubject,appleSubject);
+  await assert.rejects(authenticate(db!,`Bearer ${google.accessToken}`),{code:'sign_in_required'});
 });

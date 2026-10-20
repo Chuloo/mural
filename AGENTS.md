@@ -1,5 +1,13 @@
 # Mural agent instructions
 
+## Start from current main
+
+At the start of each Mural coding task, fetch `origin/main` and base new branch work on that revision. Before opening a PR or marking one ready for review, fetch `origin/main` again, integrate any new commits into the working branch, resolve conflicts, and run the affected checks. Check once more for a newer `main` before merging. Preserve uncommitted and untracked work when updating a checkout; use an isolated worktree when that work would be at risk.
+
+## Keep Talk minimal
+
+William reaffirmed on September 28, 2026 that Talk should retain its original minimal layout. Put funding-boundary explanations and Continue/New conversation choices together in one native sheet, not inline on the home screen. Dismissal must preserve the conversation; the microphone can reopen the pending choice. Use the existing orange primary action and native platform patterns. Avoid additional splash/logo stages before Android's animated Talk orb.
+
 ## Ship UI and server changes together
 
 When changing Mural's UI or native apps, check whether the experience depends on server changes: API contracts, error responses, prompts, capabilities, configuration, migrations or runtime permissions.

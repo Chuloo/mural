@@ -20,7 +20,13 @@ test('all native locales reach the provider with the intended regional speech ta
     for (const [locale, target] of [
       ['nb-NO', 'Norwegian Bokmål'], ['es-ES', 'Spanish from Spain'], ['en', 'English'], ['en-US', 'English'], ['fr-FR', 'French from France'],
       ['de-DE', 'Standard German as spoken in Germany'], ['it-IT', 'Italian as spoken in Italy'],
-      ['pt-BR', 'Brazilian Portuguese'], ['zh-CN', 'Standard Mandarin with Simplified Chinese writing']
+      ['pt-BR', 'Brazilian Portuguese'], ['zh-CN', 'Standard Mandarin with Simplified Chinese writing'],
+      ['th-TH', 'Central Thai as spoken in Thailand'],
+      ['sr-Latn-RS', 'Standard Serbian as spoken in Serbia, with ekavian forms and the Latin script'],
+      ['el-GR', 'Modern Standard Greek as spoken in Greece'],
+      ['tl-PH', 'Tagalog as spoken in the Philippines'],
+      ['nl-NL', 'Standard Dutch as spoken in the Netherlands'],
+      ['ru-RU', 'Standard Russian with Cyrillic writing']
     ]) {
       assert.equal(supportsLanguage(locale!), true, locale);
       await provider.create('v=0', locale!);
@@ -28,11 +34,11 @@ test('all native locales reach the provider with the intended regional speech ta
       assert.equal(requests.at(-1).session.audio.output.voice, 'marin');
       assert.equal(requests.at(-1).session.store, false);
     }
-    for (const unsupported of ['pt-PT', 'de', 'zh', 'zh-TW', '__proto__', 'constructor', '']) {
+    for (const unsupported of ['pt-PT', 'de', 'zh', 'zh-TW', 'sr', 'sr-RS', 'sr-Cyrl-RS', 'el', 'gr-GR', 'el_GR', 'tl', 'fil', 'fil-PH', 'tgl-PH', 'tl_PH', 'TL-ph', 'nl', 'nl-BE', 'nl_NL', 'NL-nl', 'ru', 'ru_RU', 'RU-ru', '__proto__', 'constructor', '']) {
       assert.equal(supportsLanguage(unsupported), false);
       await assert.rejects(provider.create('v=0', unsupported), { code: 'invalid_language' });
     }
-    assert.equal(requests.length, 9);
+    assert.equal(requests.length, 15);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
@@ -46,8 +52,33 @@ test('hosted admission accepts every locale shipped by Android and iOS', async (
   const swift = await Promise.all((await readdir(directory)).filter(name => name.endsWith('.swift'))
     .map(name => readFile(new URL(name, directory), 'utf8')));
   const iosLocales = swift.flatMap(source => [...source.matchAll(/locale: "([^"\n]+)"/g)].map(match => match[1]!)).sort();
-  assert.ok(androidLocales.length >= 8);
+  assert.equal(androidLocales.length, 14);
   assert.deepEqual(androidLocales, iosLocales);
   for (const locale of androidLocales) assert.equal(supportsLanguage(locale), true, `Native locale rejected: ${locale}`);
   assert.equal(supportsLanguage('en-US'), true, 'Preserve existing client compatibility');
+});
+
+test('hosted provider preserves selected theme instructions and continuation history', async () => {
+  let payload: any;
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    payload = JSON.parse(Buffer.concat(chunks).toString());
+    response.writeHead(201, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ session: { id: 'live_theme_fixture' }, transport: { type: 'webrtc', sdp: 'v=0' } }));
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address() as { port: number };
+    const provider = new OpenAILiveProvider('test-no-real-provider-key', { testOrigin: `http://127.0.0.1:${address.port}` });
+    const instructions = 'Conversation direction: Plan dinner together. Ask about ingredients and preferences.';
+    const history = [{ type: 'message' as const, role: 'user' as const,
+      content: [{ type: 'input_text' as const, text: 'Jeg har tomater.' }] }];
+    await provider.create('v=0', 'nb-NO', { instructions, history });
+    assert.ok(payload.session.instructions.startsWith(instructions + '\n'));
+    assert.ok(payload.session.instructions.includes('Speak only Norwegian Bokmål'));
+    assert.deepEqual(payload.session.input, history);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });

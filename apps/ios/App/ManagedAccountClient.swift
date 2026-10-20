@@ -43,6 +43,7 @@ final class ManagedAccountHTTP: NSObject, URLSessionTaskDelegate, @unchecked Sen
         completionHandler(nil)
     }
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let request = try await AppleStorePurchaseContext.shared.attachingProof(to: request)
         let session = makeSession()
         defer { session.invalidateAndCancel() }
         do {
@@ -59,7 +60,14 @@ final class ManagedAccountHTTP: NSObject, URLSessionTaskDelegate, @unchecked Sen
         } catch let error as ManagedAccountError { throw error }
         catch is CancellationError { throw ManagedAccountError.cancelled }
         catch let error as URLError where error.code == .cancelled { throw ManagedAccountError.cancelled }
-        catch { throw ManagedAccountError.transport }
+        catch {
+            #if DEBUG
+            if AudioVerification.requested, let network = error as? URLError {
+                UserDefaults.standard.set(network.code.rawValue, forKey: "verificationNetworkErrorCode")
+            }
+            #endif
+            throw ManagedAccountError.transport
+        }
     }
 }
 
@@ -87,6 +95,15 @@ struct ManagedAccountClient {
         let result: ManagedWallet = try await request("/v1/wallet", method: "GET", session: session)
         try result.validate(); return result
     }
+    func connectGoogle(session: ManagedAccountSession, apple: String, appleChallenge: ManagedAuthChallenge,
+                       google: String, googleChallenge: ManagedAuthChallenge) async throws {
+        struct Result: Decodable { let accountID: UUID; let connected: Bool }
+        let result: Result = try await request("/v1/account/connect-google", method: "POST", body: [
+            "confirmation": "connect_google", "appleToken": apple, "appleChallengeID": appleChallenge.challengeID.uuidString,
+            "googleToken": google, "googleChallengeID": googleChallenge.challengeID.uuidString
+        ], session: session)
+        guard result.accountID == session.accountID, result.connected else { throw ManagedAccountError.invalidResponse }
+    }
     func profile(session: ManagedAccountSession) async throws -> ManagedAccountProfile {
         let result: ManagedAccountProfile = try await request("/v1/account", method: "GET", session: session)
         try result.validate(session: session); return result
@@ -99,27 +116,43 @@ struct ManagedAccountClient {
     func delete(session: ManagedAccountSession, appleCode: String?) async throws {
         struct Response: Decodable { let deleted: Bool }
         let result: Response = try await request("/v1/account", method: "DELETE",
-                                               body: appleCode.map { ["appleAuthorizationCode": $0] } ?? [:], session: session)
+            body: appleCode.map { ["appleAuthorizationCode": $0] } ?? [:], session: session,
+            confirmCreditAccessLoss: true)
+        guard result.deleted else { throw ManagedAccountError.invalidResponse }
+    }
+    func deleteGuest(owner: HostedOwner) async throws {
+        struct Response: Decodable { let deleted: Bool }
+        let result: Response = try await request("/v1/guest/account", method: "DELETE", body: [:], guest: owner, confirmCreditAccessLoss: true)
         guard result.deleted else { throw ManagedAccountError.invalidResponse }
     }
     private func request<T: Decodable>(_ path: String, method: String, body: [String: String]? = nil,
-                                        session: ManagedAccountSession? = nil) async throws -> T {
+                                        session: ManagedAccountSession? = nil, guest: HostedOwner? = nil,
+                                        confirmCreditAccessLoss: Bool? = nil) async throws -> T {
         var request = URLRequest(url: try configuration.endpoint(path))
         request.httpMethod = method; request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
+            var payload: [String: Any] = body
+            if let confirmCreditAccessLoss { payload["confirmCreditAccessLoss"] = confirmCreditAccessLoss }
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         }
         if let session {
             guard session.isUsable(scope: configuration.storageScope) else { throw ManagedAccountError.server("sign_in_required") }
             request.setValue("Bearer " + session.accessToken, forHTTPHeaderField: "Authorization")
         }
+        if let guest {
+            guard guest.usable else { throw ManagedAccountError.server("sign_in_required") }
+            request.setValue("Bearer " + guest.accessToken, forHTTPHeaderField: "Authorization")
+        }
         let (data, response) = try await http.send(request)
         guard (200...299).contains(response.statusCode) else {
-            if response.statusCode == 401 { throw ManagedAccountError.server("sign_in_required") }
             let code = (try? JSONDecoder().decode(Failure.self, from: data))?.error.code ?? "service_unavailable"
+            if response.statusCode == 401 {
+                if ["invalid_challenge", "invalid_identity_token"].contains(code) { throw ManagedAccountError.invalidResponse }
+                throw ManagedAccountError.server("sign_in_required")
+            }
             // Only a small allowlist is displayed. Never surface raw provider/server response text.
-            let safe = ["unresolved_billing", "rate_limit", "apple_sign_in_not_ready", "apple_revocation_not_configured", "invalid_challenge", "identity_provider_not_configured"]
+            let safe = ["account_usage_pending", "unresolved_billing", "rate_limit", "apple_sign_in_not_ready", "apple_revocation_not_configured", "invalid_challenge", "identity_provider_not_configured", "same_account_required", "identity_link_conflict"]
             throw ManagedAccountError.server(safe.contains(code) ? code : "service_unavailable")
         }
         do { return try JSONDecoder().decode(T.self, from: data) }

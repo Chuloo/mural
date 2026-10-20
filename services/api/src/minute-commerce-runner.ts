@@ -2,14 +2,85 @@ import { transaction, type Database } from './db.js';
 import { ServiceError } from './errors.js';
 import type { MinuteDeliveryWorker, MinuteReceiptVault } from './minute-provider-delivery.js';
 import type { PlayMinuteProvider } from './play-minute-provider.js';
+import type { AppleMinuteProvider } from './apple-minute-provider.js';
+import { PlayNotificationTransportError, type PlayRtdnSubscriber } from './google-play-rtdn.js';
 
 const day = 86_400_000;
+export function reconciliationProviderStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return;
+  const value = 'httpStatusCode' in error ? error.httpStatusCode : 'providerStatus' in error ? error.providerStatus : undefined;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599 ? value : undefined;
+}
 export interface CommerceRunnerOptions {
   intervalMilliseconds?: number;
   deliveryLimit?: number;
   reconciliationLimit?: number;
   voidPagesPerRun?: number;
-  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed') => void;
+  onFailure?: (code: 'minute_delivery_failed' | 'minute_reconciliation_failed' | 'play_void_reconciliation_failed' | 'apple_history_reconciliation_failed' |
+    'play_notification_failed' | 'play_notification_unavailable' | 'play_notification_timeout', providerStatus?: number,
+    scope?: { provider: 'apple' | 'play'; environment: 'live' | 'test' }) => void;
+}
+
+/** Replay notification history without advancing beyond an unverified or unqueued page. */
+export class AppleHistoryReconciler {
+  constructor(readonly db:Database,readonly apple:Pick<AppleMinuteProvider,'environment'|'merchant'|'pollHistory'>) {}
+  async page():Promise<{pages:number;scheduled:number;more:boolean}> {
+    let attemptedAt: string | undefined;
+    try {
+      const result = await this.pollPage(value => { attemptedAt = value; });
+      if (result.pages) await this.health(false, attemptedAt!);
+      return result;
+    } catch (error) {
+      if (attemptedAt) await this.health(true, attemptedAt, reconciliationProviderStatus(error));
+      throw error;
+    }
+  }
+  private async health(failed: boolean, attemptedAt: string, providerStatus?: number) {
+    await this.db.query(`INSERT INTO provider_reconciliation_health(provider,environment,merchant,
+      last_attempt_at,first_failure_at,last_success_at,consecutive_failures,provider_status)
+      VALUES('apple',$1,$2,$5::timestamptz,CASE WHEN $3 THEN $5::timestamptz END,CASE WHEN NOT $3 THEN $5::timestamptz END,
+        CASE WHEN $3 THEN 1 ELSE 0 END,$4)
+      ON CONFLICT(provider,environment,merchant) DO UPDATE SET last_attempt_at=EXCLUDED.last_attempt_at,
+        first_failure_at=CASE WHEN $3 THEN COALESCE(provider_reconciliation_health.first_failure_at,EXCLUDED.last_attempt_at) END,
+        last_success_at=CASE WHEN $3 THEN provider_reconciliation_health.last_success_at ELSE EXCLUDED.last_attempt_at END,
+        consecutive_failures=CASE WHEN $3 THEN LEAST(provider_reconciliation_health.consecutive_failures,2147483646)+1 ELSE 0 END,
+        provider_status=$4 WHERE provider_reconciliation_health.last_attempt_at<EXCLUDED.last_attempt_at`,
+      [this.apple.environment,this.apple.merchant,failed,providerStatus??null,attemptedAt]);
+  }
+  private async pollPage(onAttempt: (value: string) => void):Promise<{pages:number;scheduled:number;more:boolean}> {
+    return transaction(this.db,async sql=>{
+      const locked=(await sql.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired',
+        [`mural-apple-history:${this.apple.environment}:${this.apple.merchant}`])).rows[0].acquired;
+      if(!locked)return {pages:0,scheduled:0,more:false};
+      await sql.query('INSERT INTO apple_notification_cursors(environment,merchant) VALUES($1,$2) ON CONFLICT DO NOTHING',[this.apple.environment,this.apple.merchant]);
+      const row=(await sql.query('SELECT * FROM apple_notification_cursors WHERE environment=$1 AND merchant=$2',[this.apple.environment,this.apple.merchant])).rows[0];
+      if(row.page_token===null && row.next_poll_after.getTime()>Date.now())return {pages:0,scheduled:0,more:false};
+      // Capture full database precision while holding the scope lock. A delayed
+      // health write must never replace the outcome of a later page attempt.
+      onAttempt((await sql.query('SELECT clock_timestamp()::text AS attempted_at')).rows[0].attempted_at);
+      const now=Date.now(),retention=(this.apple.environment==='test'?30:180)*day;
+      const target=now-60_000;
+      const start=row.window_start_ms===null?(row.completed_through_ms===null?now-retention+day:Number(row.completed_through_ms)-300_000):Number(row.window_start_ms);
+      // Apple can time out on the initial retention-wide request. Cover the same
+      // history in bounded, overlapping windows; resume issued page tokens with
+      // their original dates, and never skip ahead to open checkout prematurely.
+      const end=row.window_end_ms===null?Math.min(target,start+7*day):Number(row.window_end_ms);
+      if(start<now-retention+60_000)throw new ServiceError('apple_history_cursor_expired',503);
+      if(start>=end || (row.page_token===null && row.completed_through_ms!==null && end<=Number(row.completed_through_ms)))
+        return {pages:0,scheduled:0,more:false};
+      const result=await this.apple.pollHistory(start,end,row.page_token??undefined);
+      if(result.nextPageToken && result.nextPageToken===row.page_token)throw new ServiceError('apple_history_cursor_stalled',502);
+      // A paginated window keeps its original end while the clock advances.
+      // Treat completion within the overlap horizon as caught up; otherwise
+      // even milliseconds spent fetching page two can create an endless replay.
+      const more=!!result.nextPageToken || end<target-300_000;
+      await sql.query(`UPDATE apple_notification_cursors SET completed_through_ms=CASE WHEN $5::text IS NULL THEN $4::bigint ELSE completed_through_ms END,
+        window_start_ms=CASE WHEN $5::text IS NULL THEN NULL ELSE $3::bigint END,window_end_ms=CASE WHEN $5::text IS NULL THEN NULL ELSE $4::bigint END,
+        page_token=$5,next_poll_after=CASE WHEN $6::boolean THEN now() ELSE now()+interval '15 minutes' END,updated_at=now()
+        WHERE environment=$1 AND merchant=$2`,[this.apple.environment,this.apple.merchant,start,end,result.nextPageToken??null,more]);
+      return {pages:1,scheduled:result.scheduled,more};
+    });
+  }
 }
 
 /** Checkpoints a page only after its verified voids and retry jobs have committed. */
@@ -59,7 +130,9 @@ export class MinuteCommerceRunner {
   #stopped = false;
   constructor(readonly vault: Pick<MinuteReceiptVault, 'scheduleReconciliation'>,
     readonly worker: Pick<MinuteDeliveryWorker, 'runBatch'>, readonly voids?: PlayVoidReconciler,
-    options: CommerceRunnerOptions = {}) {
+    options: CommerceRunnerOptions = {}, readonly appleHistory?: AppleHistoryReconciler,
+    readonly playNotifications?: Pick<PlayRtdnSubscriber, 'poll' | 'isOperational'>,
+    readonly additionalAppleHistories:readonly AppleHistoryReconciler[] = []) {
     this.#interval = options.intervalMilliseconds ?? 60_000;
     this.#deliveryLimit = options.deliveryLimit ?? 5;
     this.#reconciliationLimit = options.reconciliationLimit ?? 100;
@@ -71,8 +144,9 @@ export class MinuteCommerceRunner {
       throw new ServiceError('minute_runner_configuration_invalid', 503);
     this.#onFailure = options.onFailure ?? (() => {});
   }
-  #failure(code: Parameters<NonNullable<CommerceRunnerOptions['onFailure']>>[0]) {
-    try { this.#onFailure(code); } catch { /* An observer cannot stop durable delivery. */ }
+  #failure(code: Parameters<NonNullable<CommerceRunnerOptions['onFailure']>>[0], providerStatus?: number,
+    scope?: Parameters<NonNullable<CommerceRunnerOptions['onFailure']>>[2]) {
+    try { this.#onFailure(code, providerStatus, scope); } catch { /* An observer cannot stop durable delivery. */ }
   }
   runOnce(): Promise<void> {
     if (this.#stopped) return Promise.resolve();
@@ -81,6 +155,13 @@ export class MinuteCommerceRunner {
     return this.#flight;
   }
   async #run(): Promise<void> {
+    if (this.playNotifications) {
+      try { await this.playNotifications.poll(); }
+      catch (error) {
+        if (error instanceof PlayNotificationTransportError) this.#failure(error.code, error.providerStatus);
+        else this.#failure('play_notification_failed');
+      }
+    }
     try { await this.vault.scheduleReconciliation(this.#reconciliationLimit); }
     catch { this.#failure('minute_reconciliation_failed'); }
     for (let index = 0; index < this.#deliveryLimit && !this.#stopped; index++) {
@@ -93,6 +174,13 @@ export class MinuteCommerceRunner {
     for (let index = 0; this.voids && index < this.#voidPages && !this.#stopped; index++) {
       try { if (!(await this.voids.page()).more) break; }
       catch { this.#failure('play_void_reconciliation_failed'); break; }
+    }
+    for(const history of [...(this.appleHistory?[this.appleHistory]:[]),...this.additionalAppleHistories]) {
+      for(let index=0;index<this.#voidPages && !this.#stopped;index++){
+        try {if(!(await history.page()).more)break;}
+        catch (error) {this.#failure('apple_history_reconciliation_failed', reconciliationProviderStatus(error),
+          {provider:'apple',environment:history.apple.environment});break;}
+      }
     }
   }
   start(): void {

@@ -206,23 +206,70 @@ def elf_info(header: bytes, file_size: int, expected_machine: int) -> dict:
     return {"machine": machine, "loadSegments": loads, "relroSegments": relro, "warnings": warnings}
 
 
+def dex_lambda_name_spans(data: bytes) -> list[tuple[int, int]]:
+    """Recognize D8/R8 method names through DEX tables, never arbitrary text.
+
+    The compiler's 27-character base64url suffix can incidentally contain sk-.
+    https://source.android.com/docs/core/runtime/dex-format#method-id-item
+    Unknown or malformed formats receive no exception from the secret scan.
+    """
+    if len(data) < 112 or data[:8] not in (b"dex\n035\0", b"dex\n036\0", b"dex\n037\0",
+                                         b"dex\n038\0", b"dex\n039\0", b"dex\n040\0"):
+        return []
+    file_size, header_size, endian = struct.unpack_from("<III", data, 32)
+    if file_size != len(data) or header_size != 112 or endian != 0x12345678:
+        return []
+    strings, strings_offset = struct.unpack_from("<II", data, 56)
+    methods, methods_offset = struct.unpack_from("<II", data, 88)
+    if (not strings or not methods or strings_offset < 112 or methods_offset < 112 or
+            strings_offset + strings * 4 > len(data) or methods_offset + methods * 8 > len(data)):
+        return []
+    spans = set()
+    for index in range(methods):
+        name_index = struct.unpack_from("<I", data, methods_offset + index * 8 + 4)[0]
+        if name_index >= strings:
+            return []
+        offset = struct.unpack_from("<I", data, strings_offset + name_index * 4)[0]
+        # ASCII name: its UTF-16 count is exactly 38 and fits one ULEB128 byte.
+        if offset + 40 > len(data) or data[offset] != 38 or data[offset + 39] != 0:
+            continue
+        name = data[offset + 1:offset + 39]
+        if re.fullmatch(rb"\$r8\$lambda\$[A-Za-z0-9_-]{27}", name):
+            spans.add((offset + 1, offset + 39))
+    return sorted(spans)
+
+
 def check_embedded_secrets(bundle: zipfile.ZipFile) -> dict:
     """Bounded pattern scan. Never include matched credential bytes in errors or evidence."""
     scanned = 0
+    compiler_name_matches = set()
     for info in bundle.infolist():
         if info.is_dir():
             continue
         require(not CREDENTIAL_FILE.search(info.filename), f"Credential-shaped file packaged in AAB: {info.filename}")
         require(info.file_size <= 256 * 1024 * 1024, "AAB entry exceeds secret-inspection limit")
+        method_names = None
         with bundle.open(info) as source:
             overlap = b""
+            position = 0
             while chunk := source.read(1024 * 1024):
                 data = overlap + chunk
                 for kind, pattern in SECRET_PATTERNS.items():
-                    require(pattern.search(data) is None, f"Possible {kind} packaged in {info.filename}; inspect privately")
+                    for match in pattern.finditer(data):
+                        start = position - len(overlap) + match.start()
+                        end = position - len(overlap) + match.end()
+                        if kind == "OpenAI secret key" and info.filename.endswith(".dex"):
+                            if method_names is None:
+                                method_names = dex_lambda_name_spans(bundle.read(info))
+                            if any(left <= start and end <= right for left, right in method_names):
+                                compiler_name_matches.add((info.filename, start))
+                                continue
+                        require(False, f"Possible {kind} packaged in {info.filename}; inspect privately")
                 overlap = data[-1024:]
+                position += len(chunk)
         scanned += 1
     return {"entriesScanned": scanned, "patterns": list(SECRET_PATTERNS), "findings": 0,
+            "verifiedCompilerMethodNameMatches": len(compiler_name_matches),
             "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."}
 
 

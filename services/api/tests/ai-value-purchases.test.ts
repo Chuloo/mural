@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { AIValuePurchases, makeAIValueProduct, PurchaseFulfillmentRouter, refundedAIValue, type AIValueProduct,
+import { AIValuePurchases, makeAIValueProduct, makePlayAIValueProduct, PurchaseFulfillmentRouter, refundedAIValue, type AIValueProduct,
   type AIValueProductInput } from '../src/ai-value-purchases.js';
 import { MinutePurchases, type MinutePurchaseVerifier, type VerifiedMinutePurchase, type PurchaseEnvironment } from '../src/minute-purchases.js';
 import { connectDatabase, transaction } from '../src/db.js';
@@ -53,6 +53,29 @@ test('AI quote computes only the reviewed allocation, separate fees and a conser
   assert.ok(p.quote.processingEstimateMinor>0);assert.ok(p.quote.processingBufferMinor>0);assert.ok(Object.isFrozen(p.quote));
   const euro=makeAIValueProduct(input('test',{currency:'eur',exchangeRate:{numerator:'11',denominator:'10',version:'synthetic-fx'}}));
   assert.equal(euro.aiValueNanoUSD,'11000000000');
+});
+test('fixed Play prices match the iOS AI allocation in USD and NOK and reject a changed fee snapshot',()=>{
+  const common={provider:'play' as const,environment:'test' as const,merchant:'chat.mural.android',
+    providerProduct:'chat.mural.android.minutes.small.v1',policyVersion:1,serviceFeeBasisPoints:1500,
+    estimate:{nanoUSDPerMinute:'100000000',rateVersion:'reviewed-estimate'}};
+  const usd=makePlayAIValueProduct({...common,sku:'play-us-small-v1',aiValueMinor:369,
+    exchangeRate:{numerator:'1',denominator:'1',version:'reviewed-usd'},
+    play:{currency:'usd',currencyExponent:2,unitTotalMinor:700,scheduleVersion:'play-review-v1',
+      commissionBasisPoints:3000,taxMinor:0,commissionMinor:210,residualMinor:65}});
+  const nok=makePlayAIValueProduct({...common,sku:'play-no-small-v1',aiValueMinor:3690,
+    exchangeRate:{numerator:'1',denominator:'10',version:'reviewed-nok'},
+    play:{currency:'nok',currencyExponent:2,unitTotalMinor:8900,scheduleVersion:'play-review-v1',
+      commissionBasisPoints:3000,taxMinor:1780,commissionMinor:2136,residualMinor:740}});
+  assert.equal(usd.aiValueNanoUSD,'3690000000'); assert.equal(nok.aiValueNanoUSD,usd.aiValueNanoUSD);
+  assert.throws(()=>makePlayAIValueProduct({...common,sku:'play-no-wrong-exponent-v1',aiValueMinor:3690,
+    exchangeRate:{numerator:'1',denominator:'10',version:'reviewed-nok'},
+    play:{...nok.quote.play!,currencyExponent:0}}),/invalid_ai_value_product/);
+  for(const product of [usd,nok]) assert.equal(product.totalMinor,product.quote.totalMinor);
+  const verifier={provider:'play' as const,environment:'test' as const,merchant:common.merchant,verify:async()=>{throw new Error();}};
+  assert.deepEqual(new AIValuePurchases({} as any,{catalog:[usd,nok],verifiers:[verifier],salesEnabled:true}).products('play'),[usd,nok]);
+  for(const tampered of [{...nok,quote:{...nok.quote,play:{...nok.quote.play!,taxMinor:0}}},
+    {...nok,quote:{...nok.quote,processingBufferMinor:739}}])
+    assert.throws(()=>new AIValuePurchases({} as any,{catalog:[tampered],verifiers:[verifier]}),/invalid_ai_value_product/);
 });
 test('catalog rejects claimed nano, minute estimate or fee totals that differ from reviewed quote arithmetic',()=>{
   const p=makeAIValueProduct(input());const verifier={...p,verify:async()=>{throw new Error();}};
@@ -256,5 +279,41 @@ integration('legacy Stripe sandbox grants and refunds cannot become public paid 
     await applyStripeEvent(f.db,event('checkout.session.completed',paid));
     assert.equal((await paidAIBalance(f.db,member)).availableNanoUSD,'0');
     assert.equal((await f.db.query('SELECT balance_nano,sandbox_balance_nano FROM wallets WHERE account_id=$1',[member])).rows[0].balance_nano,'0');
+  }finally{await f.cleanup();}
+});
+
+for (const quantity of [1,2,10]) integration(`quantity ${quantity} pins quote, grants once, refunds aggregate and survives sales rollback`,async()=>{
+  const f=await fixture();try{
+    const account=await f.account(),key=randomUUID();
+    const enabled=new AIValuePurchases(f.db,{catalog:[f.product],verifiers:[f.verifier],salesEnabled:true,quantityEnabled:['stripe']});
+    const order=await enabled.createOrder(account,'stripe',f.product.sku,key,quantity);
+    assert.equal(order.totalMinor,f.product.totalMinor*quantity);
+    assert.equal(BigInt(order.aiValueNanoUSD),BigInt(f.product.aiValueNanoUSD)*BigInt(quantity));
+    assert.deepEqual(await enabled.createOrder(account,'stripe',f.product.sku,key,quantity),order);
+    await assert.rejects(enabled.createOrder(account,'stripe',f.product.sku,key,quantity===1?2:1),/idempotency_conflict/);
+    // Rolling quantity sales back does not rewrite the original quote or strand recovery.
+    assert.deepEqual(await f.ai.createOrder(account,'stripe',f.product.sku,key,quantity),order);
+    if(quantity>1) await assert.rejects(f.ai.createOrder(account,'stripe',f.product.sku,randomUUID(),quantity),/purchase_quantity_unavailable/);
+    const proof=f.proof(order,{quantity});
+    await Promise.all(Array.from({length:6},()=>f.router.reconcile('stripe',proof.key)));
+    assert.equal((await paidAIBalance(f.db,account)).balanceNanoUSD,order.aiValueNanoUSD);
+    const half=Math.floor(order.totalMinor/2);
+    const refund=f.proof(order,{quantity,transactionID:proof.value.transactionID,refundedMinor:half});
+    await f.router.reconcile('stripe',refund.key);
+    assert.equal((await f.ai.status(account,order.orderID)).reversedNanoUSD,refundedAIValue(BigInt(order.aiValueNanoUSD),half,order.totalMinor).toString());
+    await f.router.reconcile('stripe',proof.key);
+    await f.router.reconcile('stripe',f.proof(order,{quantity,transactionID:proof.value.transactionID,refundedMinor:order.totalMinor}).key);
+    assert.equal((await paidAIBalance(f.db,account)).balanceNanoUSD,'0');
+    await assert.rejects(f.db.query('UPDATE minute_purchase_orders SET quantity=1 WHERE id=$1',[order.orderID]),/immutable/);
+  }finally{await f.cleanup();}
+});
+integration('quantity rejects malformed values and mismatched verified evidence without granting',async()=>{
+  const f=await fixture();try{
+    const account=await f.account(),enabled=new AIValuePurchases(f.db,{catalog:[f.product],verifiers:[f.verifier],salesEnabled:true,quantityEnabled:['stripe']});
+    for(const quantity of [0,-1,1.5,11,Number.MAX_SAFE_INTEGER,NaN,Infinity])
+      await assert.rejects(enabled.createOrder(account,'stripe',f.product.sku,randomUUID(),quantity),/invalid_purchase_quantity/);
+    const order=await enabled.createOrder(account,'stripe',f.product.sku,randomUUID(),2);
+    await assert.rejects(f.router.reconcile('stripe',f.proof(order,{quantity:1}).key),/ai_value_purchase_mismatch/);
+    assert.equal((await paidAIBalance(f.db,account)).balanceNanoUSD,'0');
   }finally{await f.cleanup();}
 });

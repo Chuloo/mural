@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-10-03T10:06:38.714468+00:00",
+  "method": "read-only sideband attach; no create/fork/close/hangup or database writes",
+  "results": [
+    {
+      "reference": "c78c03c4ed18",
+      "finalUsageReceived": false,
+      "httpStatus": 404,
+      "outcome": "attach_rejected"
+    },
+    {
+      "reference": "b9f95ca8e5c7",
+      "finalUsageReceived": false,
+      "httpStatus": 404,
+      "outcome": "attach_rejected"
+    },
+    {
+      "reference": "98122fdb250c",
+      "finalUsageReceived": false,
+      "httpStatus": 404,
+      "outcome": "attach_rejected"
+    }
+  ]
+}

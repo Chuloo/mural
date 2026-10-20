@@ -42,6 +42,8 @@ class ReportHistoryTest {
     @Test fun savedAssistantReplyOpensExactPreviewAndUnavailableServiceCannotSubmit() {
         compose.onNodeWithTag("report-current-utterance").assertDoesNotExist()
         compose.onNodeWithTag("tab-settings").performClick()
+        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-data"))
+        compose.onNodeWithTag("settings-data").performClick()
         compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-history"))
         compose.onNodeWithTag("settings-history").performClick()
         compose.onNodeWithTag("settings-history-list").performScrollToNode(hasText(session.title))

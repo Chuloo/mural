@@ -1,0 +1,302 @@
+{
+  "checkedAt": "2026-09-28T10:31:24Z",
+  "status": "US_and_Norway_purchases_full_refunds_verified_partial_provider_result_differs",
+  "sandbox": {
+    "origin": "https://sandbox-api.mural.chat",
+    "database": "mural_sandbox",
+    "environment": "test",
+    "sourceBaseRevision": "0f8a0b106bd2e149be98ed24e1dd82720b9f60d0",
+    "includesUncommittedImplementation": false,
+    "containerService": "payment-api",
+    "providerCalls": "user_authorized_up_to_USD_2; one_account_allowlist; lifetime_exposure_cap_USD_1.50",
+    "catalogSHA256": "7c990042d0bb3e6bb5e85d0ecb2c3a7dd40766c1c24d66c4c9443f5d68e43ab7",
+    "catalog": {
+      "USA": [
+        7,
+        13,
+        20
+      ],
+      "NOR": [
+        89,
+        179,
+        249
+      ],
+      "quantityMaximum": 10
+    },
+    "health": 200,
+    "readiness": 200,
+    "googleSignIn": true,
+    "appleSignIn": true,
+    "appleNotificationURL": "https://sandbox-api.mural.chat/v1/webhooks/apple",
+    "appleNotificationTest": "SUCCESS: Apple test notification and real ONE_TIME_CHARGE delivered",
+    "image": "sha256:064f038232665b1b5a83c4d745579300d48fc14e6e19058e4bd1eefc0e56f9fd",
+    "rollback": "/opt/mural/sandbox/rollback-20260928T100020Z",
+    "maximumTestCallSeconds": 60
+  },
+  "production": {
+    "apiRestarted": true,
+    "health": 200,
+    "readiness": 200,
+    "googleSignIn": true,
+    "appleSignIn": true,
+    "guestMinutes": true,
+    "livePayments": true,
+    "routingIncident": "Sandbox initially shared the Docker api alias, causing sampled production readiness/sign-in requests to return 503. Removed its edge network binding, stopped the conflicting container, and renamed the sandbox service payment-api. All production checks passed afterward.",
+    "revision": "0f8a0b106bd2e149be98ed24e1dd82720b9f60d0",
+    "verification": "production-closeout-verification.json",
+    "appleSalesEnabled": false,
+    "stripeMaximumQuantity": 10
+  },
+  "tests": {
+    "serverFull": {
+      "passed": 401,
+      "skipped": 0,
+      "log": "/private/tmp/mural-server-closeout-final.log"
+    },
+    "sandboxAndSettlementFocused": {
+      "passed": 21
+    },
+    "stripeProviderFocused": {
+      "passed": 28
+    },
+    "androidCheckoutUI": {
+      "passed": 6,
+      "includesSpanishFontScale2": true,
+      "log": "/private/tmp/mural-android-brand-ui2.log",
+      "visualReview": "Orange primary CTA and selected radio; quantity-ten screenshot reviewed"
+    },
+    "iosCheckoutUI": {
+      "passed": 3,
+      "resultBundle": ".build/PaymentBrandUI2.xcresult",
+      "visualReview": "Orange brand CTA; normal and largest-text screenshots reviewed"
+    },
+    "appleRecoveryFocused": {
+      "passed": 14,
+      "skipped": 0,
+      "log": "/private/tmp/mural-apple-closeout-final.log",
+      "includesLateCloseoutAndRefundDeclined": true
+    },
+    "iosContinuationUI": {
+      "passed": 2,
+      "includesLargestText": true,
+      "resultBundle": ".build/PaymentBoundaryUI3.xcresult",
+      "visualReview": "Passed after adapting control labels to vertical layout at accessibility sizes"
+    },
+    "swiftCore": {
+      "passed": 128,
+      "log": "/private/tmp/mural-swift-continuation-final.log"
+    },
+    "androidRegression": {
+      "unitTests": "passed",
+      "lint": "passed",
+      "debugBuild": "passed",
+      "log": "/private/tmp/mural-android-continuation-final.log",
+      "unitTestCount": 360
+    },
+    "androidConversationAccountCheckoutUI": {
+      "passed": 18,
+      "device": "emulator-5554",
+      "log": "/private/tmp/mural-android-payment-ui4.log"
+    },
+    "iosPendingRecoveryUI": {
+      "passed": 2,
+      "resultBundle": ".build/PaymentRecoveryFinalUI.xcresult"
+    },
+    "androidFullUI": {
+      "passed": 77,
+      "skipped": 0,
+      "log": "/private/tmp/mural-android-release-regression-final2.log",
+      "earlierFailure": "Report-consent test tapped during keyboard movement; isolated 4/4 passed, final suite clears text focus and asserts selected consent before sending."
+    },
+    "iosFullUI": {
+      "passed": 44,
+      "failed": 0,
+      "resultBundle": ".build/PaymentFinalRegression.xcresult",
+      "log": "/private/tmp/mural-ios-final-regression.log"
+    },
+    "iosFinalAffectedUI": {
+      "passed": 5,
+      "resultBundle": ".build/PaymentHistoryFinal.xcresult",
+      "covers": [
+        "continuation normal and largest text",
+        "purchase history",
+        "largest-text checkout",
+        "pending checkout lock"
+      ]
+    },
+    "iosFinalAccountUI": {
+      "passed": 2,
+      "failed": 0,
+      "resultBundle": ".build/PaymentFinalAccountRegression.xcresult",
+      "covers": [
+        "personal-key hides top-up and retains history",
+        "checkout and history accessibility audit"
+      ]
+    },
+    "androidFinalAccountCheckoutUI": {
+      "passed": 15,
+      "failed": 0,
+      "log": "/private/tmp/mural-android-final-account-checkout.log"
+    },
+    "androidFinalVisualCapture": {
+      "passed": 6,
+      "failed": 0,
+      "log": "/private/tmp/mural-android-final-visual-capture.log",
+      "screenshots": "android-final",
+      "visualReview": "Orange CTA and selected radio, quantity ten, non-expiry note, Spanish large text; no internal value or fee rows"
+    },
+    "releaseScripts": {
+      "passed": 54,
+      "crossPlatformContracts": "passed",
+      "generatedAndroidContent": "passed"
+    }
+  },
+  "device": {
+    "sandboxBuild": 15,
+    "signedBuild": "passed",
+    "installed": true,
+    "learningDataBackedUp": true,
+    "realPurchase": {
+      "storefront": "USA",
+      "pack": "small",
+      "quantity": 1,
+      "grossMinor": 700,
+      "currency": "USD",
+      "grantedNanoUSD": "3690000000",
+      "grantCount": 1,
+      "receiptRecoveryHTTP": 200,
+      "appleNotificationHTTP": 200
+    },
+    "accountBalanceRoute": "fixed; About 36 min visually verified in physical iPhone Account",
+    "realConversation": {
+      "userConfirmed": true,
+      "paidCalls": 2,
+      "observedMilliseconds": [
+        35000,
+        43000
+      ],
+      "voiceCostNanoUSD": "65000001",
+      "settledHelpers": 11,
+      "helperCostNanoUSD": "3367400",
+      "totalProviderCostNanoUSD": "68367401",
+      "remainingSandboxBalanceNanoUSD": "3621632599",
+      "reservedNanoUSD": "0"
+    },
+    "mirroring": "restarted successfully; taps work; Apple blocks microphone use from Mac, real calls performed directly on iPhone"
+  },
+  "planning": {
+    "appleCommissionBasisPoints": 3000,
+    "norwayVATBasisPoints": 2500,
+    "conservativeNOKPerUSD": 10,
+    "referenceNOKPerUSD": 9.5063,
+    "referenceDate": "2026-09-25",
+    "actualApplePayoutVerified": false,
+    "sources": [
+      "https://www.skatteetaten.no/en/rates/vat-rates-for-remotely-deliverable-services-purchased-from-abroad/",
+      "https://www.norges-bank.no/en/topics/Statistics/exchange_rates/?id=USD&tab=currency"
+    ]
+  },
+  "appleBusiness": {
+    "paidAppsAgreement": "Active",
+    "bankAccount": "Active",
+    "USW9": "Active",
+    "DSA": "Active"
+  },
+  "appleQuantityTwoRecovery": {
+    "orderID": "d063c229-23d8-41ea-9a70-4a1843aba59b",
+    "checkoutUSD": 14,
+    "signedQuantity": 2,
+    "signedPriceMilliunits": 7000,
+    "cause": "Real Apple sandbox returned unit price while documentation describes total. Compatibility accepts exact unit price times signed quantity only in test environment. Live total price validation remains strict.",
+    "grantedNanoUSD": "7380000000",
+    "replay": "Same grant, no duplicate",
+    "balanceNanoUSD": "11001632599",
+    "reservedNanoUSD": "0",
+    "estimatedWholeMinutes": 110,
+    "deviceDisplayVerified": true,
+    "deliveryJob": "done"
+  },
+  "stripeRealSandbox": {
+    "evidence": "stripe-real-sandbox.json",
+    "quantities": [
+      1,
+      2,
+      10
+    ],
+    "checkouts": "passed",
+    "partialAndFullRefunds": "passed",
+    "eventReplays": 9,
+    "finalBalanceNanoUSD": "0"
+  },
+  "pendingOrderRecovery": {
+    "before": "Submitted quantity-two attempt survived server fulfillment and disabled checkout.",
+    "fix": "On launch, foreground and checkout load, query owner-authenticated order status and remove only the matching fulfilled attempt.",
+    "deviceVerified": "Pending attempt count became zero; Account shows About 110 min; quantity selector changed 1 to 10 and Continue showed $70.00.",
+    "storeKitCompletion": "Client now accepts owner-authenticated durable order status before finishing a previously credited StoreKit transaction; new checkout finishes earlier consumables first.",
+    "testRepair": {
+      "orderID": "8489f782-4ad0-42c1-aad0-0738559bbd0e",
+      "reason": "Pre-fix quantity-ten invocation returned without an Apple sheet while previous consumable remained unfinished. Complete verified Apple history contained only quantities one and two.",
+      "action": "Backed up current preferences; changed only this isolated sandbox attempt from submitted to preparing to retry the same order. No wallet or ledger edits."
+    },
+    "deviceFinalCheck": "Build 9: Account about 110 min; saved quantity ten restored; orange Continue enabled; same order opened Apple $70 test-only confirmation; Purchase reached sandbox password prompt.",
+    "quantityTenServerVerified": true
+  },
+  "appleQuantityTen": {
+    "orderID": "8489f782-4ad0-42c1-aad0-0738559bbd0e",
+    "quantity": 10,
+    "grossMinor": 7000,
+    "currency": "USD",
+    "grantedNanoUSD": "36900000000",
+    "state": "purchased",
+    "deliveryJob": "done",
+    "balanceNanoUSD": "47901632599",
+    "reservedNanoUSD": "0",
+    "estimatedWholeMinutes": 479,
+    "deviceDisplayVerified": true,
+    "recoveryReplay": "Check purchases on iPhone; balance unchanged at 47901632599, three grants only"
+  },
+  "appleNorwayPurchase": {
+    "orderID": "a48dd3d4-3f15-434a-8fec-cb2d9eb17bab",
+    "quantity": 1,
+    "storefront": "NOR",
+    "currency": "NOK",
+    "grossMinor": 8900,
+    "grantedNanoUSD": "3690000000",
+    "delivery": "done",
+    "balanceNanoUSD": "51591632599",
+    "reservedNanoUSD": "0",
+    "deviceMinutes": 515,
+    "deviceDisplayVerified": true,
+    "appleSandboxSuccessVisible": true
+  },
+  "publishedPolicies": {
+    "revision": "9102c3e",
+    "terms": "https://mural.chat/terms/",
+    "privacy": "https://mural.chat/privacy/",
+    "browserVerified": true,
+    "date": "2026-09-28"
+  },
+  "appleNorwayFullRefund": {
+    "orderID": "a48dd3d4-3f15-434a-8fec-cb2d9eb17bab",
+    "grossMinor": 8900,
+    "reversedNanoUSD": "3690000000",
+    "refundNotificationReceived": true,
+    "afterRefundBalanceNanoUSD": "47901632599",
+    "deviceDisplay": "About 479 min; Refund recorded",
+    "recoveryReplay": "Check purchases retained the same grant and reversal"
+  },
+  "appleNorwayQuantityTwo": {
+    "orderID": "966178bc-4cb9-4398-b247-0851e295b1c6",
+    "quantity": 2,
+    "grossMinor": 17800,
+    "currency": "NOK",
+    "grantedNanoUSD": "7380000000",
+    "deviceDisplay": "About 552 min",
+    "partialRefundRequest": "GRANT_PRORATED visibly submitted; Apple returned verified REFUND_FULL with revocationPercentage 100000.",
+    "reversedNanoUSD": "7380000000",
+    "refundMinor": 17800,
+    "finalBalanceNanoUSD": "47901632599",
+    "partialRefundVerified": false,
+    "providerEvidence": "apple-prorated-provider-inspection.json"
+  }
+}

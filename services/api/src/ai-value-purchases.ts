@@ -2,18 +2,23 @@ import { createHash, randomUUID } from 'node:crypto';
 import { transaction, type Database } from './db.js';
 import { appendEntry, lockWallet } from './ledger.js';
 import { ServiceError } from './errors.js';
+import { storeRegionCode, validateStoreMarketPrice, type StoreMarketPrice } from './store-markets.js';
+import { appleMaximumOrderMinor, validateRegionalApplePrice, type RegionalApplePriceSnapshot } from './apple-market-prices.js';
 import { quoteAITopUp, estimatedConversationMilliseconds, type ProcessingCost } from './ai-top-up-pricing.js';
 import { type MinutePurchases, type MinutePurchaseStatus, type MinutePurchaseVerifier, type PurchaseProvider,
-  type PurchaseScope, type VerifiedMinutePurchase } from './minute-purchases.js';
+  type PurchaseScope, type PurchaseEnvironment, type VerifiedMinutePurchase } from './minute-purchases.js';
 
 const uuid = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const money = (value: unknown, positive=false): value is number => typeof value==='number' && Number.isSafeInteger(value) && value>=(positive?1:0) && value<=100_000_000;
+const checkoutMoney=(value:unknown,provider:PurchaseProvider,positive=false):value is number=>
+  provider==='apple'?typeof value==='number' && Number.isSafeInteger(value) && value>=(positive?1:0) && value<=appleMaximumOrderMinor:money(value,positive);
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const scopeKey = (scope: PurchaseScope) => JSON.stringify([scope.provider,scope.environment,scope.merchant]);
+const verifierKey = (provider:PurchaseProvider,environment:PurchaseEnvironment) => `${provider}:${environment}`;
 const productKey = (scope: PurchaseScope, sku: string) => JSON.stringify([scopeKey(scope),sku]);
 function scopeValid(scope: PurchaseScope) {
-  return scope && ['stripe','play'].includes(scope.provider) && ['test','live'].includes(scope.environment) &&
+  return scope && ['stripe','play','apple'].includes(scope.provider) && ['test','live'].includes(scope.environment) &&
     typeof scope.merchant==='string' && identifier.test(scope.merchant);
 }
 function integerString(value: unknown, max: bigint): bigint {
@@ -36,9 +41,103 @@ export interface AIValueProduct extends PurchaseScope {
     currency: string; currencyExponent: number; processingRateBasisPoints: number; processingFixedMinor: number;
     processingBufferBasisPoints: number; exchangeRateNumerator: string; exchangeRateDenominator: string;
     exchangeRateVersion: string; estimatedNanoUSDPerMinute: string; estimateRateVersion: string;
+    apple?: ApplePriceSnapshot;
+    play?: PlayPriceSnapshot;
   };
 }
-export interface AIValueOrder extends AIValueProduct { readonly orderID: string }
+export interface LegacyPlayPriceSnapshot {
+  pricingBasis?: never; regionCode?: never;
+  currency:string; currencyExponent:number; unitTotalMinor:number; scheduleVersion:string;
+  /** Conservative reviewed fee and tax assumptions, not a claim about a settled payout. */
+  commissionBasisPoints:number; taxMinor:number; commissionMinor:number; residualMinor:number;
+}
+export interface RegionalPlayPriceSnapshot extends StoreMarketPrice { pricingBasis: 'fixed-usd-allocation' }
+export type PlayPriceSnapshot = LegacyPlayPriceSnapshot | RegionalPlayPriceSnapshot;
+
+/** Regional store prices never change the USD credit allocation or imply an exchange rate. */
+export function makeRegionalPlayAIValueProduct(input: Omit<AIValueProductInput,'processing'|'currency'|'currencyExponent'|'exchangeRate'> &
+  {play:RegionalPlayPriceSnapshot}):Readonly<AIValueProduct> {
+  const p=input.play;
+  if(input.provider!=='play' || !p || p.pricingBasis!=='fixed-usd-allocation' ||
+    Object.keys(p).some(key=>!['pricingBasis','regionCode','currency','currencyExponent','unitTotalMinor','scheduleVersion',
+      'taxBasis','taxRateBasisPoints','hasLocationOverrides','taxMinor','commissionBasisPoints','commissionMinor','proceedsMinor'].includes(key))) throw new ServiceError('invalid_ai_value_product');
+  try { validateStoreMarketPrice(p); } catch { throw new ServiceError('invalid_ai_value_product'); }
+  const base=makeAIValueProduct({...input,currency:'usd',currencyExponent:2,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0},
+    exchangeRate:{numerator:'1',denominator:'1',version:p.scheduleVersion}});
+  return Object.freeze({...base,currency:p.currency,totalMinor:p.unitTotalMinor,
+    quote:Object.freeze({...base.quote,play:Object.freeze({...p})})});
+}
+/** Fixed Play prices keep the same AI allocation as iOS without inventing a percentage-based checkout price. */
+export function makePlayAIValueProduct(input:Omit<AIValueProductInput,'processing'|'currency'|'currencyExponent'> &
+  {play:LegacyPlayPriceSnapshot}):Readonly<AIValueProduct & {quote:AIValueProduct['quote'] & {play:LegacyPlayPriceSnapshot}}> {
+  const p=input.play;
+  if(input.provider!=='play' || !p || Object.keys(p).some(key=>!['currency','currencyExponent','unitTotalMinor','scheduleVersion','commissionBasisPoints','taxMinor','commissionMinor','residualMinor'].includes(key)) || !/^[a-z]{3}$/.test(p.currency) || !identifier.test(p.scheduleVersion) ||
+    !Number.isInteger(p.currencyExponent) || p.currencyExponent<0 || p.currencyExponent>3 ||
+    (p.currency==='nok' && p.currencyExponent!==2) ||
+    ![p.unitTotalMinor,p.taxMinor,p.commissionMinor,p.residualMinor].every(v=>money(v)) || p.unitTotalMinor<=0 ||
+    !Number.isInteger(p.commissionBasisPoints) || p.commissionBasisPoints<0 || p.commissionBasisPoints>10000 ||
+    p.taxMinor>=p.unitTotalMinor ||
+    p.commissionMinor!==Number((BigInt(p.unitTotalMinor-p.taxMinor)*BigInt(p.commissionBasisPoints)+9999n)/10000n))
+    throw new ServiceError('invalid_ai_value_product');
+  const base=makeAIValueProduct({...input,currency:p.currency,currencyExponent:p.currencyExponent,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0}});
+  const fee=p.taxMinor+p.commissionMinor;
+  if(p.unitTotalMinor!==base.quote.aiValueMinor+base.quote.serviceFeeMinor+fee+p.residualMinor)
+    throw new ServiceError('invalid_ai_value_product');
+  return Object.freeze({...base,totalMinor:p.unitTotalMinor,quote:Object.freeze({...base.quote,
+    processingEstimateMinor:fee,processingBufferMinor:p.residualMinor,paymentFeeMinor:fee+p.residualMinor,
+    totalMinor:p.unitTotalMinor,play:Object.freeze({...p})})});
+}
+export interface LegacyApplePriceSnapshot {
+  pricingBasis?:never;
+  storefront:'USA'|'NOR'; currency:string; currencyExponent:number; unitTotalMinor:number;
+  scheduleVersion:string; commissionBasisPoints:number; taxMinor:number; commissionMinor:number;
+  /** Reviewed local proceeds and FX; residual is explicit and never entitlement. */
+  proceedsMinor:number; proceedsUSDMinor:number; residualUSDMinor:number;
+}
+export type ApplePriceSnapshot=LegacyApplePriceSnapshot|RegionalApplePriceSnapshot;
+/** Historical USA/NOR quotes preserve their reviewed proceeds arithmetic. */
+export function makeAppleAIValueProduct(input:Omit<AIValueProductInput,'currency'|'currencyExponent'|'exchangeRate'|'processing'> & {apple:ApplePriceSnapshot}):Readonly<AIValueProduct> {
+  if(input.apple?.pricingBasis==='fixed-usd-allocation') return makeRegionalAppleAIValueProduct({...input,apple:input.apple});
+  const a=input.apple;
+  if(input.provider!=='apple' || !a || a.pricingBasis!==undefined || !['USA','NOR'].includes(a.storefront) ||
+    a.currency!==(a.storefront==='USA'?'usd':'nok') || a.currencyExponent!==2 || !identifier.test(a.scheduleVersion) ||
+    ![a.unitTotalMinor,a.taxMinor,a.commissionMinor,a.proceedsMinor,a.proceedsUSDMinor,a.residualUSDMinor].every(v=>money(v)) ||
+    a.unitTotalMinor<=0 || a.proceedsMinor<=0 || a.proceedsUSDMinor<=0 || !Number.isInteger(a.commissionBasisPoints) ||
+    a.commissionBasisPoints<0 || a.commissionBasisPoints>10000 || a.unitTotalMinor!==a.taxMinor+a.commissionMinor+a.proceedsMinor ||
+    a.commissionMinor!==Number((BigInt(a.unitTotalMinor-a.taxMinor)*BigInt(a.commissionBasisPoints)+9999n)/10000n))
+    throw new ServiceError('invalid_ai_value_product');
+  const base=makeAIValueProduct({...input,currency:'usd',currencyExponent:2,processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0},
+    exchangeRate:{numerator:'1',denominator:'1',version:a.scheduleVersion}});
+  if(a.proceedsUSDMinor!==base.quote.aiValueMinor+base.quote.serviceFeeMinor+a.residualUSDMinor)
+    throw new ServiceError('invalid_ai_value_product');
+  return Object.freeze({...base,currency:a.currency,totalMinor:a.unitTotalMinor,quote:Object.freeze({...base.quote,apple:Object.freeze({...a})})});
+}
+/** Local Apple checkout prices never change the fixed USD credit or imply a payout exchange rate. */
+export function makeRegionalAppleAIValueProduct(input:Omit<AIValueProductInput,'currency'|'currencyExponent'|'exchangeRate'|'processing'> & {apple:RegionalApplePriceSnapshot}):Readonly<AIValueProduct> {
+  if(input.provider!=='apple') throw new ServiceError('invalid_ai_value_product');
+  validateRegionalApplePrice(input.apple);
+  const base=makeAIValueProduct({...input,currency:'usd',currencyExponent:2,
+    processing:{rateBasisPoints:0,fixedMinor:0,bufferBasisPoints:0},
+    exchangeRate:{numerator:'1',denominator:'1',version:input.apple.scheduleVersion}});
+  return Object.freeze({...base,currency:input.apple.currency,totalMinor:input.apple.unitTotalMinor,
+    quote:Object.freeze({...base.quote,apple:Object.freeze({...input.apple,source:Object.freeze({...input.apple.source})})})});
+}
+export interface AIValueOrder extends AIValueProduct { readonly orderID: string; readonly quantity: number; readonly unitTotalMinor: number }
+
+export function quantityQuote(product: AIValueProduct, quantity: number) {
+  if (!Number.isInteger(quantity) || quantity<1 || quantity>10 || (product.provider==='play' && quantity!==1))
+    throw new ServiceError('invalid_purchase_quantity');
+  const allocation=BigInt(product.aiValueNanoUSD)*BigInt(quantity),q=product.quote;
+  const totalMinor=product.totalMinor*quantity;
+  if (!checkoutMoney(totalMinor,product.provider,true) || allocation>1_000_000_000_000_000n) throw new ServiceError('invalid_purchase_quantity');
+  return {...product,quantity,unitTotalMinor:product.totalMinor,totalMinor,aiValueNanoUSD:allocation.toString(),
+    estimatedMilliseconds:estimatedConversationMilliseconds(allocation,BigInt(q.estimatedNanoUSDPerMinute)),
+    quote:{...q,aiValueMinor:q.aiValueMinor*quantity,serviceFeeMinor:q.serviceFeeMinor*quantity,
+      processingEstimateMinor:q.processingEstimateMinor*quantity,processingBufferMinor:q.processingBufferMinor*quantity,
+      paymentFeeMinor:q.paymentFeeMinor*quantity,totalMinor:q.totalMinor*quantity}};
+}
 export interface AIValuePurchaseStatus {
   readonly orderID: string; readonly entitlementKind: 'ai_value';
   readonly state: 'created'|'pending'|'purchased'|'voided';
@@ -75,14 +174,22 @@ export function makeAIValueProduct(input: AIValueProductInput): Readonly<AIValue
 function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
   try {
     const q=product.quote;
-    const canonical=makeAIValueProduct({...product,currencyExponent:q.currencyExponent,aiValueMinor:q.aiValueMinor,
+    const canonical=product.provider==='play' && q.play?.pricingBasis==='fixed-usd-allocation'?makeRegionalPlayAIValueProduct({...product,
+      aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,serviceFeeBasisPoints:q.serviceFeeBasisPoints,
+      estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},play:q.play}):product.provider==='play' && q.play && q.play.pricingBasis===undefined?makePlayAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      serviceFeeBasisPoints:q.serviceFeeBasisPoints,exchangeRate:{numerator:q.exchangeRateNumerator,denominator:q.exchangeRateDenominator,
+        version:q.exchangeRateVersion},estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},
+      play:q.play}):product.provider==='apple' && q.apple?.pricingBasis==='fixed-usd-allocation'?makeRegionalAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      serviceFeeBasisPoints:q.serviceFeeBasisPoints,estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},apple:q.apple}):product.provider==='apple'?makeAppleAIValueProduct({...product,aiValueMinor:q.aiValueMinor,policyVersion:q.policyVersion,
+      serviceFeeBasisPoints:q.serviceFeeBasisPoints,estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion},apple:q.apple!}):makeAIValueProduct({...product,currencyExponent:q.currencyExponent,aiValueMinor:q.aiValueMinor,
       policyVersion:q.policyVersion,serviceFeeBasisPoints:q.serviceFeeBasisPoints,
       processing:{rateBasisPoints:q.processingRateBasisPoints,fixedMinor:q.processingFixedMinor,bufferBasisPoints:q.processingBufferBasisPoints},
       exchangeRate:{numerator:q.exchangeRateNumerator,denominator:q.exchangeRateDenominator,version:q.exchangeRateVersion},
       estimate:{nanoUSDPerMinute:q.estimatedNanoUSDPerMinute,rateVersion:q.estimateRateVersion}});
     for (const key of Object.keys(canonical) as (keyof AIValueProduct)[]) {
       if (key==='quote') {
-        if (Object.keys(q).length!==Object.keys(canonical.quote).length || Object.entries(canonical.quote).some(([k,v])=>q[k as keyof typeof q]!==v)) throw new Error();
+        if (Object.keys(q).length!==Object.keys(canonical.quote).length || Object.entries(canonical.quote).some(([k,v])=>
+          k==='apple'||k==='play'?JSON.stringify(q[k as 'apple'|'play'])!==JSON.stringify(v):q[k as keyof typeof q]!==v)) throw new Error();
       } else if (canonical[key]!==product[key]) throw new Error();
     }
     if (Object.keys(canonical).length!==Object.keys(product).length) throw new Error();
@@ -92,6 +199,7 @@ function validateProduct(product: AIValueProduct): Readonly<AIValueProduct> {
 function mappedOrder(row: any): AIValueOrder {
   return {orderID:row.id,provider:row.provider,environment:row.environment,merchant:row.merchant,sku:row.sku,
     providerProduct:row.provider_product,currency:row.currency,totalMinor:Number(row.total_minor),
+    quantity:Number(row.quantity??1),unitTotalMinor:Number(row.total_minor)/Number(row.quantity??1),
     entitlementKind:'ai_value',billingBasis:'actual-ai-usage',estimate:true,
     aiValueNanoUSD:row.ai_value_nano.toString(),estimatedMilliseconds:estimatedConversationMilliseconds(BigInt(row.ai_value_nano),
       BigInt(row.quote.estimatedNanoUSDPerMinute)),quote:row.quote};
@@ -109,37 +217,58 @@ export function refundedAIValue(allocation: bigint, refundedMinor:number,totalMi
 function evidenceValid(e:VerifiedMinutePurchase,scope:PurchaseScope) {
   if (!scopeValid(e) || scopeKey(e)!==scopeKey(scope) || !uuid.test(e.orderID) ||
     typeof e.transactionID!=='string' || !/^[\x21-\x7e]{1,4096}$/.test(e.transactionID) ||
-    typeof e.eventID!=='string' || !/^[\x21-\x7e]{1,4096}$/.test(e.eventID) || !identifier.test(e.providerProduct) || e.quantity!==1 ||
-    !/^[a-z]{3}$/.test(e.currency) || !money(e.totalMinor,true) || !money(e.refundedMinor) || e.refundedMinor>e.totalMinor ||
+    typeof e.eventID!=='string' || !/^[\x21-\x7e]{1,4096}$/.test(e.eventID) || !identifier.test(e.providerProduct) || !Number.isInteger(e.quantity) || e.quantity<1 || e.quantity>10 ||
+    !/^[a-z]{3}$/.test(e.currency) || !checkoutMoney(e.totalMinor,e.provider,true) || !checkoutMoney(e.refundedMinor,e.provider) || e.refundedMinor>e.totalMinor ||
     !['pending','purchased','voided'].includes(e.state) || (e.state==='pending' && e.refundedMinor!==0)) throw new ServiceError('invalid_purchase_evidence',502);
 }
 
 /** Optional catalog. All real entitlements come from server-verified provider evidence. */
 export class AIValuePurchases {
   readonly #catalog=new Map<string,Readonly<AIValueProduct>>();
-  readonly #verifiers=new Map<PurchaseProvider,MinutePurchaseVerifier>();
+  readonly #verifiers=new Map<string,MinutePurchaseVerifier>();
   readonly #salesEnabled:boolean;
-  constructor(readonly db:Database, options:{catalog?:readonly AIValueProduct[];verifiers?:readonly MinutePurchaseVerifier[];salesEnabled?:boolean}={}) {
+  readonly #quantityEnabled:ReadonlySet<PurchaseProvider>;
+  constructor(readonly db:Database, options:{catalog?:readonly AIValueProduct[];verifiers?:readonly MinutePurchaseVerifier[];salesEnabled?:boolean;quantityEnabled?:readonly PurchaseProvider[]}={}) {
     this.#salesEnabled=options.salesEnabled===true;
+    this.#quantityEnabled=new Set(options.quantityEnabled??[]);
     for (const verifier of options.verifiers??[]) {
-      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifier.provider)) throw new ServiceError('invalid_purchase_verifier');
-      this.#verifiers.set(verifier.provider,Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
+      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifierKey(verifier.provider,verifier.environment))) throw new ServiceError('invalid_purchase_verifier');
+      this.#verifiers.set(verifierKey(verifier.provider,verifier.environment),Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
     }
-    const bindings=new Set<string>();
+    const bindings=new Set<string>(),playMarkets=new Map<string,Readonly<AIValueProduct>[]>(),appleMarkets=new Map<string,Readonly<AIValueProduct>[]>();
+    if((options.catalog?.length??0)>4096) throw new ServiceError('invalid_ai_value_catalog');
     for (const candidate of options.catalog??[]) {
-      const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,product.currency]);
-      const verifier=this.#verifiers.get(product.provider);
+      const product=validateProduct(candidate),key=productKey(product,product.sku),binding=JSON.stringify([scopeKey(product),product.providerProduct,
+        product.quote.apple?.storefront??product.quote.play?.regionCode??product.currency]);
+      const verifier=this.#verifiers.get(verifierKey(product.provider,product.environment));
       if (this.#catalog.has(key) || bindings.has(binding) || !verifier || scopeKey(product)!==scopeKey(verifier)) throw new ServiceError('invalid_ai_value_catalog');
       this.#catalog.set(key,product);bindings.add(binding);
+      if(product.provider==='play') {
+        const market=product.quote.play?.regionCode??'legacy',rows=playMarkets.get(market)??[];
+        rows.push(product);playMarkets.set(market,rows);
+        if(rows.length>100 || Buffer.byteLength(JSON.stringify(rows))>120_000) throw new ServiceError('invalid_ai_value_catalog');
+      }
+      if(product.provider==='apple') {
+        const market=JSON.stringify([product.environment,product.quote.apple?.storefront]),rows=appleMarkets.get(market)??[];
+        rows.push(product);appleMarkets.set(market,rows);
+        if(rows.length>20 || Buffer.byteLength(JSON.stringify(rows))>120_000) throw new ServiceError('invalid_ai_value_catalog');
+      }
     }
   }
-  products(provider:PurchaseProvider):readonly Readonly<AIValueProduct>[] {
-    return this.#salesEnabled?[...this.#catalog.values()].filter(product=>product.provider===provider):[];
+  #verifier(provider:PurchaseProvider,environment?:PurchaseEnvironment) {
+    if(environment)return this.#verifiers.get(verifierKey(provider,environment));
+    const candidates=[...this.#verifiers.values()].filter(v=>v.provider===provider);
+    return candidates.length===1?candidates[0]:this.#verifiers.get(verifierKey(provider,'live'));
   }
-  async createOrder(accountID:string,provider:PurchaseProvider,sku:string,idempotencyKey:string):Promise<AIValueOrder> {
+  maximumQuantity(provider:PurchaseProvider):number {return provider!=='play' && this.#quantityEnabled.has(provider)?10:1;}
+  products(provider:PurchaseProvider,environment?:PurchaseEnvironment):readonly Readonly<AIValueProduct>[] {
+    return this.#salesEnabled?[...this.#catalog.values()].filter(product=>product.provider===provider && (environment===undefined || product.environment===environment)):[];
+  }
+  async createOrder(accountID:string,provider:PurchaseProvider,sku:string,idempotencyKey:string,quantity=1,appleSelection?:{storefront:string;scheduleVersion:string},playSelection?:{regionCode:string;scheduleVersion:string},environment?:PurchaseEnvironment):Promise<AIValueOrder> {
     if (!this.#salesEnabled) throw new ServiceError('ai_value_purchases_unavailable',503);
     if (!uuid.test(accountID) || typeof sku!=='string' || typeof idempotencyKey!=='string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) throw new ServiceError('invalid_ai_value_order');
-    const verifier=this.#verifiers.get(provider); if (!verifier) throw new ServiceError('ai_value_purchases_unavailable',503);
+    if (!Number.isInteger(quantity) || quantity<1 || quantity>10 || (provider==='play' && quantity!==1)) throw new ServiceError('invalid_purchase_quantity');
+    const verifier=this.#verifier(provider,environment); if (!verifier) throw new ServiceError('ai_value_purchases_unavailable',503);
     return transaction(this.db,async sql=>{
       const wallet=await lockWallet(sql,accountID,true);
       if ((await sql.query('SELECT is_guest FROM accounts WHERE id=$1',[accountID])).rows[0].is_guest) throw new ServiceError('purchase_requires_account',403);
@@ -149,17 +278,26 @@ export class AIValuePurchases {
       const prior=(await sql.query(`SELECT o.*,q.ai_value_nano,q.quote FROM minute_purchase_orders o
         LEFT JOIN ai_value_purchase_quotes q ON q.order_id=o.id WHERE o.account_id=$1 AND o.idempotency_key=$2`,[accountID,idempotencyKey])).rows[0];
       if (prior) {
-        if (prior.entitlement_kind!=='ai_value' || prior.provider!==provider || prior.sku!==sku || prior.environment!==verifier.environment || prior.merchant!==verifier.merchant)
+        if (prior.entitlement_kind!=='ai_value' || prior.provider!==provider || prior.sku!==sku || prior.environment!==verifier.environment || prior.merchant!==verifier.merchant || Number(prior.quantity)!==quantity)
           throw new ServiceError('idempotency_conflict',409);
+        if(provider==='play' && (prior.quote.play?.regionCode!==playSelection?.regionCode ||
+          (playSelection && prior.quote.play?.scheduleVersion!==playSelection.scheduleVersion))) throw new ServiceError('idempotency_conflict',409);
+        if(provider==='apple' && (prior.quote.apple?.storefront!==appleSelection?.storefront || prior.quote.apple?.scheduleVersion!==appleSelection?.scheduleVersion)) throw new ServiceError('idempotency_conflict',409);
         return mappedOrder(prior);
       }
-      const product=this.#catalog.get(productKey(verifier,sku));if (!product) throw new ServiceError('ai_value_product_unavailable',503);
+      if (quantity>this.maximumQuantity(provider)) throw new ServiceError('purchase_quantity_unavailable',503);
+      const unit=this.#catalog.get(productKey(verifier,sku));if (!unit) throw new ServiceError('ai_value_product_unavailable',503);
+      if(provider==='play' && (unit.quote.play?.regionCode!==playSelection?.regionCode ||
+        (playSelection && (storeRegionCode(playSelection.regionCode)!==unit.quote.play?.regionCode || playSelection.scheduleVersion!==unit.quote.play?.scheduleVersion))))
+        throw new ServiceError('purchase_quote_changed',409);
+      if(provider==='apple' && (!appleSelection || appleSelection.storefront!==unit.quote.apple?.storefront || appleSelection.scheduleVersion!==unit.quote.apple?.scheduleVersion)) throw new ServiceError('purchase_quote_changed',409);
+      const product=quantityQuote(unit,quantity);
       const policy=(await sql.query('SELECT version,service_fee_basis_points FROM lock_ai_pricing_policy()')).rows[0];
       if (!policy || policy.version!==product.quote.policyVersion || policy.service_fee_basis_points!==product.quote.serviceFeeBasisPoints)
         throw new ServiceError('ai_pricing_changed_review_quote',409);
       const id=randomUUID();
-      await sql.query(`INSERT INTO minute_purchase_orders(id,account_id,idempotency_key,provider,environment,merchant,sku,provider_product,currency,total_minor,allowance_ms,entitlement_kind)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,'ai_value')`,[id,accountID,idempotencyKey,provider,product.environment,product.merchant,sku,product.providerProduct,product.currency,product.totalMinor]);
+      await sql.query(`INSERT INTO minute_purchase_orders(id,account_id,idempotency_key,provider,environment,merchant,sku,provider_product,currency,total_minor,allowance_ms,entitlement_kind,quantity)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,'ai_value',$11)`,[id,accountID,idempotencyKey,provider,product.environment,product.merchant,sku,product.providerProduct,product.currency,product.totalMinor,quantity]);
       const q=product.quote;
       await sql.query(`INSERT INTO ai_value_purchase_quotes(order_id,ai_value_nano,ai_value_minor,policy_version,service_fee_basis_points,service_fee_minor,
         processing_estimate_minor,processing_buffer_minor,quote) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
@@ -176,18 +314,23 @@ export class AIValuePurchases {
     return purchaseStatus(orderID,found.order_id?found:undefined);
   }
   async reconcile(provider:PurchaseProvider,input:unknown):Promise<AIValuePurchaseStatus> {
-    const verifier=this.#verifiers.get(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
+    const verifier=this.#verifier(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
     let verified:VerifiedMinutePurchase;
     try {verified=await verifier.verify(input);}catch {throw new ServiceError('purchase_verification_failed',502);}
     return this.applyVerifiedEvidence(provider,verified);
   }
   /** Server-internal: callers must use the configured provider verifier or shared fulfillment router. */
   async applyVerifiedEvidence(provider:PurchaseProvider,verified:VerifiedMinutePurchase):Promise<AIValuePurchaseStatus> {
-    const verifier=this.#verifiers.get(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
+    const verifier=this.#verifier(provider,verified.environment);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
     evidenceValid(verified,verifier);
+    if(provider==='apple' && (!Number.isSafeInteger(verified.providerRevision) || verified.providerRevision!<=0 ||
+      !Number.isInteger(verified.refundedPartsPer100000) || verified.refundedPartsPer100000!<0 || verified.refundedPartsPer100000!>100000 ||
+      verified.state!=='purchased')) throw new ServiceError('invalid_purchase_evidence',502);
     const evidence={provider:verified.provider,environment:verified.environment,merchant:verified.merchant,orderID:verified.orderID.toLowerCase(),
       transactionHash:hash(verified.transactionID),eventHash:hash(verified.eventID),providerProduct:verified.providerProduct,currency:verified.currency,
-      totalMinor:verified.totalMinor,state:verified.state,refundedMinor:verified.refundedMinor};
+      totalMinor:verified.totalMinor,state:verified.state,refundedMinor:verified.refundedMinor,
+      ...(verified.quantity===1?{}:{quantity:verified.quantity}),
+      ...(provider==='apple'?{providerRevision:verified.providerRevision,refundedPartsPer100000:verified.refundedPartsPer100000}:{})};
     const evidenceHash=hash(JSON.stringify(evidence));
     return transaction(this.db,async sql=>{
       const locks=[`minute-purchase-transaction:${scopeKey(evidence)}:${evidence.transactionHash}`,`minute-purchase-event:${scopeKey(evidence)}:${evidence.eventHash}`].sort();
@@ -196,7 +339,7 @@ export class AIValuePurchases {
         JOIN ai_value_purchase_quotes q ON q.order_id=o.id WHERE o.id=$1`,[evidence.orderID])).rows[0];
       if (!order || order.entitlement_kind!=='ai_value') throw new ServiceError('purchase_entitlement_mismatch',409);
       if (order.provider!==provider || order.environment!==evidence.environment || order.merchant!==evidence.merchant || order.provider_product!==evidence.providerProduct ||
-        order.currency!==evidence.currency || Number(order.total_minor)!==evidence.totalMinor) throw new ServiceError('ai_value_purchase_mismatch',409);
+        order.currency!==evidence.currency || Number(order.total_minor)!==evidence.totalMinor || Number(order.quantity)!==verified.quantity) throw new ServiceError('ai_value_purchase_mismatch',409);
       if ((await sql.query(`SELECT 1 FROM minute_purchase_transactions WHERE provider=$1 AND environment=$2 AND merchant=$3 AND transaction_hash=$4`,
         [provider,evidence.environment,evidence.merchant,evidence.transactionHash])).rowCount) throw new ServiceError('purchase_transaction_conflict',409);
       await lockWallet(sql,order.account_id);
@@ -209,7 +352,24 @@ export class AIValuePurchases {
       let purchase=rows[0];
       if (!purchase) purchase=(await sql.query(`INSERT INTO ai_value_purchase_transactions(order_id,account_id,provider,environment,merchant,transaction_hash,state,ai_value_nano)
         VALUES($1,$2,$3,$4,$5,$6,'pending',$7) RETURNING *`,[evidence.orderID,order.account_id,provider,evidence.environment,evidence.merchant,evidence.transactionHash,order.ai_value_nano])).rows[0];
-      if (!duplicate) {
+      if(provider==='apple' && !duplicate) {
+        const revision=verified.providerRevision!,priorRevision=Number(purchase.provider_revision);
+        if(revision===priorRevision && purchase.provider_evidence_hash!==evidenceHash) throw new ServiceError('purchase_event_conflict',409);
+        if(revision>priorRevision) {
+          const allocation=BigInt(order.ai_value_nano),reversal=(allocation*BigInt(verified.refundedPartsPer100000!)+99999n)/100000n;
+          const version=`ai-value:${order.quote.policyVersion}:${order.quote.exchangeRateVersion}`;
+          if(BigInt(purchase.granted_nano)===0n) await appendEntry(sql,order.account_id,`ai-purchase:${order.id}`,'purchase',allocation,0n,version,
+            order.environment==='test'?allocation:0n);
+          const delta=BigInt(purchase.reversed_nano)-reversal;
+          if(delta!==0n) await appendEntry(sql,order.account_id,`apple-adjust:${order.id}:${revision}`,'reversal',delta,0n,version,
+            order.environment==='test'?delta:0n);
+          await sql.query(`UPDATE ai_value_purchase_transactions SET state='purchased',granted_nano=$2,refunded_minor=$3,reversed_nano=$4,
+            provider_revision=$5,provider_evidence_hash=$6,updated_at=now() WHERE order_id=$1`,
+            [order.id,allocation.toString(),evidence.refundedMinor,reversal.toString(),revision,evidenceHash]);
+        }
+        await sql.query(`INSERT INTO minute_purchase_events(id,order_id,provider,environment,merchant,event_hash,evidence_hash,state,refunded_minor)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),order.id,provider,evidence.environment,evidence.merchant,evidence.eventHash,evidenceHash,evidence.state,evidence.refundedMinor]);
+      } else if (!duplicate) {
         const state=evidence.state==='voided'||purchase.state==='voided'?'voided':evidence.state==='purchased'||purchase.state==='purchased'?'purchased':'pending';
         const allocation=BigInt(order.ai_value_nano),granted=BigInt(purchase.granted_nano);
         const version=`ai-value:${order.quote.policyVersion}:${order.quote.exchangeRateVersion}`;
@@ -234,15 +394,26 @@ export class AIValuePurchases {
 
 /** Webhook, Play recovery and durable worker share one authoritative verification before dispatch. */
 export class PurchaseFulfillmentRouter {
-  readonly #verifiers=new Map<PurchaseProvider,MinutePurchaseVerifier>();
+  readonly #verifiers=new Map<string,MinutePurchaseVerifier>();
   constructor(readonly db:Database,readonly minutes:MinutePurchases,readonly ai:AIValuePurchases,verifiers:readonly MinutePurchaseVerifier[]) {
     for (const verifier of verifiers) {
-      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifier.provider)) throw new ServiceError('invalid_purchase_verifier');
-      this.#verifiers.set(verifier.provider,Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
+      if (!scopeValid(verifier) || typeof verifier.verify!=='function' || this.#verifiers.has(verifierKey(verifier.provider,verifier.environment))) throw new ServiceError('invalid_purchase_verifier');
+      this.#verifiers.set(verifierKey(verifier.provider,verifier.environment),Object.freeze({provider:verifier.provider,environment:verifier.environment,merchant:verifier.merchant,verify:verifier.verify.bind(verifier)}));
     }
   }
   async reconcile(provider:PurchaseProvider,input:unknown):Promise<MinutePurchaseStatus|AIValuePurchaseStatus> {
-    const verifier=this.#verifiers.get(provider);if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
+    const request=input && typeof input==='object'?input as Record<string,unknown>:undefined;
+    let environment=request?.environment;
+    if(typeof request?.orderID==='string') {
+      const order=(await this.db.query('SELECT provider,environment FROM minute_purchase_orders WHERE id=$1',[request.orderID])).rows[0];
+      if(order?.provider!==provider || (environment!==undefined && environment!==order.environment))
+        throw new ServiceError('purchase_verification_failed',502);
+      environment=order.environment;
+    }
+    const candidates=[...this.#verifiers.values()].filter(v=>v.provider===provider);
+    const verifier=typeof environment==='string'?this.#verifiers.get(verifierKey(provider,environment as PurchaseEnvironment)):
+      candidates.length===1?candidates[0]:undefined;
+    if (!verifier) throw new ServiceError('purchase_verification_unavailable',503);
     let evidence:VerifiedMinutePurchase;
     try {evidence=await verifier.verify(input);}catch {throw new ServiceError('purchase_verification_failed',502);}
     evidenceValid(evidence,verifier);

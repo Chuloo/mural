@@ -1,0 +1,55 @@
+{
+  "available": true,
+  "maximumQuantity": 1,
+  "billingBasis": "actual-ai-usage",
+  "regionCode": "GB",
+  "products": [
+    {
+      "environment": "test",
+      "sku": "play-gb-small-synthetic-regional-v1",
+      "providerProduct": "chat.mural.android.minutes.small.v1",
+      "currency": "gbp",
+      "totalMinor": 649,
+      "entitlementKind": "ai_value",
+      "billingBasis": "actual-ai-usage",
+      "estimate": true,
+      "aiValueNanoUSD": "3690000000",
+      "estimatedMilliseconds": 2214000,
+      "quote": {
+        "policyVersion": 1,
+        "aiValueMinor": 369,
+        "serviceFeeBasisPoints": 1500,
+        "serviceFeeMinor": 56,
+        "processingEstimateMinor": 0,
+        "processingBufferMinor": 0,
+        "paymentFeeMinor": 0,
+        "totalMinor": 425,
+        "currency": "usd",
+        "currencyExponent": 2,
+        "processingRateBasisPoints": 0,
+        "processingFixedMinor": 0,
+        "processingBufferBasisPoints": 0,
+        "exchangeRateNumerator": "1",
+        "exchangeRateDenominator": "1",
+        "exchangeRateVersion": "synthetic-regional-v1",
+        "estimatedNanoUSDPerMinute": "100000000",
+        "estimateRateVersion": "synthetic-estimate",
+        "play": {
+          "pricingBasis": "fixed-usd-allocation",
+          "regionCode": "GB",
+          "currency": "gbp",
+          "currencyExponent": 2,
+          "unitTotalMinor": 649,
+          "scheduleVersion": "synthetic-regional-v1",
+          "taxBasis": "console-rate-estimate",
+          "taxMinor": 109,
+          "commissionBasisPoints": 3000,
+          "commissionMinor": 162,
+          "proceedsMinor": 378,
+          "taxRateBasisPoints": 2000,
+          "hasLocationOverrides": false
+        }
+      }
+    }
+  ]
+}

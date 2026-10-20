@@ -24,6 +24,9 @@ final class ManagedAccountTests: XCTestCase {
         XCTAssertEqual(try config(api: "https://accounts.example.test/").origin.absoluteString, "https://accounts.example.test")
         XCTAssertThrowsError(try config().endpoint("https://attacker.example.test/v1/wallet"))
         XCTAssertThrowsError(try config().endpoint("//attacker.example.test"))
+        XCTAssertEqual(try config().endpoint("/v1/guest/account").absoluteString,
+                       "https://accounts.example.test/v1/guest/account")
+        XCTAssertThrowsError(try config().endpoint("/v1/guest/account?redirect=https://attacker.example.test"))
     }
     func testGoogleCanBeConfiguredWithoutAppleCapability() throws {
         let google = try ManagedAccountConfiguration(apiURL: "https://accounts.example.test", googleClientID: client,

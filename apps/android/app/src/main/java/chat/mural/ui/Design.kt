@@ -180,8 +180,9 @@ fun MuralOrb(energy: Float = 0f, listening: Boolean = false, active: Boolean = t
         if (android.os.Build.VERSION.SDK_INT >= 33) OrbMesh() else null
     }
     Canvas(modifier) {
-        val side = minOf(size.width, size.height)
-        val center = Offset(size.width / 2, size.height / 2 - 5.dp.toPx() + sin(phase * 1.25f) * 4.dp.toPx())
+        // Reserve room for the moving outline and satellites at every rendered size.
+        val side = minOf(size.width, size.height) * .84f
+        val center = Offset(size.width / 2, size.height / 2 - side * .015f + sin(phase * 1.25f) * side * .008f)
         // A broad feathered shadow, with no hard ellipse underneath the orb.
         withTransform({
             translate(size.width / 2, size.height * .94f); scale(1f, .17f, Offset.Zero)
@@ -217,10 +218,11 @@ fun MuralOrb(energy: Float = 0f, listening: Boolean = false, active: Boolean = t
                 drawRect(Brush.radialGradient(listOf(Color(0x99FFF5D6), Color(0x00FFF5D6)), Offset(side * .22f, side * .2f), side * .5f))
             }
         }
+        val satelliteRadius = minOf(6.dp.toPx(), side * .025f)
         drawCircle(Brush.radialGradient(listOf(Color.White, MuralColors.Peach, MuralColors.Orange.copy(alpha = .5f)),
-            Offset(center.x + side * .54f - 3.dp.toPx(), center.y - side * .24f - 3.dp.toPx()), 12.dp.toPx()),
-            6.dp.toPx(), Offset(center.x + side * .55f, center.y - side * .24f))
-        drawCircle(MuralColors.Peach, 3.5.dp.toPx(), Offset(center.x - side * .54f, center.y + side * .26f))
+            Offset(center.x + side * .55f - satelliteRadius / 2, center.y - side * .24f - satelliteRadius / 2), satelliteRadius * 2),
+            satelliteRadius, Offset(center.x + side * .55f, center.y - side * .24f))
+        drawCircle(MuralColors.Peach, satelliteRadius * .58f, Offset(center.x - side * .54f, center.y + side * .26f))
     }
 }
 

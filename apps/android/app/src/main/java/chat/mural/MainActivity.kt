@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep isolated interface tests visible on physical phones with short idle timers.
+        if (BuildConfig.BUILD_TYPE == "uiTest") window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         MandarinPinyin.reader = IcuHanReader()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
@@ -69,11 +71,20 @@ class MainActivity : ComponentActivity() {
             var microphoneMessage by rememberSaveable { mutableStateOf<String?>(null) }
             var microphonePermanentlyDenied by rememberSaveable { mutableStateOf(false) }
             var requestedMicrophone by rememberSaveable { mutableStateOf(false) }
+            val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+                vm.start() // Denial still permits a microphone foreground service.
+            }
+            fun startVoice() {
+                if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else vm.start()
+            }
             val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                 if (granted) {
                     microphoneMessage = null
                     microphonePermanentlyDenied = false
-                    vm.start()
+                    startVoice()
                 } else {
                     val canAskAgain = shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
                     microphonePermanentlyDenied = requestedMicrophone && !canAskAgain
@@ -113,7 +124,7 @@ class MainActivity : ComponentActivity() {
                 onRequestMicrophone = {
                     if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                         microphoneMessage = null
-                        vm.start()
+                        startVoice()
                     } else {
                         requestedMicrophone = true
                         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -128,7 +139,7 @@ class MainActivity : ComponentActivity() {
                 onDeleteAccount = { changeAccount(delete = true) },
                 accountTransitionBusy = accountTransitionBusy,
                 purchases = purchases,
-                onBuyMinutes = { sku -> if (!changingAccount) purchases.launch(this@MainActivity, sku) },
+                onBuyMinutes = { sku, quantity -> if (!changingAccount) purchases.launch(this@MainActivity, sku, quantity) },
             )
             }
         }
@@ -184,6 +195,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        vm.foreground()
         account.refresh()
         purchases.onForeground(account.state.value.copy(busy = account.state.value.busy || changingAccount))
         vm.refreshHostedReadiness()

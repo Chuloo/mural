@@ -45,6 +45,9 @@ jobs:
       - name: Test, lint and build Android
         working-directory: apps/android
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleUiTestAndroidTest :app:bundleRelease
+      - name: Compile opt-in live device checks without making calls
+        working-directory: apps/android
+        run: ./gradlew --no-daemon -Pmural.liveDeviceVerification=true -Pmural.apiOrigin=https://api.mural.chat -Pmural.minutePurchasesEnabled=false :app:assembleVoiceVerification :app:assembleVoiceVerificationAndroidTest
       - name: Inspect unsigned release bundle and native library layout
         run: python3 scripts/check_android_release.py --aab apps/android/app/build/outputs/bundle/release/app-release.aab --output /tmp/android-release-native-checks.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

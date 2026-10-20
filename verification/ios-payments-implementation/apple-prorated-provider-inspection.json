@@ -1,0 +1,45 @@
+{
+  "verifiedLatest": {
+    "environment": "Sandbox",
+    "quantity": 2,
+    "price": 89000,
+    "currency": "NOK",
+    "signedDate": 1790591484851,
+    "revocationDate": 1790591202000,
+    "revocationReason": 0,
+    "revocationType": "REFUND_FULL",
+    "revocationPercentage": 100000
+  },
+  "verifiedNotifications": [
+    {
+      "type": "ONE_TIME_CHARGE",
+      "notificationSignedDate": 1790590428831,
+      "transaction": {
+        "environment": "Sandbox",
+        "quantity": 2,
+        "price": 89000,
+        "currency": "NOK",
+        "signedDate": 1790590428831,
+        "revocationDate": null,
+        "revocationReason": null,
+        "revocationType": null,
+        "revocationPercentage": null
+      }
+    },
+    {
+      "type": "CONSUMPTION_REQUEST",
+      "notificationSignedDate": 1790590725173,
+      "transaction": {
+        "environment": "Sandbox",
+        "quantity": 2,
+        "price": 89000,
+        "currency": "NOK",
+        "signedDate": 1790590725173,
+        "revocationDate": null,
+        "revocationReason": null,
+        "revocationType": null,
+        "revocationPercentage": null
+      }
+    }
+  ]
+}

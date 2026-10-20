@@ -7,7 +7,11 @@ const postCommitConstraints = [
   ['minute_stripe_paid_totals', 'minute_stripe_paid_totals_gross_minor_check'],
 ] as const;
 
-export async function migrate(db: Database): Promise<void> {
+export async function migrate(db: Database, options: {through?:'032_apple_funding_scope.sql'} = {}): Promise<void> {
+  // Upgrade fixtures use the same runner and checked-in migrations as production.
+  // The CLI and normal callers always apply the complete history.
+  if(!options || typeof options!=='object' || Array.isArray(options) || Object.keys(options).some(key=>key!=='through') ||
+    (options.through!==undefined && options.through!=='032_apple_funding_scope.sql')) throw new Error('Unsupported migration boundary.');
   const directory = fileURLToPath(new URL('../../migrations/', import.meta.url));
   // When executed from source, this module is one level closer to migrations.
   const sourceDirectory = fileURLToPath(new URL('../migrations/', import.meta.url));
@@ -16,6 +20,7 @@ export async function migrate(db: Database): Promise<void> {
     await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-migrations'))");
     await sql.query('CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
     for (const file of (await readdir(path)).filter(name => name.endsWith('.sql')).sort()) {
+      if(options.through!==undefined && file>'032_apple_funding_scope.sql') continue;
       if ((await sql.query('SELECT name FROM schema_migrations WHERE name=$1', [file])).rowCount) continue;
       await sql.query(await readFile(`${path}/${file}`, 'utf8'));
       await sql.query('INSERT INTO schema_migrations(name) VALUES ($1)', [file]);

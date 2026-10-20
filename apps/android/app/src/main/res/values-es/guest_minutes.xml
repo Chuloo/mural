@@ -18,7 +18,6 @@
     <string name="guest_check_again">Comprobar de nuevo</string>
     <string name="guest_personal_key">Usar mi propia clave de API</string>
     <string name="guest_purchases_soon">Las compras aún no están disponibles. Puedes usar tu propia clave de API.</string>
-    <string name="guest_account_detail">Inicia sesión para conservar en tu cuenta los minutos que te quedan como invitado. Tu aprendizaje se queda en este dispositivo.</string>
     <string name="consent_adult_confirmation">Al continuar, confirmas que tienes 18 años o más.</string>
     <string name="guest_member_trial_used">Esta cuenta ya ha recibido sus minutos de bienvenida, así que no recibirá un segundo saldo gratuito. El saldo de tu cuenta no ha cambiado.</string>
 </resources>

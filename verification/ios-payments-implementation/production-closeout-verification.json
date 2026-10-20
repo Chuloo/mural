@@ -1,0 +1,159 @@
+{
+  "revision": "0f8a0b106bd2e149be98ed24e1dd82720b9f60d0",
+  "sourceClean": true,
+  "image": "sha256:2a97a66affb2f664d6c3d3883c4f0509d55fb8c0fbd0f41812802ce49170d733",
+  "deployment": {
+    "revision": "0f8a0b106bd2e149be98ed24e1dd82720b9f60d0",
+    "image": "sha256:2a97a66affb2f664d6c3d3883c4f0509d55fb8c0fbd0f41812802ce49170d733",
+    "rollback": "/opt/mural/deploy/before-payment-closeout-20260928T095941Z",
+    "status": "ready",
+    "privateConfigurationChanged": false,
+    "appleSalesEnabled": false
+  },
+  "checkedAt": "2026-09-28T10:01:44.857869+00:00",
+  "checks": {
+    "https://api.mural.chat/healthz": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "stage": "commercial-foundation",
+        "hostedVoice": true,
+        "guestMinutes": true,
+        "livePayments": true
+      }
+    },
+    "https://api.mural.chat/readyz": {
+      "status": 200,
+      "body": {
+        "database": true,
+        "hostedVoice": true,
+        "guestMinutes": true,
+        "livePayments": true
+      }
+    },
+    "https://api.mural.chat/v1/auth/providers": {
+      "status": 200,
+      "body": {
+        "google": true,
+        "googleAndroid": true,
+        "apple": true
+      }
+    },
+    "https://api.mural.chat/v1/minutes/products?provider=stripe": {
+      "status": 200,
+      "body": {
+        "available": true,
+        "maximumQuantity": 10,
+        "products": [
+          {
+            "sku": "mural-ai-usd-500-v1",
+            "totalMinor": 500,
+            "environment": "live",
+            "currency": "usd"
+          },
+          {
+            "sku": "mural-ai-usd-1000-v1",
+            "totalMinor": 1000,
+            "environment": "live",
+            "currency": "usd"
+          },
+          {
+            "sku": "mural-ai-usd-1500-v1",
+            "totalMinor": 1500,
+            "environment": "live",
+            "currency": "usd"
+          }
+        ]
+      }
+    },
+    "https://api.mural.chat/v1/minutes/products?provider=apple&storefront=NOR": {
+      "status": 200,
+      "body": {
+        "available": false,
+        "maximumQuantity": 1,
+        "products": []
+      }
+    },
+    "https://sandbox-api.mural.chat/healthz": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "stage": "commercial-foundation",
+        "hostedVoice": true,
+        "guestMinutes": false,
+        "livePayments": false
+      }
+    },
+    "https://sandbox-api.mural.chat/readyz": {
+      "status": 200,
+      "body": {
+        "database": true,
+        "hostedVoice": true,
+        "guestMinutes": false,
+        "livePayments": false
+      }
+    },
+    "https://sandbox-api.mural.chat/v1/auth/providers": {
+      "status": 200,
+      "body": {
+        "google": true,
+        "googleAndroid": true,
+        "apple": true
+      }
+    },
+    "https://sandbox-api.mural.chat/v1/minutes/products?provider=stripe": {
+      "status": 200,
+      "body": {
+        "available": true,
+        "maximumQuantity": 10,
+        "products": [
+          {
+            "sku": "mural-ai-usd-500-v1",
+            "totalMinor": 500,
+            "environment": "test",
+            "currency": "usd"
+          },
+          {
+            "sku": "mural-ai-usd-1000-v1",
+            "totalMinor": 1000,
+            "environment": "test",
+            "currency": "usd"
+          },
+          {
+            "sku": "mural-ai-usd-1500-v1",
+            "totalMinor": 1500,
+            "environment": "test",
+            "currency": "usd"
+          }
+        ]
+      }
+    },
+    "https://sandbox-api.mural.chat/v1/minutes/products?provider=apple&storefront=NOR": {
+      "status": 200,
+      "body": {
+        "available": true,
+        "maximumQuantity": 10,
+        "products": [
+          {
+            "sku": "mural-apple-nor-small-v1",
+            "totalMinor": 8900,
+            "environment": "test",
+            "currency": "nok"
+          },
+          {
+            "sku": "mural-apple-nor-medium-v1",
+            "totalMinor": 17900,
+            "environment": "test",
+            "currency": "nok"
+          },
+          {
+            "sku": "mural-apple-nor-large-v1",
+            "totalMinor": 24900,
+            "environment": "test",
+            "currency": "nok"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -21,7 +21,7 @@ During this preview, eligible new installations can receive 10 free conversation
 About this preview
 Mural is for adults aged 18 and older. An internet connection is required. AI can make mistakes in language, translations and factual answers.
 
-Paid top-ups are not available yet. You can optionally add your own OpenAI API key in Advanced settings. This requires your own OpenAI billing and access to the supported models; OpenAI charges your project directly for that usage.
+Where available, you can buy a minute pack through Google Play for more conversation time. Mural shows the pack's price and estimated conversation time before checkout. You can also add your own OpenAI API key in Advanced settings. This requires your own OpenAI billing and access to the supported models; OpenAI charges your project directly for that usage.
 
 Mural is open source under the MIT License. Explore the code at github.com/Chuloo/mural.
 

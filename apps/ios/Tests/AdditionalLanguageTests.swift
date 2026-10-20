@@ -2,13 +2,18 @@ import XCTest
 @testable import MuralCore
 
 final class AdditionalLanguageTests: XCTestCase {
-    private let ids = ["de", "it", "pt", "zh", "th"]
+    private let ids = ["de", "it", "pt", "zh", "th", "sr", "el", "tl", "nl", "ru"]
     private let samples = [
         ("de", "Ich gehe über die Straße.", "die Straße", "Straße", "street"),
         ("it", "Vorrei un caffè.", "un caffè", "caffè", "coffee"),
         ("pt", "Eu gosto de pão e maçã.", "o pão", "pão", "bread"),
         ("zh", "我想去银行。", "银行", "银行", "bank"),
-        ("th", "ฉันอยากไปตลาด", "ตลาด", "ตลาด", "market")
+        ("th", "ฉันอยากไปตลาด", "ตลาด", "ตลาด", "market"),
+        ("sr", "Može jedna kafa sa mlekom?", "kafa", "kafa", "coffee"),
+        ("tl", "Mag-aaral ako araw-araw.", "mag-aral", "Mag-aaral", "study"),
+        ("el", "Θα ήθελα έναν καφέ.", "καφές", "καφέ", "coffee"),
+        ("nl", "Ik fiets naar huis.", "fietsen", "fiets", "to cycle"),
+        ("ru", "Я читаю книгу.", "книга", "книгу", "book")
     ]
 
     private func session(_ id: String, text: String = "radio", lemma: String = "radio", form: String = "radio", meaning: String = "radio", day: Int = 0, supported: Bool = false, typed: Bool = false) -> SessionRecord {
@@ -25,8 +30,8 @@ final class AdditionalLanguageTests: XCTestCase {
     }
 
     func testRegistrationPreservesOldIDsAndSetsRequestedVarieties() {
-        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "th"])
-        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("th", "th-TH", "สวัสดี!")] {
+        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "th", "sr", "el", "tl", "nl", "ru"])
+        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("th", "th-TH", "สวัสดี!"), ("sr", "sr-Latn-RS", "Zdravo!"), ("el", "el-GR", "Γεια σου!"), ("tl", "tl-PH", "Kumusta!"), ("nl", "nl-NL", "Hoi!"), ("ru", "ru-RU", "Привет!")] {
             XCTAssertEqual(LanguageRegistry.module(for: id)?.locale, locale)
             XCTAssertEqual(LanguageRegistry.module(for: id)?.greeting, greeting)
         }
@@ -34,6 +39,8 @@ final class AdditionalLanguageTests: XCTestCase {
         XCTAssertEqual(MeaningLanguages.greeting(in: "Chinese (Simplified)"), "你好！")
         XCTAssertTrue(MeaningLanguages.all.contains("Thai"))
         XCTAssertEqual(MeaningLanguages.greeting(in: "Thai"), "สวัสดี!")
+        XCTAssertTrue(MeaningLanguages.all.contains("Serbian (Latin)"))
+        XCTAssertEqual(MeaningLanguages.greeting(in: "Serbian (Latin)"), "Zdravo!")
     }
 
     func testAllPromptPathsUseEachNewTargetAndItsRegionalGuidance() throws {
@@ -82,7 +89,7 @@ final class AdditionalLanguageTests: XCTestCase {
                 let hidden = LearningEngine.project(restored.sessions, languageID: language.id, hiddenWords: restored.preferences.hiddenWords)
                 XCTAssertEqual(hidden.words.count, language.id == "pt" ? 0 : 1)
             }
-            XCTAssertEqual(keys.count, 9)
+            XCTAssertEqual(keys.count, LanguageRegistry.all.count)
         }
     }
 
@@ -131,6 +138,24 @@ final class AdditionalLanguageTests: XCTestCase {
         XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .mandarin, detectedLanguageID: "ja", confidence: 0.99))
         XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .mandarin, detectedLanguageID: "zhx", confidence: 0.99))
         XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: .portuguese, detectedLanguageID: "pt-PT", confidence: 0.99))
+    }
+
+    func testSerbianIsNotRedirectedWhenDetectedAsCroatianOrBosnian() {
+        for detected in ["sr", "sr-Latn", "sr_Cyrl", "hr", "bs", "sh", "cnr"] {
+            XCTAssertFalse(TeachingPolicy.shouldRedirectSpeech(language: .serbian, detectedLanguageID: detected, confidence: 0.99), detected)
+        }
+        XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .serbian, detectedLanguageID: "sl", confidence: 0.99))
+        XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .serbian, detectedLanguageID: "en", confidence: 0.99))
+        XCTAssertTrue(TeachingPolicy.shouldRedirectSpeech(language: .spanish, detectedLanguageID: "hr", confidence: 0.99))
+    }
+
+    func testSerbianUsesLatinEkavianTargetAndAcceptsOtherScriptInput() throws {
+        let serbian = try XCTUnwrap(LanguageRegistry.module(for: "sr"))
+        XCTAssertTrue(serbian.writingGuidance.contains("Latin script, never Cyrillic"))
+        XCTAssertTrue(serbian.speechGuidance.contains("ekavian"))
+        XCTAssertTrue(serbian.lemmaGuidance.contains("Cyrillic, ijekavian or undiacritized input"))
+        let words = CaptionWords.segments("Može jedna kafa, molim?", languageID: "sr").compactMap(\.lookup)
+        XCTAssertEqual(words, ["Može", "jedna", "kafa", "molim"])
     }
 
     func testPinyinUsesWordReadingsAndNormalizesUmlautVowels() {

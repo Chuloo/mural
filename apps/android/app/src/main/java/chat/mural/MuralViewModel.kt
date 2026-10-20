@@ -32,6 +32,9 @@ internal fun errorMessageRes(e: Throwable): Int = when (e) {
     is APIClient.APIException.Http -> when (e.kind) {
         ProviderFailureKind.authentication -> R.string.error_http_401
         ProviderFailureKind.modelAccess -> R.string.error_http_403_404
+        ProviderFailureKind.creditExhausted -> R.string.error_provider_credit_exhausted
+        ProviderFailureKind.spendLimit -> R.string.error_provider_spend_limit
+        ProviderFailureKind.usageLimit -> R.string.error_provider_usage_limit
         ProviderFailureKind.quota -> R.string.error_provider_quota
         ProviderFailureKind.rateLimit -> R.string.error_http_429
         ProviderFailureKind.unavailable -> R.string.error_provider_unavailable
@@ -103,6 +106,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var loadingHistory by mutableStateOf(true); private set
     var session by mutableStateOf<SessionRecord?>(null); private set
     var state by mutableStateOf("idle"); private set
+    var targetCaptionFollowing by mutableStateOf(CaptionFollowing())
+    var meaningCaptionFollowing by mutableStateOf(CaptionFollowing())
     var error by mutableStateOf<String?>(null); private set
     var errorNeedsKeySetup by mutableStateOf(false); private set
     var errorNeedsAccountSignIn by mutableStateOf(false); private set
@@ -110,6 +115,45 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var typedRepliesSent by mutableStateOf(0); private set
     fun clearTypedReplyError() { typedReplyError = null }
     var notice by mutableStateOf<String?>(null); private set
+    private var continuationSession: SessionRecord? = null
+    private var continuationOwnerID: String? = null
+    private var freeBoundaryOwnerID: String? = null
+    var hasContinuation by mutableStateOf(false); private set
+    var continuationReady by mutableStateOf(false); private set
+    var continuationNeedsMinutes by mutableStateOf(false); private set
+    private val continuationPreferences = application.getSharedPreferences("mural_continuation", android.content.Context.MODE_PRIVATE)
+    private val continuationKey = "v1." + BuildConfig.MANAGED_API_ORIGIN
+    private fun clearContinuation() {
+        continuationSession = null; continuationOwnerID = null; freeBoundaryOwnerID = null
+        hasContinuation = false; continuationReady = false; continuationNeedsMinutes = false
+        continuationPreferences.edit().remove(continuationKey).apply()
+    }
+    private fun restoreContinuation(accountID: String) {
+        if (isRunning || hasContinuation || conversationProvider != ConversationProvider.HOSTED_MINUTES) return
+        val checkpoint = runCatching { json.decodeFromString<ConversationContinuationCheckpoint>(
+            continuationPreferences.getString(continuationKey, null) ?: return) }.getOrNull() ?: return
+        val saved = checkpoint.recover(archive.sessions, accountID, language.id) ?: return
+        continuationSession = saved; continuationOwnerID = accountID; hasContinuation = true; continuationReady = false
+        session = saved; selectedTheme = language.themes.firstOrNull { it.id == saved.themeID }; topicResult = saved.topics.lastOrNull()
+        if (saved.themeID == "current") selectedTheme = topicResult?.let(::currentTheme)
+        state = "ended"; resetJob?.cancel()
+        notice = getApplication<Application>().getString(R.string.notice_continue_settling)
+    }
+    private suspend fun refreshContinuation() {
+        val expected = continuationOwnerID ?: return
+        if (isRunning) return
+        continuationReady = false; continuationNeedsMinutes = false
+        val owner = availableHostedOwner()?.takeIf { it.accountID == expected } ?: return
+        val balance = hostedBalance(owner)
+        if (isRunning || continuationOwnerID != expected || availableHostedOwner()?.accountID != expected) return
+        continuationReady = !accountChangeBlocked && balance.canStartConversation && balance.presentation?.settlementState == "settled"
+        continuationNeedsMinutes = ConversationContinuationPolicy.needsMoreMinutes(balance.presentation?.settlementState,
+            balance.presentation?.availabilityReason)
+        if (continuationNeedsMinutes) notice = getApplication<Application>().getString(R.string.notice_continue_insufficient)
+        else if (continuationReady) notice = getApplication<Application>().getString(
+            if (balance.availableMilliseconds > 0) R.string.notice_continue_remaining_free
+            else R.string.notice_continue_purchased)
+    }
     var meaning by mutableStateOf(""); private set
     var translating by mutableStateOf(false); private set
     var meaningFailed by mutableStateOf(false); private set
@@ -166,13 +210,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private var reconciliationJob: Job? = null
     var conversationProvider by mutableStateOf(ConversationProvider.PERSONAL_KEY); private set
+    var providerIssue by mutableStateOf<ProviderFailureKind?>(null); private set
     var hostedReadiness by mutableStateOf(HostedReadiness()); private set
     private val readiness = HostedReadinessController(viewModelScope,
         readSession = { availableHostedOwner() },
         fetch = { owner ->
             val enabled = hostedClient(owner.accountID).available()
             val balance = if (enabled) hostedBalance(owner) else null
-            HostedReadiness(owner.accountID, balance?.readinessMilliseconds ?: 0, enabled)
+            HostedReadiness(owner.accountID, balance?.readinessMilliseconds ?: 0, enabled,
+                verified = balance != null)
         }, changed = { hostedReadiness = it })
     var accountChangeBlocked by mutableStateOf(true); private set
 
@@ -216,6 +262,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private var lastLanguageRedirect: String? = null
     private val delegations = mutableMapOf<String, Job>()
     private var voiceSession = false
+    private var inForeground = true
     private var activity = ConversationActivity(activityNow())
     private var conversationPace = ConversationPace()
     var inactivitySeconds by mutableStateOf<Int?>(null); private set
@@ -366,6 +413,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         error = message; errorNeedsKeySetup = needsKeySetup; errorNeedsAccountSignIn = false
     }
     private fun presentError(e: Throwable, @StringRes fallback: Int) {
+        if (conversationProvider == ConversationProvider.PERSONAL_KEY && e is APIClient.APIException.Http)
+            providerIssue = e.kind
         presentError(resolveMessage(e, fallback), errorNeedsKeySetup(e))
         errorNeedsAccountSignIn = needsAccountRecovery(e)
     }
@@ -383,6 +432,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** Called by the minutes/account UI after an explicit provider choice. No failure changes it. */
     fun selectConversationProvider(provider: ConversationProvider) {
         if (isRunning || !storageReady) return
+        if (provider != conversationProvider) clearContinuation()
         conversationProvider = provider
         viewModelScope.launch {
             try { providerStore.select(provider) }
@@ -390,9 +440,22 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (provider == ConversationProvider.HOSTED_MINUTES) refreshHostedReadiness()
     }
+    /** A source preview never creates a hosted lease or changes who pays. */
+    suspend fun checkHostedBalanceForSwitch(): Long? {
+        if (isRunning || accountChangeBlocked || !storageReady) return null
+        return try {
+            if (availableHostedOwner() == null) guests?.acquire()
+            val owner = availableHostedOwner() ?: return null
+            val enabled = hostedClient(owner.accountID).available()
+            val balance = if (enabled) hostedBalance(owner) else return null
+            balance.availableMilliseconds.takeIf { availableHostedOwner() == owner && !isRunning }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
+    }
 
     fun onAccountChanged(account: AccountState) {
         selectedAccount = account
+        continuationReady = false
         // Invalidate immediately. Slow guest or member reads may not restore access during a transition.
         readiness.selectAccount(null, true)
         accessJob?.cancel()
@@ -411,6 +474,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                         if (!completeGuestSignIn() && guests.memberMaySpend(member.accountID) != true) return@launch
                     }
                     if (selectedAccount.busy) return@launch
+                    restoreContinuation(member.accountID)
                     readiness.selectAccount(member.accountID, false)
                     readiness.refresh()
                 } else {
@@ -423,6 +487,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     readiness.selectAccount(guest?.accountID, false)
                     readiness.refresh()
                 }
+                refreshContinuation()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { readiness.selectAccount(null, false) }
         }
@@ -565,7 +630,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         reconciliationJob = viewModelScope.launch {
             // Wait for cancelled creation/provenance writes before clearing the durable pending marker.
             connectionJob?.join()
-            if (settleHostedSessions()) refreshHostedReadiness()
+            repeat(40) {
+                if (settleHostedSessions()) { refreshHostedReadiness(); return@launch }
+                delay(15_000)
+            }
         }
     }
 
@@ -590,7 +658,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 if (!closed) return false
             }
             val balance = hostedBalance(owner)
-            if (balance.reservedMilliseconds != 0L) return false
+            if (balance.reservedMilliseconds != 0L || balance.paid?.reservedNanoUSD?.toBigInteger()?.signum() == 1 ||
+                balance.presentation?.settlementState?.let { it != "settled" } == true) return false
             guests?.recordSettledBalance(owner, balance)
             providerStore.clearPending()
             pendingHostedOwnerID = null; accountChangeBlocked = false
@@ -606,14 +675,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         lookupJob?.cancel()
         lookupJob = null; lookupResult = null; lookupError = null; lookupLoading = false
     }
-    fun saveKey(key: String) {
+    fun saveKey(key: String, useAfterSave: Boolean = true) {
         if (isRunning) return
-        try { credentials.save(key, aiProvider); hasKey = credentials.hasKey(aiProvider); selectConversationProvider(ConversationProvider.PERSONAL_KEY); recoverFinalAssessments(); notice = getApplication<Application>().getString(R.string.notice_key_saved) }
+        try { credentials.save(key, aiProvider); hasKey = credentials.hasKey(aiProvider); providerIssue = null; if (useAfterSave) selectConversationProvider(ConversationProvider.PERSONAL_KEY); recoverFinalAssessments(); notice = getApplication<Application>().getString(R.string.notice_key_saved) }
         catch (e: Exception) { presentError(e, R.string.error_key_save_failed) }
     }
     fun deleteKey() {
         if (isRunning) return
-        try { credentials.delete(aiProvider); hasKey = false }
+        try { credentials.delete(aiProvider); hasKey = false; providerIssue = null }
         catch (e: Exception) { presentError(e, R.string.error_key_delete_failed) }
         finally { hasKey = credentials.hasKey(aiProvider) }
     }
@@ -623,6 +692,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         api.provider = provider
         AIProviderSelection.save(getApplication(), provider)
         hasKey = credentials.hasKey(provider)
+        providerIssue = null
         if (storageReady) updatePreferences(archive.preferences.copy(aiConsentVersion = null))
         dismissError()
     }
@@ -643,12 +713,16 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun selectLanguage(id: String) {
         if (!isRunning && LanguageRegistry.get(id) != null) updatePreferences(archive.preferences.copy(learningLanguageID = id))
     }
+    private var startingWithHistory = false
     fun chooseTheme(theme: ConversationTheme?) {
         if (!isRunning && session != null) resetConversation()
         selectedTheme = theme
-        if (state == "active") {
+        if (theme?.id != "current") topicResult = null
+        if (state == "active" || state == "connecting") {
             updateSession { it.themeID = theme?.id; it.title = theme?.title ?: language.defaultTitle }
-            command("instructions", TeachingPolicy.theme(theme, language))
+            // The opening instruction applies a selection made while connecting.
+            startingWithHistory = false
+            if (state == "active") command("instructions", TeachingPolicy.theme(theme, language))
         }
     }
     fun toggleMeaning() {
@@ -691,7 +765,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         session = record; save(record)
     }
     fun start() {
-        if (isRunning || !cloudReady()) return
+        if (!inForeground || isRunning || !cloudReady()) return
+        if (hasContinuation && !continuationReady) { reconcileHostedSessions(); refreshHostedReadiness(); return }
+        val continuing = continuationSession
+        val continuingOwner = continuationOwnerID
         val choice = conversationProvider
         if (choice == ConversationProvider.HOSTED_MINUTES && accountChangeBlocked) {
             presentError(getApplication<Application>().getString(R.string.hosted_checking_previous))
@@ -705,18 +782,29 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
         newSession(true); state = "connecting"
         val id = session!!.id
+        try {
+            // Start while visible and after microphone consent, before Android 15 audio focus.
+            VoiceConversationService.start(getApplication(), id) { end("Ended by you") }
+        } catch (error: Exception) {
+            fail(error, R.string.error_voice_connect_failed); return
+        }
         val module = language
         val instructions = TeachingPolicy.voice(module, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage)
-        val history = ConversationHistory.messages(session)
+        val history = ConversationHistory.messages(continuing ?: session)
+        startingWithHistory = history.isNotEmpty()
         if (choice == ConversationProvider.HOSTED_MINUTES) accountChangeBlocked = true
         connectionJob = viewModelScope.launch {
             try {
                 val provider: LiveSessionProvider = if (choice == ConversationProvider.PERSONAL_KEY) api else {
                     val owner = requireHostedOwner()
-                    if (selectedAccount.busy || owner.accountID != hostedReadiness.accountID) throw HostedFailure.SignInRequired
+                    if (selectedAccount.busy || owner.accountID != hostedReadiness.accountID ||
+                        (continuingOwner != null && continuingOwner != owner.accountID)) throw HostedFailure.SignInRequired
                     val hosted = hostedClient(owner.accountID)
                     val balance = hostedBalance(owner)
                     if (!balance.canStartConversation || !hosted.available()) throw HostedFailure.Unavailable
+                    freeBoundaryOwnerID = if (balance.availableMilliseconds in 1 until archive.preferences.sessionMinutes * 60_000L &&
+                        balance.paid?.available == true) owner.accountID else null
+                    if (freeBoundaryOwnerID != null) notice = getApplication<Application>().getString(R.string.notice_free_minutes_first)
                     // Commit provider provenance and the unresolved-owner marker before making a paid create.
                     hostedSessionIDs = hostedSessionIDs + id
                     pendingHostedOwnerID = owner.accountID
@@ -726,6 +814,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                             val result = hosted.createLiveSession(request.copy(requestedMilliseconds = archive.preferences.sessionMinutes * 60_000L))
                             val lease = result.lease as? HostedAPIClient.HostedLease ?: throw HostedFailure.InvalidResponse
                             withContext(NonCancellable + Dispatchers.Main.immediate) {
+                                if (lease.paid) freeBoundaryOwnerID = null
                                 hostedBindings.bind(id, owner.accountID, binding(lease))
                                 if (session?.id != id || state != "connecting") {
                                     hostedBindings.ended(id); reconcileHostedSessions()
@@ -757,17 +846,25 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         closeJob = viewModelScope.launch { delay(5000); if (state == "closing") finish(false) }
     }
     fun background() {
-        // Leaving the foreground ends the conversation and releases the microphone; its final assessment still completes.
+        inForeground = false
+        // Screen state is not learner inactivity. The foreground service owns this call.
+        if (isRunning && voiceSession && VoiceConversationService.holds(session?.id)) return
         generation++; actionJob?.cancel(); clearLookup(); meanings.reset(); working = false
         if (isRunning) { updateSession { it.endReason = "App moved to background" }; finish(false) }
     }
+    fun foreground() { inForeground = true }
     private fun finish(final: Boolean) {
         if (!isRunning) return
+        if (ConversationContinuationPolicy.reachedFreeBoundary(freeBoundaryOwnerID != null,
+                session?.endReason, session?.id?.let(hostedBindings::reachedDeadline) == true)) {
+            updateSession { it.endReason = "Reserved conversation time ended" }
+        }
         connectionJob?.cancel(); durationJob?.cancel(); closeJob?.cancel(); assessmentJob?.cancel()
         actionJob?.cancel(); clearLookup(); languageCheckJob?.cancel()
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()
         if (session?.providerID == "gemini-live") updateSession { it.voiceSeconds = (nowSeconds() - it.startedAt).coerceAtLeast(0.0) }
         transport.disconnect(); inputLevel = 0.0; outputLevel = 0.0; working = false; isMuted = false
+        VoiceConversationService.stop(getApplication(), session?.id)
         updateSession { it.endedAt = nowSeconds(); it.usageFinal = final }
         state = "ended"
         notice = when (session?.endReason) {
@@ -775,21 +872,34 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             "Time limit" -> getApplication<Application>().getString(R.string.notice_time_limit_reached)
             else -> null
         }
+        if (freeBoundaryOwnerID != null && session?.endReason in listOf("Time limit", "Reserved conversation time ended")) {
+            continuationSession = session; continuationOwnerID = freeBoundaryOwnerID
+            hasContinuation = true; continuationReady = false
+            session?.let { saved ->
+                continuationPreferences.edit().putString(continuationKey, json.encodeToString(
+                    kotlinx.serialization.serializer<ConversationContinuationCheckpoint>(),
+                    ConversationContinuationCheckpoint(saved.id, freeBoundaryOwnerID!!))).apply()
+            }
+            notice = getApplication<Application>().getString(R.string.notice_continue_settling)
+        }
         session?.let {
             if (it.id in hostedSessionIDs) {
                 hostedBindings.ended(it.id); reconcileHostedSessions(); finishHostedAssessment(clone(it))
             } else finalAssessments.submit(clone(it))
         }
         scheduleTranslation(utteranceComplete = true)
-        resetJob = viewModelScope.launch { delay(15000); if (state == "ended") resetConversation() }
+        if (!hasContinuation) resetJob = viewModelScope.launch { delay(15000); if (state == "ended" && !hasContinuation) resetConversation() }
     }
     private fun fail(message: String, needsKeySetup: Boolean = false) { finish(false); resetJob?.cancel(); state = "failed"; presentError(message, needsKeySetup) }
     private fun fail(e: Throwable, @StringRes fallback: Int) {
+        if (conversationProvider == ConversationProvider.PERSONAL_KEY && e is APIClient.APIException.Http)
+            providerIssue = e.kind
         fail(resolveMessage(e, fallback), errorNeedsKeySetup(e))
         errorNeedsAccountSignIn = needsAccountRecovery(e)
     }
     fun resetConversation() {
         if (isRunning) return
+        clearContinuation()
         generation++; resetJob?.cancel(); actionJob?.cancel(); clearLookup(); assessmentJob?.cancel(); languageCheckJob?.cancel(); meanings.reset()
         session = null; selectedTheme = null; topicResult = null
         notice = null; working = false; state = "idle"; voiceSession = false
@@ -809,9 +919,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 if (it.providerID != "gemini-live") it.voiceSeconds = 15.0
             }
             "session.started" -> if (state == "connecting") {
+                continuationSession = null; continuationOwnerID = null; hasContinuation = false; continuationReady = false
+                continuationPreferences.edit().remove(continuationKey).apply()
                 state = "active"; activity = ConversationActivity(activityNow()); conversationPace = ConversationPace(); inactivitySeconds = null
+                if (conversationProvider == ConversationProvider.PERSONAL_KEY) providerIssue = null
                 updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content ?: it.providerID }
-                command("instructions", TeachingPolicy.greeting(language)); startDurationChecks()
+                if (selectedTheme?.id == "current") topicResult?.let { command("thinking", "Sourced context, data: ${it.text}") }
+                command("instructions", TeachingPolicy.greeting(language, selectedTheme, startingWithHistory)); startDurationChecks()
             }
             "session.input_transcript.delta", "session.output_transcript.delta" -> {
                 val text = event["delta"]?.jsonPrimitive?.contentOrNull ?: return
@@ -835,7 +949,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 if (seconds != null && seconds.isFinite() && seconds in 0.0..31536000.0) updateSession { it.voiceSeconds = seconds }
                 if (event["type"]?.jsonPrimitive?.content == "session.closed") finish(true)
             }
-            "error" -> { notice = getApplication<Application>().getString(R.string.notice_voice_update_rejected) }
+            "error" -> {
+                val code = (event["error"] as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull
+                val issue = if (conversationProvider == ConversationProvider.PERSONAL_KEY)
+                    ProviderFailureKind.realtimeCode(code) else null
+                if (issue != null) {
+                    val status = if (issue == ProviderFailureKind.authentication) 401 else 429
+                    fail(APIClient.APIException.Http(status, code), R.string.error_voice_connect_failed)
+                } else notice = getApplication<Application>().getString(R.string.notice_voice_update_rejected)
+            }
         }
     }
     private fun startDurationChecks() {
@@ -1069,9 +1191,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun discuss(brief: TopicBrief) {
         if (brief.languageID != language.id) return
         if (state == "active") {
-            updateSession { if (it.topics.none { t -> t.id == brief.id }) it.topics += brief }
+            topicResult = brief; selectedTheme = currentTheme(brief)
+            updateSession {
+                it.themeID = selectedTheme?.id; it.title = brief.query
+                if (it.topics.none { t -> t.id == brief.id }) it.topics += brief
+            }
             if (voiceSession) {
-                command("thinking", "Sourced context, data: ${brief.text}"); command("instructions", "Discuss this topic ONLY in ${language.name}.")
+                command("thinking", "Sourced context, data: ${brief.text}"); command("instructions", TeachingPolicy.theme(selectedTheme, language))
                 return
             }
         } else resetConversation()
@@ -1112,5 +1238,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         return try { archive = ArchiveCodec.merge(archive, prepareImportedArchive(data)); persist(); notice = getApplication<Application>().getString(R.string.notice_backup_imported); true }
         catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.error_import_failed)); false }
     }
-    override fun onCleared() { hostedBindings.disableHelpers(); transport.disconnect(); super.onCleared() }
+    override fun onCleared() {
+        if (isRunning) finish(false)
+        VoiceConversationService.stop(getApplication(), session?.id)
+        hostedBindings.disableHelpers(); transport.disconnect(); super.onCleared()
+    }
 }

@@ -1,0 +1,485 @@
+{
+  "kind": "Real Stripe sandbox Checkout with synthetic card and isolated test fixture",
+  "steps": [
+    {
+      "phase": "verify",
+      "at": "2026-09-26T22:31:22.285Z",
+      "orders": [
+        {
+          "quantity": 1,
+          "checkoutAmountMinor": 500,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "dcdca1a1-7ae9-4973-ae2f-807f6fd83cdc",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "3690000000",
+            "reversedNanoUSD": "0",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 2,
+          "checkoutAmountMinor": 1000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "57b42df2-eebb-4a94-875a-a8ce5c797f71",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "7380000000",
+            "reversedNanoUSD": "0",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 10,
+          "checkoutAmountMinor": 5000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "ce47bd8d-0aa5-4b0d-bc38-ea0b437e2a93",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "36900000000",
+            "reversedNanoUSD": "0",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        }
+      ],
+      "balance": {
+        "unit": "milliseconds",
+        "balanceMilliseconds": 0,
+        "reservedMilliseconds": 0,
+        "availableMilliseconds": 0,
+        "billingBasis": "connected-conversation-time",
+        "paid": {
+          "currency": "USD",
+          "billingBasis": "actual-ai-usage",
+          "balanceNanoUSD": "47970000000",
+          "reservedNanoUSD": "0",
+          "availableNanoUSD": "47970000000",
+          "estimatedMilliseconds": 28782000,
+          "estimatedNanoUSDPerMinute": "100000000",
+          "minimumSessionNanoUSD": "30000000",
+          "available": true
+        },
+        "presentation": {
+          "schemaVersion": 1,
+          "asOf": "2026-09-26T22:31:22.275Z",
+          "revision": "4",
+          "freeAvailableMilliseconds": 0,
+          "paidEstimatedMilliseconds": 28782000,
+          "hasPurchasedRemainder": true,
+          "totalDisplayMilliseconds": 28782000,
+          "displayKind": "approximate",
+          "estimateRateVersion": "nano-usd-per-minute-100000000",
+          "availabilityReason": "ready",
+          "settlementState": "settled",
+          "paidSupported": true
+        }
+      }
+    },
+    {
+      "phase": "partial-refunds",
+      "at": "2026-09-26T22:32:00.124Z",
+      "orders": [
+        {
+          "quantity": 1,
+          "checkoutAmountMinor": 500,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "dcdca1a1-7ae9-4973-ae2f-807f6fd83cdc",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "3690000000",
+            "reversedNanoUSD": "0",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 2,
+          "checkoutAmountMinor": 1000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "57b42df2-eebb-4a94-875a-a8ce5c797f71",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "7380000000",
+            "reversedNanoUSD": "0",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 10,
+          "checkoutAmountMinor": 5000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "ce47bd8d-0aa5-4b0d-bc38-ea0b437e2a93",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "36900000000",
+            "reversedNanoUSD": "0",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        }
+      ],
+      "balance": {
+        "unit": "milliseconds",
+        "balanceMilliseconds": 0,
+        "reservedMilliseconds": 0,
+        "availableMilliseconds": 0,
+        "billingBasis": "connected-conversation-time",
+        "paid": {
+          "currency": "USD",
+          "billingBasis": "actual-ai-usage",
+          "balanceNanoUSD": "47970000000",
+          "reservedNanoUSD": "0",
+          "availableNanoUSD": "47970000000",
+          "estimatedMilliseconds": 28782000,
+          "estimatedNanoUSDPerMinute": "100000000",
+          "minimumSessionNanoUSD": "30000000",
+          "available": true
+        },
+        "presentation": {
+          "schemaVersion": 1,
+          "asOf": "2026-09-26T22:32:00.114Z",
+          "revision": "4",
+          "freeAvailableMilliseconds": 0,
+          "paidEstimatedMilliseconds": 28782000,
+          "hasPurchasedRemainder": true,
+          "totalDisplayMilliseconds": 28782000,
+          "displayKind": "approximate",
+          "estimateRateVersion": "nano-usd-per-minute-100000000",
+          "availabilityReason": "ready",
+          "settlementState": "settled",
+          "paidSupported": true
+        }
+      }
+    },
+    {
+      "phase": "verify-partial-refunds",
+      "at": "2026-09-26T22:32:35.997Z",
+      "orders": [
+        {
+          "quantity": 1,
+          "checkoutAmountMinor": 500,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "dcdca1a1-7ae9-4973-ae2f-807f6fd83cdc",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "3690000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 2,
+          "checkoutAmountMinor": 1000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "57b42df2-eebb-4a94-875a-a8ce5c797f71",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "7380000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 10,
+          "checkoutAmountMinor": 5000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "ce47bd8d-0aa5-4b0d-bc38-ea0b437e2a93",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "36900000000",
+            "reversedNanoUSD": "9106920000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        }
+      ],
+      "balance": {
+        "unit": "milliseconds",
+        "balanceMilliseconds": 0,
+        "reservedMilliseconds": 0,
+        "availableMilliseconds": 0,
+        "billingBasis": "connected-conversation-time",
+        "paid": {
+          "currency": "USD",
+          "billingBasis": "actual-ai-usage",
+          "balanceNanoUSD": "31483080000",
+          "reservedNanoUSD": "0",
+          "availableNanoUSD": "31483080000",
+          "estimatedMilliseconds": 18889848,
+          "estimatedNanoUSDPerMinute": "100000000",
+          "minimumSessionNanoUSD": "30000000",
+          "available": true
+        },
+        "presentation": {
+          "schemaVersion": 1,
+          "asOf": "2026-09-26T22:32:35.987Z",
+          "revision": "7",
+          "freeAvailableMilliseconds": 0,
+          "paidEstimatedMilliseconds": 18889848,
+          "hasPurchasedRemainder": true,
+          "totalDisplayMilliseconds": 18889848,
+          "displayKind": "approximate",
+          "estimateRateVersion": "nano-usd-per-minute-100000000",
+          "availabilityReason": "ready",
+          "settlementState": "settled",
+          "paidSupported": true
+        }
+      }
+    },
+    {
+      "phase": "replay-after-partial-refunds",
+      "at": "2026-09-26T22:34:24.785Z",
+      "orders": [
+        {
+          "quantity": 1,
+          "checkoutAmountMinor": 500,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "dcdca1a1-7ae9-4973-ae2f-807f6fd83cdc",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "3690000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 2,
+          "checkoutAmountMinor": 1000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "57b42df2-eebb-4a94-875a-a8ce5c797f71",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "7380000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 10,
+          "checkoutAmountMinor": 5000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "ce47bd8d-0aa5-4b0d-bc38-ea0b437e2a93",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "36900000000",
+            "reversedNanoUSD": "9106920000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        }
+      ],
+      "balance": {
+        "unit": "milliseconds",
+        "balanceMilliseconds": 0,
+        "reservedMilliseconds": 0,
+        "availableMilliseconds": 0,
+        "billingBasis": "connected-conversation-time",
+        "paid": {
+          "currency": "USD",
+          "billingBasis": "actual-ai-usage",
+          "balanceNanoUSD": "31483080000",
+          "reservedNanoUSD": "0",
+          "availableNanoUSD": "31483080000",
+          "estimatedMilliseconds": 18889848,
+          "estimatedNanoUSDPerMinute": "100000000",
+          "minimumSessionNanoUSD": "30000000",
+          "available": true
+        },
+        "presentation": {
+          "schemaVersion": 1,
+          "asOf": "2026-09-26T22:34:24.774Z",
+          "revision": "7",
+          "freeAvailableMilliseconds": 0,
+          "paidEstimatedMilliseconds": 18889848,
+          "hasPurchasedRemainder": true,
+          "totalDisplayMilliseconds": 18889848,
+          "displayKind": "approximate",
+          "estimateRateVersion": "nano-usd-per-minute-100000000",
+          "availabilityReason": "ready",
+          "settlementState": "settled",
+          "paidSupported": true
+        }
+      }
+    },
+    {
+      "phase": "remaining-refunds",
+      "at": "2026-09-26T22:35:30.259Z",
+      "orders": [
+        {
+          "quantity": 1,
+          "checkoutAmountMinor": 500,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "dcdca1a1-7ae9-4973-ae2f-807f6fd83cdc",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "3690000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 2,
+          "checkoutAmountMinor": 1000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "57b42df2-eebb-4a94-875a-a8ce5c797f71",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "7380000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 10,
+          "checkoutAmountMinor": 5000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "ce47bd8d-0aa5-4b0d-bc38-ea0b437e2a93",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "36900000000",
+            "reversedNanoUSD": "9106920000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        }
+      ],
+      "balance": {
+        "unit": "milliseconds",
+        "balanceMilliseconds": 0,
+        "reservedMilliseconds": 0,
+        "availableMilliseconds": 0,
+        "billingBasis": "connected-conversation-time",
+        "paid": {
+          "currency": "USD",
+          "billingBasis": "actual-ai-usage",
+          "balanceNanoUSD": "31483080000",
+          "reservedNanoUSD": "0",
+          "availableNanoUSD": "31483080000",
+          "estimatedMilliseconds": 18889848,
+          "estimatedNanoUSDPerMinute": "100000000",
+          "minimumSessionNanoUSD": "30000000",
+          "available": true
+        },
+        "presentation": {
+          "schemaVersion": 1,
+          "asOf": "2026-09-26T22:35:30.248Z",
+          "revision": "7",
+          "freeAvailableMilliseconds": 0,
+          "paidEstimatedMilliseconds": 18889848,
+          "hasPurchasedRemainder": true,
+          "totalDisplayMilliseconds": 18889848,
+          "displayKind": "approximate",
+          "estimateRateVersion": "nano-usd-per-minute-100000000",
+          "availabilityReason": "ready",
+          "settlementState": "settled",
+          "paidSupported": true
+        }
+      }
+    },
+    {
+      "phase": "verify-final-refunds",
+      "at": "2026-09-26T22:37:49.569Z",
+      "orders": [
+        {
+          "quantity": 1,
+          "checkoutAmountMinor": 500,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "dcdca1a1-7ae9-4973-ae2f-807f6fd83cdc",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "3690000000",
+            "reversedNanoUSD": "3690000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 2,
+          "checkoutAmountMinor": 1000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "57b42df2-eebb-4a94-875a-a8ce5c797f71",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "7380000000",
+            "reversedNanoUSD": "7380000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        },
+        {
+          "quantity": 10,
+          "checkoutAmountMinor": 5000,
+          "checkoutStatus": "complete",
+          "server": {
+            "orderID": "ce47bd8d-0aa5-4b0d-bc38-ea0b437e2a93",
+            "entitlementKind": "ai_value",
+            "state": "purchased",
+            "grantedNanoUSD": "36900000000",
+            "reversedNanoUSD": "36900000000",
+            "reversalOutstandingNanoUSD": "0",
+            "fulfillmentRecorded": true
+          }
+        }
+      ],
+      "balance": {
+        "unit": "milliseconds",
+        "balanceMilliseconds": 0,
+        "reservedMilliseconds": 0,
+        "availableMilliseconds": 0,
+        "billingBasis": "connected-conversation-time",
+        "paid": {
+          "currency": "USD",
+          "billingBasis": "actual-ai-usage",
+          "balanceNanoUSD": "0",
+          "reservedNanoUSD": "0",
+          "availableNanoUSD": "0",
+          "estimatedMilliseconds": 0,
+          "estimatedNanoUSDPerMinute": "100000000",
+          "minimumSessionNanoUSD": "30000000",
+          "available": false
+        },
+        "presentation": {
+          "schemaVersion": 1,
+          "asOf": "2026-09-26T22:37:49.560Z",
+          "revision": "9",
+          "freeAvailableMilliseconds": 0,
+          "paidEstimatedMilliseconds": 0,
+          "hasPurchasedRemainder": false,
+          "totalDisplayMilliseconds": 0,
+          "displayKind": "exactFree",
+          "estimateRateVersion": "nano-usd-per-minute-100000000",
+          "availabilityReason": "insufficient_remaining_time",
+          "settlementState": "settled",
+          "paidSupported": true
+        }
+      }
+    }
+  ]
+}

@@ -7,8 +7,9 @@ import { ServiceError } from './errors.js';
 import { VoiceMeter } from './meter.js';
 import { cost, RATE_VERSION, TRIAL_MS } from './pricing.js';
 import { LiveCreateFailure, LiveCreateRejectedError, supportsLanguage, parseLiveContext, type LiveProvider, type Sideband, type VoiceUsage } from './live-provider.js';
-import { appendMinuteEntry, lockMinuteWallet } from './minutes.js';
+import { appendMinuteEntry, lockMinuteWallet, MINIMUM_PUBLIC_FREE_SESSION_MS } from './minutes.js';
 import { recoverMinutePurchaseShortfalls } from './minute-purchases.js';
+import type { PurchaseEnvironment } from './minute-purchases.js';
 import { hostedHelperExposure, type HostedHelpers } from './hosted-helpers.js';
 
 const voiceCost = (milliseconds: number) => cost({ milliseconds, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, searchCalls: 0 }).voice;
@@ -24,6 +25,8 @@ export interface HostedConfig {
   publicMinuteAccess?: boolean;
   /** Independently enabled only after end-to-end paid accounting verification. */
   publicPaidAccess?: boolean;
+  restrictToAllowlist?: boolean;
+  maximumSessionMilliseconds?: number;
   billingUnit?: 'nanoUSD' | 'milliseconds';
   helpers?: Pick<HostedHelpers, 'reserveSessionBudget'> & Partial<Pick<HostedHelpers,'paidFundingPolicy'|'closeCashBudget'>>;
   onStartupFailure?: (diagnostic: { category: string; providerStatus?: number; requestID?: string }) => void;
@@ -39,6 +42,7 @@ export class HostedVoice {
   private timer?: NodeJS.Timeout;
   private ticking = false;
   private readonly slots = new Map<string, Slot>();
+  private readonly recoveryAttempts = new Map<string, { failures: number; notBefore: number }>();
   private readonly now: () => number;
   private readonly grace: number;
   private readonly diagnostics: Diagnostics;
@@ -46,6 +50,9 @@ export class HostedVoice {
     if (config.publicMinuteAccess ? config.billingUnit!=='milliseconds' :
       config.lifetimeFundingCapNano < HOLD || config.lifetimeFundingCapNano > 25_000_000_000n || !config.accountAllowlist.size)
       throw new ServiceError('invalid_hosted_funding_configuration', 503);
+    if (config.maximumSessionMilliseconds !== undefined && (!config.restrictToAllowlist ||
+      !Number.isSafeInteger(config.maximumSessionMilliseconds) || config.maximumSessionMilliseconds < 60_000 || config.maximumSessionMilliseconds > 3_600_000))
+      throw new ServiceError('invalid_hosted_test_duration',503);
     this.diagnostics = config.diagnostics ?? new Diagnostics();
     this.now = config.now ?? Date.now; this.grace = config.closeGraceMilliseconds ?? 5_000;
     if (!Number.isSafeInteger(this.grace) || this.grace<0 || this.grace>60_000)
@@ -56,6 +63,8 @@ export class HostedVoice {
   get available() { return this.accepting; }
   get minuteFunded() { return this.config.billingUnit === 'milliseconds'; }
   get publicMinuteAccess() { return this.config.publicMinuteAccess === true; }
+  /** Public account spending excludes synthetic credit; private test allowlists retain their boundary. */
+  get realFundedAccess() { return this.publicMinuteAccess && !this.config.restrictToAllowlist; }
   get publicPaidAccess() { return this.config.publicPaidAccess === true; }
   get estimatedNanoUSDPerMinute() { return 50_000_000n+(this.config.helpers?.paidFundingPolicy?.helperBudgetNanoPerMinute ?? 0n); }
   get minimumPaidSessionNanoUSD() { return this.paidHold(15_000).total; }
@@ -64,7 +73,8 @@ export class HostedVoice {
     const helper=(BigInt(duration)*(this.config.helpers?.paidFundingPolicy?.helperBudgetNanoPerMinute ?? 0n)+59_999n)/60_000n;
     return { voice,helper,total:voice+helper };
   }
-  allows(account: string) { return this.accepting && (this.publicMinuteAccess || this.config.accountAllowlist.has(account)); }
+  allows(account: string) { return this.accepting && (!this.config.restrictToAllowlist || this.config.accountAllowlist.has(account)) &&
+    (this.publicMinuteAccess || this.config.accountAllowlist.has(account)); }
   async start(): Promise<void> {
     if (this.leader) throw new ServiceError('voice_worker_already_started', 503);
     const leader = await this.db.connect();
@@ -75,16 +85,19 @@ export class HostedVoice {
       this.leaderError=() => { this.accepting = false; void this.emergencyClose(); };
       leader.on('error',this.leaderError);
       // Recovery prioritizes stopping billed sessions; it never opens a replacement session automatically.
-      const rows = (await this.db.query(`SELECT * FROM hosted_sessions WHERE ${unresolved}`)).rows;
+      const rows = (await this.db.query(`SELECT h.*,
+        (SELECT usage_seconds FROM hosted_voice_final_usage f WHERE f.session_id=h.id) AS final_usage_seconds
+        FROM hosted_sessions h WHERE ${unresolved}`)).rows;
       for (const row of rows) {
         if (!row.provider_session_id) {
           if (Number(row.minimum_charge_ms) === 15_000 && !row.provider_attempted_at) {
             await this.prepareMinuteProviderAttempt(row.id, row.account_id, false);
             continue;
           }
-          await this.db.query("UPDATE hosted_sessions SET state='incomplete',close_reason='create_uncertain' WHERE id=$1 AND state<>'closed'", [row.id]);
+          await this.updateSessionState(row.id, "UPDATE hosted_sessions SET state='incomplete',close_reason='create_uncertain' WHERE id=$1 AND state<>'closed'", [row.id]);
           continue;
         }
+        if (row.final_usage_seconds !== null) { await this.replayFinalUsage(row); continue; }
         try { await this.attach(row.id, row.provider_session_id); } catch { /* The watchdog retries. */ }
         await this.requestClose(row.id, 'worker_recovery');
       }
@@ -97,13 +110,16 @@ export class HostedVoice {
       this.leaderError=undefined;leader.release(); throw error;
     }
   }
-  async create(account: string, key: string, sdp: string, language: string, context?: unknown, requestedMilliseconds?: number) {
+  async create(account: string, key: string, sdp: string, language: string, context?: unknown, requestedMilliseconds?: number,
+    requestedFundingEnvironment?:PurchaseEnvironment) {
     if (!this.allows(account)) throw new ServiceError('hosted_voice_not_ready', 503);
     if (!key || key.length < 8 || key.length > 128 || !supportsLanguage(language) || !sdp.startsWith('v=0') || Buffer.byteLength(sdp) > 65_536)
       throw new ServiceError('invalid_live_offer');
     const teachingContext = parseLiveContext(context);
     if (requestedMilliseconds!==undefined && (!Number.isSafeInteger(requestedMilliseconds) || requestedMilliseconds<60_000 || requestedMilliseconds>3_600_000))
       throw new ServiceError('invalid_session_duration');
+    if (this.config.maximumSessionMilliseconds !== undefined)
+      requestedMilliseconds = Math.min(requestedMilliseconds ?? 900_000,this.config.maximumSessionMilliseconds);
     const id = randomUUID(), reservation = randomUUID();
     let minutes = this.config.billingUnit === 'milliseconds', paid=false;
     let reservedMilliseconds = TRIAL_MS;
@@ -111,8 +127,12 @@ export class HostedVoice {
     let deadline = new Date(this.now() + reservedMilliseconds);
     await transaction(this.db, async sql => {
       await sql.query("SELECT pg_advisory_xact_lock(hashtext('mural-hosted-funding-cap'))");
+      const fundingEnvironment:PurchaseEnvironment=this.realFundedAccess?'live':requestedFundingEnvironment??
+        (await sql.query('SELECT environment FROM deployment_environment WHERE singleton')).rows[0].environment;
       const minuteWallet = minutes ? await lockMinuteWallet(sql, account) : undefined;
       let wallet = minuteWallet ?? await lockWallet(sql, account, true);
+      if ((await sql.query('SELECT 1 FROM hosted_close_intents WHERE account_id=$1 AND idempotency_key=$2',[account,key])).rowCount)
+        throw new ServiceError('live_request_already_closed',409);
       if((await sql.query('SELECT 1 FROM minute_guest_link_intents WHERE guest_account_id=$1',[account])).rowCount)
         throw new ServiceError('sign_in_to_continue',403);
       const previous = (await sql.query('SELECT id FROM hosted_sessions WHERE account_id=$1 AND idempotency_key=$2', [account, key])).rows[0];
@@ -125,16 +145,20 @@ export class HostedVoice {
       const exposure = this.publicMinuteAccess ? 0n : BigInt((await sql.query('SELECT COALESCE(sum(funding_exposure_nano),0) AS total FROM hosted_sessions')).rows[0].total) +
         await hostedHelperExposure(sql);
       if (minutes) {
-        if (this.publicMinuteAccess && !minuteWallet!.sandboxReconciled) throw new ServiceError('minute_balance_reconciliation_required',409);
+        if (this.publicMinuteAccess && !minuteWallet!.sandboxReconciled)
+          throw new ServiceError('minute_balance_reconciliation_required',409);
+        // Reconciled free grants are usable independently of StoreKit. Unreviewed
+        // legacy minute value never backs a public provider attempt.
         reservedMilliseconds = Math.min(TRIAL_MS,requestedMilliseconds ?? TRIAL_MS, Number(wallet.balance) - Number(wallet.reserved) -
-          (this.publicMinuteAccess ? minuteWallet!.sandbox : 0));
-        if (reservedMilliseconds<=0 && this.publicPaidAccess) {
-          const cash=await lockPaidWallet(sql,account);
+            (this.publicMinuteAccess ? minuteWallet!.sandbox : 0));
+        const minimumFree = this.publicMinuteAccess ? MINIMUM_PUBLIC_FREE_SESSION_MS : 1;
+        if (reservedMilliseconds<minimumFree && this.publicPaidAccess) {
+          const cash=await lockPaidWallet(sql,account,true,fundingEnvironment);
           if (cash.fundedAvailable<this.minimumPaidSessionNanoUSD) throw new ServiceError('insufficient_credit',402);
           let low=15_000,high=requestedMilliseconds ?? 900_000;
           while (low<high) { const middle=Math.ceil((low+high)/2); if (this.paidHold(middle).total<=cash.fundedAvailable) low=middle; else high=middle-1; }
           reservedMilliseconds=low; paidReserve=this.paidHold(low); paid=true; minutes=false; wallet=cash;
-        } else if (reservedMilliseconds <= 0) throw new ServiceError('insufficient_minutes', 402);
+        } else if (reservedMilliseconds < minimumFree) throw new ServiceError('insufficient_minutes', 402);
       }
       if (minutes) {
         const funding = voiceCost(Math.max(15_000, reservedMilliseconds));
@@ -149,11 +173,11 @@ export class HostedVoice {
         await this.config.helpers?.reserveSessionBudget(sql, account, id);
       } else if (paid) {
         deadline=new Date(this.now()+Math.max(30_000,reservedMilliseconds));
-        await reservePaidInTransaction(sql,account,reservation,`hosted:${key}`,paidReserve.voice,RATE_VERSION);
+        await reservePaidInTransaction(sql,account,reservation,`hosted:${key}`,paidReserve.voice,RATE_VERSION,fundingEnvironment);
         await sql.query(`INSERT INTO hosted_sessions(id,account_id,idempotency_key,reservation_id,rate_version,state,deadline,
-          funding_exposure_nano,minimum_charge_ms,funding_mode,limit_ms)
-          VALUES($1,$2,$3,$4,$5,'creating',$6,$7,15000,'ai-value',$8)`,
-          [id,account,key,reservation,RATE_VERSION,deadline,paidReserve.voice.toString(),reservedMilliseconds]);
+          funding_exposure_nano,minimum_charge_ms,funding_mode,limit_ms,funding_environment)
+          VALUES($1,$2,$3,$4,$5,'creating',$6,$7,15000,'ai-value',$8,$9)`,
+          [id,account,key,reservation,RATE_VERSION,deadline,paidReserve.voice.toString(),reservedMilliseconds,fundingEnvironment]);
         await this.config.helpers!.reserveSessionBudget(sql,account,id);
       } else {
         if (exposure + HOLD > this.config.lifetimeFundingCapNano) throw new ServiceError('hosted_funding_cap_reached', 503);
@@ -164,6 +188,10 @@ export class HostedVoice {
         await sql.query(`INSERT INTO hosted_sessions(id,account_id,idempotency_key,reservation_id,rate_version,state,deadline,funding_exposure_nano)
           VALUES($1,$2,$3,$4,$5,'creating',$6,$7)`, [id, account, key, reservation, RATE_VERSION, deadline, HOLD.toString()]);
       }
+      if(this.config.restrictToAllowlist){
+        const total=BigInt((await sql.query('SELECT COALESCE(sum(funding_exposure_nano),0) AS total FROM hosted_sessions')).rows[0].total)+await hostedHelperExposure(sql);
+        if(total>this.config.lifetimeFundingCapNano)throw new ServiceError('hosted_funding_cap_reached',503);
+      }
     });
     if ((minutes || paid) && !await this.prepareMinuteProviderAttempt(id, account))
       throw new ServiceError('live_session_cancelled', 409);
@@ -173,7 +201,7 @@ export class HostedVoice {
       created = await this.provider.create(sdp, language, teachingContext);
       if (minutes || paid) deadline = new Date(this.now() + reservedMilliseconds);
       startupStage = 'persist_provider_session';
-      const persisted = await this.db.query("UPDATE hosted_sessions SET provider_session_id=$2,state='active',deadline=$3 WHERE id=$1 AND state<>'closed'", [id, created.sessionID, deadline]);
+      const persisted = await this.updateSessionState(id, "UPDATE hosted_sessions SET provider_session_id=$2,state='active',deadline=$3 WHERE id=$1 AND state<>'closed'", [id, created.sessionID, deadline]);
       if (persisted.rowCount !== 1) throw new ServiceError('provider_session_no_longer_active', 502);
       startupStage = 'provider_attach';
       await this.attach(id, created.sessionID);
@@ -208,7 +236,7 @@ export class HostedVoice {
         throw error;
       }
       if (created) await this.provider.hangup(created.sessionID).catch(() => {});
-      await this.db.query(`UPDATE hosted_sessions SET state='incomplete',close_reason='create_or_attach_uncertain'
+      await this.updateSessionState(id, `UPDATE hosted_sessions SET state='incomplete',close_reason='create_or_attach_uncertain'
         WHERE id=$1 AND state<>'closed'`, [id]).catch(() => {});
       // Never guess a final bill or release this hold before a trusted final event/reconciliation.
       throw new ServiceError('provider_session_unconfirmed', 502);
@@ -295,13 +323,45 @@ export class HostedVoice {
       slot.connection = await this.provider.attach(providerID, event => {
         if (++slot.pending > 100) { void this.connectionLost(id); return; }
         slot.queue = slot.queue.then(() => this.recordUsage(id, providerID, event))
-          .catch(() => this.connectionLost(id)).finally(() => { slot.pending--; });
-      }, () => { void this.connectionLost(id); });
+          .catch(error => {
+            this.diagnostics.record('provider_failed', { operation: 'voice.settle', sessionReference: errorReference(id) }, error);
+            return this.connectionLost(id);
+          }).finally(() => { slot.pending--; });
+      }, () => {
+        // Drain already received usage before processing transport loss.
+        slot.queue = slot.queue.then(() => this.connectionLost(id));
+      });
       await slot.queue;
       if (!this.slots.has(id)) slot.connection.disconnect();
     } catch { this.slots.delete(id); throw new ServiceError('provider_attach_failed', 502); }
   }
+  private async replayFinalUsage(row: any) {
+    if ((this.recoveryAttempts.get(row.id)?.notBefore ?? 0) > this.now()) return;
+    try { await this.recordUsage(row.id, row.provider_session_id,
+      { type: 'session.closed', usage: { seconds: Number(row.final_usage_seconds) } }); }
+    catch (error) {
+      this.scheduleRecovery(row.id);
+      this.diagnostics.record('provider_failed', { operation: 'voice.settle.replay', sessionReference: errorReference(row.id) }, error);
+    }
+  }
+  private async preserveFinalUsage(id: string, providerID: string, event: VoiceUsage) {
+    await transaction(this.db, async sql => {
+      const row = (await sql.query('SELECT * FROM hosted_sessions WHERE id=$1', [id])).rows[0];
+      if (!row || row.provider_session_id !== providerID || row.rate_version !== RATE_VERSION)
+        throw new ServiceError('provider_session_mismatch');
+      if (row.state === 'closed') return;
+      const meter = new VoiceMeter(providerID, Number(row.limit_ms ?? row.reserved_ms ?? TRIAL_MS));
+      meter.milliseconds = Number(row.observed_ms); meter.receive(providerID, event);
+      if (!meter.finalized) throw new ServiceError('invalid_provider_usage');
+      await sql.query(`INSERT INTO hosted_voice_final_usage(session_id,provider_session_id,usage_seconds)
+        VALUES($1,$2,$3) ON CONFLICT(session_id) DO NOTHING`, [id,providerID,event.usage.seconds]);
+      const saved = (await sql.query('SELECT provider_session_id,usage_seconds FROM hosted_voice_final_usage WHERE session_id=$1', [id])).rows[0];
+      if (saved.provider_session_id !== providerID || Number(saved.usage_seconds) !== event.usage.seconds)
+        throw new ServiceError('provider_final_usage_conflict');
+    });
+  }
   private async recordUsage(id: string, providerID: string, event: VoiceUsage) {
+    if (event.type === 'session.closed') await this.preserveFinalUsage(id, providerID, event);
     const state = await transaction(this.db, async sql => {
       // Match admission/helper lock order so final voice cost and reduced helper liability
       // become visible atomically to a new funded conversation.
@@ -356,13 +416,31 @@ export class HostedVoice {
       }
       return { finalized: meter.finalized, close: meter.closeRequested };
     });
-    if (state.finalized) { this.diagnostics.record('voice_closed', { operation: 'voice.settle', sessionReference: errorReference(id) }); this.slots.get(id)?.connection?.disconnect(); this.slots.delete(id); }
+    if (state.finalized) { this.diagnostics.record('voice_closed', { operation: 'voice.settle', sessionReference: errorReference(id) }); this.slots.get(id)?.connection?.disconnect(); this.slots.delete(id); this.recoveryAttempts.delete(id); }
     else if (state.close) await this.requestClose(id, 'usage_limit');
   }
+  private async updateSessionState(id: string, query: string, values: unknown[]) {
+    return transaction(this.db, async sql => {
+      // Session-state triggers advance the account's minutes revision. Take its
+      // lock first, matching funding and final-usage writers, before the session.
+      await sql.query(`SELECT id FROM accounts
+        WHERE id=(SELECT account_id FROM hosted_sessions WHERE id=$1) FOR UPDATE`, [id]);
+      return sql.query(query, values);
+    });
+  }
+  private scheduleRecovery(id: string) {
+    const previous = this.recoveryAttempts.get(id), now = this.now();
+    // One failed attach may report both a socket loss and a rejected attach promise.
+    if (previous && previous.notBefore > now) return false;
+    const failures = Math.min((previous?.failures ?? 0) + 1, 6);
+    this.recoveryAttempts.set(id, { failures, notBefore: now + Math.min(300_000, 10_000 * 2 ** (failures - 1)) });
+    return true;
+  }
   private async connectionLost(id: string) {
+    if (!this.scheduleRecovery(id)) return;
     this.diagnostics.record('voice_connection_lost', { operation: 'voice.sideband', sessionReference: errorReference(id) });
     const slot = this.slots.get(id); slot?.connection?.disconnect(); this.slots.delete(id);
-    await this.db.query(`UPDATE hosted_sessions SET state='incomplete',close_requested_at=COALESCE(close_requested_at,$2),close_reason='sideband_lost'
+    await this.updateSessionState(id, `UPDATE hosted_sessions SET state='incomplete',close_requested_at=COALESCE(close_requested_at,$2),close_reason='sideband_lost'
       WHERE id=$1 AND state<>'closed'`, [id, new Date(this.now())]).catch(() => { this.accepting = false; });
     const row = (await this.db.query('SELECT provider_session_id,state FROM hosted_sessions WHERE id=$1', [id]).catch(() => ({ rows: [] }))).rows[0];
     if (row?.provider_session_id && row.state !== 'closed') await this.provider.hangup(row.provider_session_id).catch(error => this.diagnostics.record('voice_hangup_failed', { operation: 'voice.hangup', sessionReference: errorReference(id) }, error));
@@ -370,7 +448,7 @@ export class HostedVoice {
   async requestClose(id: string, reason: 'user_requested' | 'worker_recovery' | 'usage_limit' | 'deadline' | 'funding_reversed' | 'worker_shutdown' | 'sign_out') {
     // Lock the prior value so concurrent recovery requests log the durable transition once,
     // including sessions whose provider connection never produced an in-memory slot.
-    const updated = await this.db.query(`WITH previous AS MATERIALIZED (
+    const updated = await this.updateSessionState(id, `WITH previous AS MATERIALIZED (
       SELECT id,close_requested_at IS NULL AS first_request FROM hosted_sessions WHERE id=$1 AND state<>'closed' FOR UPDATE
     ) UPDATE hosted_sessions h SET state=CASE WHEN h.state='incomplete' THEN h.state ELSE 'closing' END,
       close_requested_at=COALESCE(h.close_requested_at,$2),close_reason=COALESCE(h.close_reason,$3)
@@ -384,13 +462,16 @@ export class HostedVoice {
   }
   async status(account: string, id: string) {
     const row = (await this.db.query(`SELECT h.*,r.reserved_nano AS voice_reserved_nano,b.budget_nano AS helper_budget_nano,
-      b.cash_pool_nano,b.rate_version AS helper_rate_version,
+      b.cash_pool_nano,b.rate_version AS helper_rate_version,b.state AS helper_state,
       (SELECT COALESCE(sum(CASE WHEN q.state='settled' THEN q.cost_nano ELSE 0 END),0) FROM hosted_helper_requests q WHERE q.session_id=h.id) AS helper_charged_nano,
       (SELECT COALESCE(sum(CASE WHEN q.state<>'settled' THEN q.hold_nano ELSE 0 END),0) FROM hosted_helper_requests q WHERE q.session_id=h.id) AS helper_pending_nano
       FROM hosted_sessions h LEFT JOIN reservations r ON r.id=h.reservation_id LEFT JOIN hosted_helper_sessions b ON b.session_id=h.id
       WHERE h.id=$1 AND h.account_id=$2`, [id, account])).rows[0];
     if (!row) throw new ServiceError('live_session_not_found', 404);
+    const settlementState=row.state==='closed' && (!row.helper_state || row.helper_state==='expired') && BigInt(row.helper_pending_nano)===0n &&
+      (row.minute_reservation_id ? row.charged_ms!==null : row.charged_nano!==null) ? 'final' as const : 'pending' as const;
     if (row.funding_mode==='ai-value') return {sessionID:row.id,state:row.state,deadline:row.deadline,
+      settlementState,
       fundingMode:'ai-value' as const,billingBasis:'actual-ai-usage' as const,billingPolicy:'actual-ai-usage-15s-minimum-v1' as const,
       minimumChargeMilliseconds:15000,limitMilliseconds:Number(row.limit_ms),observedMilliseconds:Number(row.observed_ms),
       reservedNanoUSD:(BigInt(row.voice_reserved_nano)+BigInt(row.helper_budget_nano)).toString(),
@@ -400,6 +481,7 @@ export class HostedVoice {
       helperPendingNanoUSD:row.helper_pending_nano,helperReservedRemainingNanoUSD:(BigInt(row.cash_pool_nano)+BigInt(row.helper_pending_nano)).toString(),
       providerCostNanoUSD:row.provider_cost_nano,rateVersion:row.rate_version,helperRateVersion:row.helper_rate_version};
     return { sessionID: row.id, state: row.state, deadline: row.deadline, observedMilliseconds: Number(row.observed_ms),
+      settlementState,
       fundingMode:row.minute_reservation_id ? 'minutes' as const : undefined,
       reservedMilliseconds: row.reserved_ms ? Number(row.reserved_ms) : undefined,
       chargedMilliseconds: row.reserved_ms ? row.charged_ms === null ? null : Number(row.charged_ms) : undefined,
@@ -409,19 +491,39 @@ export class HostedVoice {
       chargedNanoUSD: row.reserved_ms ? undefined : row.charged_nano, providerCostNanoUSD: row.provider_cost_nano };
   }
   async current(account: string) {
-    const row = (await this.db.query("SELECT id FROM hosted_sessions WHERE account_id=$1 AND state<>'closed'", [account])).rows[0];
+    const row = (await this.db.query(`SELECT h.id FROM hosted_sessions h
+      WHERE h.account_id=$1 AND (h.state<>'closed' OR EXISTS (
+        SELECT 1 FROM hosted_helper_sessions b WHERE b.session_id=h.id AND b.state<>'expired') OR EXISTS (
+        SELECT 1 FROM hosted_helper_requests q WHERE q.session_id=h.id AND q.state<>'settled' AND q.hold_nano>0))
+      ORDER BY (h.state<>'closed') DESC,h.created_at DESC LIMIT 1`, [account])).rows[0];
     return { session: row ? await this.status(account, row.id) : null };
   }
   async close(account: string, id: string) { await this.status(account, id); await this.requestClose(id, 'user_requested'); return this.status(account, id); }
+  async closeByKey(account: string, key: string) {
+    if (!key || key.length<8 || key.length>128) throw new ServiceError('invalid_request');
+    const id = await transaction(this.db,async sql=>{
+      await sql.query('SELECT id FROM accounts WHERE id=$1 FOR UPDATE',[account]);
+      await sql.query('INSERT INTO hosted_close_intents(account_id,idempotency_key) VALUES($1,$2) ON CONFLICT DO NOTHING',[account,key]);
+      return (await sql.query('SELECT id FROM hosted_sessions WHERE account_id=$1 AND idempotency_key=$2',[account,key])).rows[0]?.id;
+    });
+    return {requestID:key,session:id ? await this.close(account,id) : null,preventedCreate:!id};
+  }
   async tick(): Promise<void> {
     if (this.ticking || !this.leader) return; this.ticking = true;
     try {
       await this.leader.query('SELECT 1');
       const rows = (await this.db.query(`SELECT h.*,w.balance_nano,w.reserved_nano,w.sandbox_balance_nano,
+        (SELECT usage_seconds FROM hosted_voice_final_usage f WHERE f.session_id=h.id) AS final_usage_seconds,
+        (SELECT environment FROM deployment_environment WHERE singleton) AS deployment_environment,
+        (SELECT COALESCE(sum(r.reserved_nano),0) FROM reservations r WHERE r.account_id=h.account_id
+          AND r.state='open' AND r.funding_environment=h.funding_environment)+
+        (SELECT COALESCE(sum(b.cash_pool_nano),0) FROM hosted_helper_sessions b JOIN hosted_sessions owner ON owner.id=b.session_id
+          WHERE owner.account_id=h.account_id AND b.funding_environment=h.funding_environment) AS scoped_reserved_nano,
         EXISTS(SELECT 1 FROM minute_purchase_transactions p WHERE p.account_id=h.account_id
           AND (NOT h.public_minutes OR p.environment='live') AND p.recovered_ms<LEAST(p.reversal_target_ms,p.granted_ms)) AS minute_refund_due
         FROM hosted_sessions h LEFT JOIN wallets w ON w.account_id=h.account_id WHERE h.state<>'closed'`)).rows;
       for (const row of rows) {
+        if (row.final_usage_seconds !== null) { await this.replayFinalUsage(row); continue; }
         if (!row.provider_session_id) {
           if (Number(row.minimum_charge_ms) === 15_000 && !row.provider_attempted_at &&
             (row.close_requested_at || this.now() >= new Date(row.deadline).getTime()))
@@ -429,19 +531,32 @@ export class HostedVoice {
           continue;
         }
         if (row.state === 'incomplete' && !this.slots.has(row.id)) {
-          try { await this.attach(row.id, row.provider_session_id); } catch { /* Keep the hold and retry closure. */ }
+          if ((this.recoveryAttempts.get(row.id)?.notBefore ?? 0) > this.now()) continue;
+          try { await this.attach(row.id, row.provider_session_id); }
+          catch {
+            // Some adapters reject before invoking onLoss; still stop the existing call once.
+            if (this.scheduleRecovery(row.id)) await this.provider.hangup(row.provider_session_id)
+              .catch(error => this.diagnostics.record('voice_hangup_failed', { operation: 'voice.hangup', sessionReference: errorReference(row.id) }, error));
+            continue; // Keep the hold and retry after backoff.
+          }
         }
         if (row.close_requested_at) await this.requestClose(row.id, row.close_reason === 'sign_out' ? 'sign_out' : 'user_requested');
-        else if (row.minute_reservation_id ? row.minute_refund_due : BigInt(row.balance_nano)-(row.funding_mode==='ai-value' ? BigInt(row.sandbox_balance_nano) : 0n) < BigInt(row.reserved_nano)) await this.requestClose(row.id, 'funding_reversed');
+        else if (row.minute_reservation_id ? row.minute_refund_due :
+          (row.funding_mode==='ai-value' && row.funding_environment==='test' ? BigInt(row.sandbox_balance_nano) :
+          BigInt(row.balance_nano)-(row.funding_mode==='ai-value' ? BigInt(row.sandbox_balance_nano) : 0n)) <
+          BigInt(row.funding_mode==='ai-value'?row.scoped_reserved_nano:row.reserved_nano))
+          await this.requestClose(row.id, 'funding_reversed');
         else if (this.now() >= new Date(row.deadline).getTime()) await this.requestClose(row.id, 'deadline');
         if (row.close_requested_at && this.now() - new Date(row.close_requested_at).getTime() >= this.grace) {
           const slot = this.slots.get(row.id);
+          // Loss already requests HTTP hangup; do not repeat it in the same tick.
+          if (!slot && this.recoveryAttempts.has(row.id)) continue;
           if (!slot || this.now() - slot.lastHangup >= this.grace) {
             if (slot) slot.lastHangup = this.now();
             await this.provider.hangup(row.provider_session_id).catch(error => this.diagnostics.record('voice_hangup_failed', { operation: 'voice.hangup', sessionReference: errorReference(row.id) }, error));
           }
           // An HTTP 2xx hangup is not a final usage event. Keep the reservation unresolved.
-          await this.db.query("UPDATE hosted_sessions SET state='incomplete' WHERE id=$1 AND state<>'closed'", [row.id]);
+          await this.updateSessionState(row.id, "UPDATE hosted_sessions SET state='incomplete' WHERE id=$1 AND state<>'closed'", [row.id]);
         }
       }
     } finally { this.ticking = false; }
@@ -460,6 +575,7 @@ export class HostedVoice {
     await Promise.all([...this.slots.values()].map(slot => slot.queue));
     for (const slot of this.slots.values()) slot.connection?.disconnect();
     this.slots.clear();
+    this.recoveryAttempts.clear();
     if (this.leader) {
       await this.leader.query("SELECT pg_advisory_unlock(hashtext('mural-hosted-voice-worker'))").catch(() => {});
       if (this.leaderError) this.leader.removeListener('error',this.leaderError);

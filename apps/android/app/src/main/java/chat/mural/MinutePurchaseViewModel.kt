@@ -153,12 +153,13 @@ class MinutePurchaseViewModel(application: Application) : AndroidViewModel(appli
         if (changed) viewModelScope.launch { controller?.onForeground(); stripeController?.onForeground() }
     }
     fun refresh() { viewModelScope.launch { controller?.refresh(); stripeController?.refresh() } }
-    fun launch(activity: Activity, sku: String) {
+    fun launch(activity: Activity, sku: String, quantity: Int = 1) {
         if (!enabled) return
+        if (quantity !in 1..10 || (channel == PurchaseChannel.PLAY && quantity != 1)) return
         val permit = launchGate.begin() ?: return
         val currentActivity = WeakReference(activity)
         viewModelScope.launch {
-            stripeController?.buy(sku) { checkout ->
+            stripeController?.buy(sku, quantity) { checkout ->
                 val host = currentActivity.get()
                 val lifecycle = (host as? LifecycleOwner)?.lifecycle?.currentState
                 val readiness = if (host != null && lifecycle != null)

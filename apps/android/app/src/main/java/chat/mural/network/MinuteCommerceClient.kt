@@ -35,8 +35,11 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         .apply { interceptors().clear(); networkInterceptors().clear() }.build()
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun catalog(): MinuteCatalog = decoded {
-        val body = request("GET", "minutes/products", providerQuery = true)
+    override suspend fun catalog(): MinuteCatalog = catalog(null)
+    override suspend fun catalog(regionCode: String?): MinuteCatalog = decoded {
+        if (regionCode != null && (channel != PurchaseChannel.PLAY || !Regex("[A-Z]{2}").matches(regionCode)))
+            throw MinuteCommerceFailure.InvalidResponse
+        val body = request("GET", "minutes/products", providerQuery = true, regionCode = regionCode)
         val basis = body.text("billingBasis")
         if (basis !in listOf("connected-conversation-time", "actual-ai-usage")) throw MinuteCommerceFailure.InvalidResponse
         val products = body["products"] as? JsonArray ?: throw MinuteCommerceFailure.InvalidResponse
@@ -46,28 +49,38 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
             val ai = if (basis == "actual-ai-usage") parseAIValue(item) else null
             MinuteProduct(item.text("sku"), item.text("providerProduct"), ai?.displayMinutes ?: item.count("minutes", 1440).toInt(), item.text("currency"),
                 item.count("totalMinor", 100_000_000), item.text("environment"), ai)
-        })
+        }, maximumQuantity = if (body["maximumQuantity"] == null) 1 else body.count("maximumQuantity", 10).toInt(),
+            regionUnavailable = body["availabilityReason"]?.let {
+                if (body.text("availabilityReason") != "unsupported_country" || regionCode == null) throw MinuteCommerceFailure.InvalidResponse
+                true
+            } ?: false)
     }
-    override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String): MinuteOrder = decoded {
+    override suspend fun create(session: AccountSession, sku: String, idempotencyKey: String, selection: PlayPriceSnapshot?): MinuteOrder = decoded {
         if (channel != PurchaseChannel.PLAY) throw MinuteCommerceFailure.Unavailable
         if (sku.length > 128 || !minuteIdentifier.matches(sku) || !Regex("[A-Za-z0-9._:-]{8,128}").matches(idempotencyKey))
             throw MinuteCommerceFailure.InvalidResponse
-        val body = request("POST", "minutes/orders", session, buildJsonObject { put("provider", "play"); put("sku", sku) }, idempotencyKey)
+        val body = request("POST", "minutes/orders", session, buildJsonObject {
+            put("provider", "play"); put("sku", sku)
+            selection?.regionCode?.let { put("regionCode", it); put("scheduleVersion", selection.scheduleVersion) }
+        }, idempotencyKey)
         val payment = body["payment"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
         val ai = if (body["entitlementKind"] == JsonPrimitive("ai_value")) parseAIValue(body) else null
         MinuteOrder(body.text("orderID"), ai?.displayMinutes ?: body.count("minutes", 1440).toInt(), body.text("currency"), body.count("totalMinor", 100_000_000),
             PlayOrderBinding(payment.text("orderID"), payment.text("obfuscatedAccountID"), payment.text("obfuscatedProfileID")), ai)
     }
-    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder = decoded {
+    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String): StripeMinuteOrder = createStripe(session, sku, idempotencyKey, 1)
+    override suspend fun createStripe(session: AccountSession, sku: String, idempotencyKey: String, quantity: Int): StripeMinuteOrder = decoded {
         if (channel != PurchaseChannel.STRIPE) throw MinuteCommerceFailure.Unavailable
-        if (sku.length > 128 || !minuteIdentifier.matches(sku) || !minuteUUID.matches(idempotencyKey))
+        if (quantity !in 1..10 || sku.length > 128 || !minuteIdentifier.matches(sku) || !minuteUUID.matches(idempotencyKey))
             throw MinuteCommerceFailure.InvalidResponse
         val body = request("POST", "minutes/orders", session,
-            buildJsonObject { put("provider", "stripe"); put("sku", sku) }, idempotencyKey)
+            buildJsonObject { put("provider", "stripe"); put("sku", sku); put("quantity", quantity) }, idempotencyKey)
         val payment = body["payment"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
-        val ai = parseAIValue(body)
+        val returnedQuantity = if (body["quantity"] == null) 1 else body.count("quantity", 10).toInt()
+        if (returnedQuantity != quantity) throw MinuteCommerceFailure.InvalidResponse
+        val ai = parseAIValue(body, returnedQuantity)
         val order = StripeMinuteOrder(body.text("orderID"), body.text("currency"), body.count("totalMinor", 100_000_000),
-            StripeCheckoutURL.checked(payment.text("checkoutURL")), ai)
+            StripeCheckoutURL.checked(payment.text("checkoutURL")), ai, returnedQuantity)
         if (payment.text("orderID") != order.orderID) throw MinuteCommerceFailure.InvalidResponse
         return@decoded order
     }
@@ -111,12 +124,12 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
             if (ai == null) body.count("reversalOutstandingMilliseconds", 86_400_000) else 0,
             body.boolean("fulfillmentRecorded"), ai)
     }
-    private fun parseAIValue(body: JsonObject): AIValueEntitlement {
+    private fun parseAIValue(body: JsonObject, quantity: Int = 1): AIValueEntitlement {
         if (body.text("entitlementKind") != "ai_value" || body.text("billingBasis") != "actual-ai-usage" ||
             !body.boolean("estimate")) throw MinuteCommerceFailure.InvalidResponse
         val quote = body["quote"] as? JsonObject ?: throw MinuteCommerceFailure.InvalidResponse
         return AIValueEntitlement(body.text("aiValueNanoUSD"), body.count("estimatedMilliseconds", MAX_AI_ESTIMATE_MS),
-            json.decodeFromJsonElement<AIValueQuote>(quote))
+            json.decodeFromJsonElement<AIValueQuote>(JsonObject(quote + ("quantity" to JsonPrimitive(quantity)))))
     }
     private fun validateID(value: String) { if (!minuteUUID.matches(value)) throw MinuteCommerceFailure.InvalidResponse }
     private fun validateToken(value: String) { if (!validPurchaseToken(value)) throw MinuteCommerceFailure.InvalidResponse }
@@ -124,9 +137,12 @@ class MinuteCommerceClient internal constructor(private val origin: HttpUrl, tra
         catch (error: IllegalArgumentException) { throw MinuteCommerceFailure.InvalidResponse }
 
     private suspend fun request(method: String, path: String, session: AccountSession? = null, body: JsonObject? = null,
-        idempotencyKey: String? = null, providerQuery: Boolean = false): JsonObject {
+        idempotencyKey: String? = null, providerQuery: Boolean = false, regionCode: String? = null): JsonObject {
         if (session != null && !session.isValid(now())) throw MinuteCommerceFailure.SignInRequired
-        val url = origin.newBuilder().addPathSegments("v1/$path").apply { if (providerQuery) addQueryParameter("provider", channel.provider) }.build()
+        val url = origin.newBuilder().addPathSegments("v1/$path").apply {
+            if (providerQuery) addQueryParameter("provider", channel.provider)
+            regionCode?.let { addQueryParameter("regionCode", it) }
+        }.build()
         val request = Request.Builder().url(url).header("Accept", "application/json").header("Cache-Control", "no-store")
             .apply { session?.let { header("Authorization", "Bearer ${it.accessToken}") }; idempotencyKey?.let { header("Idempotency-Key", it) } }
             .method(method, body?.toString()?.toRequestBody("application/json".toMediaType())).build()

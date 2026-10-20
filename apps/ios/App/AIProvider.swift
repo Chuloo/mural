@@ -15,7 +15,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var helperModel: String {
         switch self {
-        case .openAI: "gpt-5.6-luna"
+        case .openAI: "gpt-6-luna"
         case .googleAIStudio: "gemma-4-31b-it"
         }
     }

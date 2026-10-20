@@ -16,8 +16,10 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "fastify": "5.12.4",
+    "@apple/app-store-server-library": "3.1.0",
+    "fastify": "5.12.5",
     "jose": "6.2.12",
+    "node-fetch": "2.7.0",
     "pg": "8.23.0",
     "stripe": "22.6.2",
     "ws": "8.21.0"

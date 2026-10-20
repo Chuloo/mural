@@ -16,12 +16,38 @@ import XCTest
             return try await withCheckedThrowingContinuation { pending.append($0) }
         }
         func succeed(_ text: String) { pending.removeFirst().resume(returning: MeaningResult(text: text)) }
-        func fail() { pending.removeFirst().resume(throwing: URLError(.notConnectedToInternet)) }
+        func fail(_ error: Error = URLError(.notConnectedToInternet)) { pending.removeFirst().resume(throwing: error) }
     }
     private let sessionID = UUID()
+    func testGreekQuestionMarksDispatchAMeaningWhileOtherSemicolonsWait() async {
+        func sample(_ text: String, id: String) -> MeaningRequest {
+            let passage = Passage(id: "question", speaker: .assistant, fragments: [
+                Fragment(speaker: .assistant, text: text, startMS: 0, endMS: 1000)
+            ])
+            return MeaningRequest(sessionID: sessionID, passage: passage, learningLanguageID: id, meaningLanguage: "English")
+        }
+        for ending in [";", ";” "] {
+            let translator = Translator()
+            let controller = MeaningController(delay: .zero, incompleteDelay: .seconds(60), minimumSpacing: .zero, translate: translator.translate)
+            controller.update(sample("Πώς είσαι" + ending, id: "el"))
+            await waitUntil { translator.requests.count == 1 }
+            translator.succeed("How are you?")
+            await waitUntil { !controller.isLoading }
+        }
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, incompleteDelay: .seconds(60), minimumSpacing: .zero, translate: translator.translate)
+        let pending = sample("Mag-aaral ako;", id: "tl")
+        controller.update(pending)
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(translator.requests.isEmpty)
+        controller.update(pending, conversationEnded: true)
+        await waitUntil { translator.requests.count == 1 }
+        translator.succeed("I will study;")
+        await waitUntil { !controller.isLoading }
+    }
     func testPartialMeaningAppearsEarlyButOnlyCompletionIsSaved() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, streaming: translator.stream)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
         var saved = 0; controller.onResult = { _, _ in saved += 1 }
         controller.update(request("Hei, verden."))
         await waitUntil { translator.partials.count == 1 }
@@ -34,7 +60,7 @@ import XCTest
     }
     func testGrowingMeaningDoesNotFlashBackToItsFirstWord() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, streaming: translator.stream)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
         controller.update(request("Hei, jeg liker"))
         await waitUntil { translator.partials.count == 1 }
         translator.succeed("Hello, I like")
@@ -51,7 +77,7 @@ import XCTest
     }
     func testCorrectionAndResetRejectLatePartialText() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, streaming: translator.stream)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
         controller.update(request("Jeg liker kaffe."))
         await waitUntil { translator.partials.count == 1 }
         translator.partials[0]("I like coffee")
@@ -68,7 +94,7 @@ import XCTest
     }
     func testFailedStreamClearsPartialAndDoesNotCacheOrRetry() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, streaming: translator.stream)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
         var saved = 0; controller.onResult = { _, _ in saved += 1 }
         controller.update(request("Hei")); await waitUntil { translator.partials.count == 1 }
         translator.partials[0]("Hi"); translator.fail()
@@ -78,7 +104,7 @@ import XCTest
     }
     func testSlowRequestDoesNotAddAnotherFullSchedulingDelay() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .milliseconds(200), streaming: translator.stream)
+        let controller = MeaningController(delay: .milliseconds(200), incompleteDelay: .milliseconds(200), minimumSpacing: .zero, streaming: translator.stream)
         controller.update(request("Hei")); await waitUntil { translator.requests.count == 1 }
         controller.update(request("Hei, verden.", revision: 1))
         try? await Task.sleep(for: .milliseconds(250))
@@ -101,7 +127,7 @@ import XCTest
 
     func testGrowingSpeechCoalescesWithoutCancellingTheRunningTranslation() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         controller.update(request("Hei"))
         await waitUntil { translator.requests.count == 1 }
         controller.update(request("Hei,", revision: 1))
@@ -119,22 +145,43 @@ import XCTest
         XCTAssertNil(controller.error)
     }
 
-    func testContinuousFragmentsDoNotKeepRestartingTheDelay() async {
+    func testContinuousFragmentsWaitForQuietThenTranslateLatestText() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .milliseconds(30), translate: translator.translate)
+        // The simulated gaps must stay well below the quiet window even on a busy CI runner.
+        let controller = MeaningController(delay: .seconds(1), incompleteDelay: .seconds(1), minimumSpacing: .zero, translate: translator.translate)
         for revision in 0..<12 {
             controller.update(request(String(repeating: "hei ", count: revision + 1), revision: revision))
-            try? await Task.sleep(for: .milliseconds(10))
+            if revision < 11 { try? await Task.sleep(for: .milliseconds(10)) }
         }
-        XCTAssertEqual(translator.requests.count, 1)
-        XCTAssertLessThan(translator.requests.first?.text.count ?? 1000, 48)
+        XCTAssertEqual(translator.requests.count, 0)
+        await waitUntil { translator.requests.count == 1 }
+        XCTAssertEqual(translator.requests[0].text, String(repeating: "hei ", count: 12))
         controller.reset()
         if !translator.pending.isEmpty { translator.succeed("Hello") }
     }
 
+    func testIncompleteCaptionWaitsForSentenceAndSpacesLaterMeaningRequests() async {
+        let translator = Translator()
+        let controller = MeaningController(delay: .milliseconds(25), incompleteDelay: .milliseconds(500),
+                                           minimumSpacing: .milliseconds(200), translate: translator.translate)
+        controller.update(request("Godt å"))
+        try? await Task.sleep(for: .milliseconds(40))
+        controller.update(request("Godt å høre!", revision: 1))
+        await waitUntil { translator.requests.count == 1 }
+        XCTAssertEqual(translator.requests[0].text, "Godt å høre!")
+        controller.update(request("Godt å høre! Hva har du gjort i dag?", revision: 2))
+        translator.succeed("Good to hear!")
+        try? await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(translator.requests.count, 1)
+        await waitUntil { translator.requests.count == 2 }
+        XCTAssertEqual(translator.requests[1].text, "Godt å høre! Hva har du gjort i dag?")
+        translator.succeed("Good to hear! What did you do today?")
+        await waitUntil { !controller.isLoading }
+    }
+
     func testHidingMeaningRejectsLateResultsAndCanShowACachedTranslation() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         var saved = 0
         controller.onResult = { _, _ in saved += 1 }
         controller.update(request("Hei"))
@@ -152,12 +199,13 @@ import XCTest
 
     func testNewPassageRejectsThePreviousPassagesResponse() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         controller.update(request("Hei"))
         await waitUntil { translator.requests.count == 1 }
         controller.update(request("Ha det", passageID: "next"))
-        await waitUntil { translator.requests.count == 2 }
+        XCTAssertEqual(translator.requests.count, 1)
         translator.succeed("Hi")
+        await waitUntil { translator.requests.count == 2 }
         try? await Task.sleep(for: .milliseconds(10))
         XCTAssertEqual(controller.text, "")
         XCTAssertTrue(controller.isLoading)
@@ -166,9 +214,23 @@ import XCTest
         XCTAssertEqual(controller.text, "Goodbye")
     }
 
+    func testOldPassageFailureDoesNotShowAnErrorOverTheNextPassage() async {
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
+        controller.update(request("Hei"))
+        await waitUntil { translator.requests.count == 1 }
+        controller.update(request("Ha det", passageID: "next"))
+        translator.fail()
+        await waitUntil { translator.requests.count == 2 }
+        XCTAssertNil(controller.error)
+        translator.succeed("Goodbye")
+        await waitUntil { !controller.isLoading }
+        XCTAssertEqual(controller.text, "Goodbye")
+    }
+
     func testCorrectedTranscriptNeverDisplaysMeaningOfTheOldWords() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         controller.update(request("Jeg liker kaffe."))
         await waitUntil { translator.requests.count == 1 }
         controller.update(request("Jeg liker te.", revision: 1))
@@ -182,7 +244,7 @@ import XCTest
 
     func testFailureIsVisibleAndRetriesOnlyWhenRequested() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         controller.update(request("Hei"))
         await waitUntil { translator.requests.count == 1 }
         translator.fail()
@@ -199,9 +261,62 @@ import XCTest
         XCTAssertEqual(controller.text, "Hi!")
     }
 
+    func testRetryDoesNotCancelAnAdmittedRequest() async {
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
+        controller.update(request("Hei"))
+        await waitUntil { translator.requests.count == 1 }
+        controller.retry()
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(translator.requests.count, 1)
+        translator.succeed("Hi")
+        await waitUntil { !controller.isLoading }
+        XCTAssertEqual(controller.text, "Hi")
+    }
+
+    func testCachedNewPassageWaitsForAnAdmittedRequestBeforeFollowingSpeech() async {
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, streaming: translator.stream)
+        controller.update(request("Hei"))
+        await waitUntil { translator.requests.count == 1 }
+        controller.update(request("Ha det", passageID: "next"), cached: "Goodbye")
+        translator.partials[0]("Late hello")
+        XCTAssertEqual(controller.text, "Goodbye")
+        controller.update(request("Ha det, venn.", revision: 1, passageID: "next"))
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(translator.requests.count, 1)
+        translator.fail()
+        await waitUntil { translator.requests.count == 2 }
+        XCTAssertNil(controller.error)
+        translator.succeed("Goodbye, friend.")
+        await waitUntil { !controller.isLoading }
+        XCTAssertEqual(controller.text, "Goodbye, friend.")
+    }
+
+    func testConversationMeaningLimitDoesNotOfferADeadEndRetry() async {
+        struct Limit: LocalizedError, MeaningRetryGuidance {
+            var retryMeaningAllowed: Bool { false }
+            var errorDescription: String? { "This conversation has reached its limit for extra meanings." }
+        }
+        let translator = Translator()
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
+        controller.update(request("Hei"))
+        await waitUntil { translator.requests.count == 1 }
+        translator.fail(Limit())
+        await waitUntil { controller.error != nil }
+        XCTAssertFalse(controller.canRetry)
+        controller.retry()
+        XCTAssertEqual(translator.requests.count, 1)
+        controller.update(request("Ha det", passageID: "next"))
+        await waitUntil { translator.requests.count == 2 }
+        XCTAssertTrue(controller.canRetry)
+        translator.succeed("Goodbye")
+        await waitUntil { !controller.isLoading }
+    }
+
     func testFailureForAnExtendedCaptionClearsItsEarlierPartialMeaning() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         controller.update(request("Hei"))
         await waitUntil { translator.requests.count == 1 }
         translator.succeed("Hi")
@@ -218,9 +333,40 @@ import XCTest
         XCTAssertEqual(controller.text, "Hi, I like coffee.")
     }
 
+    func testSwitchingBetweenTagalogAndSpanishDiscardsLateMeaningsAndErrors() async {
+        for (oldID, newID) in [("tl", "es"), ("es", "tl")] {
+            for fails in [false, true] {
+                let translator = Translator()
+                let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
+                let passage = Passage(id: "same-passage", speaker: .assistant, fragments: [
+                    Fragment(speaker: .assistant, text: "Kumusta!", startMS: 0, endMS: 1000)
+                ])
+                func request(_ id: String) -> MeaningRequest {
+                    MeaningRequest(sessionID: sessionID, passage: passage, learningLanguageID: id, meaningLanguage: "English")
+                }
+                var saved: [String] = []
+                controller.onResult = { request, _ in saved.append(request.learningLanguageID) }
+                controller.update(request(oldID))
+                await waitUntil { translator.pending.count == 1 }
+                controller.update(request(newID))
+                if fails { translator.fail() } else { translator.succeed("Old meaning") }
+                await waitUntil { translator.requests.count == 2 }
+                try? await Task.sleep(for: .milliseconds(10))
+                XCTAssertEqual(controller.text, "")
+                XCTAssertNil(controller.error)
+                XCTAssertTrue(controller.isLoading)
+                XCTAssertTrue(saved.isEmpty)
+                translator.succeed("New meaning")
+                await waitUntil { !controller.isLoading }
+                XCTAssertEqual(controller.text, "New meaning")
+                XCTAssertEqual(saved, [newID])
+            }
+        }
+    }
+
     func testChangingMeaningLanguageClearsOldTextAndUsesSeparateCacheKeys() async {
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         let english = request("Hei")
         let french = request("Hei", language: "French")
         XCTAssertNotEqual(english.cacheKey, french.cacheKey)
@@ -243,7 +389,7 @@ import XCTest
     func testLongCaptionFailureIsVisibleAndOnlyCompleteRetryIsCached() async {
         let text = "UNIQUE_START " + String(repeating: "我喜欢咖啡。 ", count: 600) + " UNIQUE_END"
         let translator = Translator()
-        let controller = MeaningController(delay: .zero, translate: translator.translate)
+        let controller = MeaningController(delay: .zero, incompleteDelay: .zero, minimumSpacing: .zero, translate: translator.translate)
         var saved: [String: String] = [:]
         controller.onResult = { request, result in saved[request.cacheKey] = result.text }
         let longRequest = request(text)

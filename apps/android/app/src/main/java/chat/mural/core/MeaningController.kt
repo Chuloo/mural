@@ -127,8 +127,11 @@ class MeaningController(
         generation++; activeTranslation = null; worker?.cancel(); worker = null; isLoading = false; translating = false
     }
 
-    private fun endsSentence(value: String): Boolean =
-        value.trimEnd().trimEnd('"', '\'', '”', '’', '»', ')').lastOrNull() in setOf('.', '!', '?', '。', '！', '？', '…')
+    private fun endsSentence(value: String, languageID: String): Boolean {
+        val last = value.trimEnd().trimEnd('"', '\'', '”', '’', '»', ')').lastOrNull()
+        return last in setOf('.', '!', '?', '。', '！', '？', '…') ||
+            (languageID == "el" && last in setOf(';', ';'))
+    }
 
     private fun prepareAutomaticRetry(failure: Throwable, wait: Long): Boolean {
         val current = now()
@@ -148,7 +151,7 @@ class MeaningController(
             try {
                 val initial = desired ?: return@launch
                 val current = now()
-                val quietUntil = desiredUpdatedAt + if (finalRequested) 0 else if (endsSentence(initial.text)) delayMillis else incompleteDelayMillis
+                val quietUntil = desiredUpdatedAt + if (finalRequested) 0 else if (endsSentence(initial.text, initial.learningLanguageID)) delayMillis else incompleteDelayMillis
                 val pacedUntil = lastDispatchedAt?.let { it + minimumSpacingMillis } ?: current
                 delay((maxOf(quietUntil, pacedUntil, retryNotBefore) - current).coerceAtLeast(0))
                 val request = desired

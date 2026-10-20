@@ -13,6 +13,8 @@ export class UnconfiguredMinuteAttestor implements MinuteAttestor {
 }
 
 export const MS_PER_MINUTE = 60_000;
+/** Public free conversations must fund the provider's minimum billed duration. */
+export const MINIMUM_PUBLIC_FREE_SESSION_MS = 15_000;
 export function millisecondsForMinutes(minutes: number): number {
   if (!Number.isSafeInteger(minutes) || minutes < 0 || minutes > 1440) throw new ServiceError('invalid_minutes');
   return minutes * MS_PER_MINUTE;
@@ -53,7 +55,7 @@ export async function appendMinuteEntry(sql: PoolClient, account: string, refere
   return true;
 }
 
-export async function minuteBalance(db: Database, account: string, publicMinutes = false) {
+export async function minuteBalance(db: Pick<Database, 'query'> | PoolClient, account: string, publicMinutes = false) {
   const row = (await db.query(`SELECT COALESCE(w.balance_ms,0) AS balance_ms,COALESCE(w.reserved_ms,0) AS reserved_ms,
     COALESCE(w.sandbox_balance_ms,0) AS sandbox_ms,COALESCE(w.sandbox_reconciled,true) AS sandbox_reconciled
     FROM accounts a LEFT JOIN minute_wallets w ON w.account_id=a.id WHERE a.id=$1 AND a.deleted_at IS NULL`, [account])).rows[0];

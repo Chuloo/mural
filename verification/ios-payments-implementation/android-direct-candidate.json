@@ -1,0 +1,41 @@
+{
+  "file": "Mural-Android-direct-v10-candidate.apk",
+  "sha256": "aa1569688e61f8f54655ec3772b4dd7a8515c73a52714488172d235dd794662d",
+  "versionCode": 10,
+  "versionName": "0.1",
+  "configuration": {
+    "origin": "https://api.mural.chat",
+    "purchaseChannel": "stripe",
+    "purchaseEnvironment": "live",
+    "purchasesEnabled": true
+  },
+  "signature": {
+    "verified": true,
+    "schemes": [
+      "v2",
+      "v3"
+    ],
+    "certificateSHA256": "16cc94553e43e0d9dfbc0ac72f162eb163e7d26d330bcae455e212c0a790c022",
+    "matchesPreviousDirectV9": true,
+    "googlePlaySigning": false
+  },
+  "zipalign16KB": true,
+  "releasePayloadDebuggable": false,
+  "published": false,
+  "deviceInstallVerified": false,
+  "embeddedSecretScan": {
+    "entriesScanned": 607,
+    "patterns": [
+      "OpenAI secret key",
+      "Stripe secret or restricted key",
+      "Google OAuth client secret",
+      "GitHub token",
+      "private key material"
+    ],
+    "findings": 0,
+    "scope": "Known credential files and high-confidence secret patterns only; not proof that every possible credential format is absent."
+  },
+  "compactCheckoutVerifiedOnPhysicalSamsung": true,
+  "minimalTalkAndLaunchVerified": true,
+  "launchVerification": "Physical Samsung cold-start recording: cream directly to Talk; no static logo or separate loading orb. Android 16 launch-theme and automated startup checks also passed."
+}

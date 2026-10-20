@@ -5,6 +5,7 @@ import { connectDatabase, transaction } from '../src/db.js';
 import { migrate } from '../src/migrate.js';
 import { authenticate, deleteAccount, digest, signOut } from '../src/auth.js';
 import { createApp } from '../src/app.js';
+import { AuthAdmission } from '../src/auth-admission.js';
 import { captureWelcomeOffer, claimWelcomeMinutes, finishMinuteReservation, minuteBalance, reserveMinutes } from '../src/minutes.js';
 import { finalizeDeferredGuestLinks, linkGuestMinutes, startGuestMinutes, UnconfiguredGuestMinuteAttestor } from '../src/guest-minutes.js';
 import { applyMinuteCampaign, prepareMinuteCampaign, updateWelcomePolicy, welcomePolicy } from '../src/minutes-admin.js';
@@ -265,4 +266,51 @@ integration('an expired bearer without an accepted binding cannot link until the
   await finishMinuteReservation(f.db,hold,30000);await finalizeDeferredGuestLinks(f.db);
   assert.equal((await f.db.query("SELECT count(*) FROM minute_entries WHERE kind='welcome'")).rows[0].count,'1');
  }finally{await f.cleanup();}
+});
+
+
+integration('automatic guests can delete in-app without sign-in and cannot replay their free allowance',async()=>{
+  const f=await fixture();try{
+    const proof={installationToken:randomBytes(32).toString('base64url')};
+    const {InstallationGuestMinuteAttestor}=await import('../src/guest-minutes.js');
+    const attestor=new InstallationGuestMinuteAttestor(),guest=await startGuestMinutes(f.db,proof,attestor);
+    const service=createApp({db:f.db,auth:{}});
+    try{
+      const unconfirmed=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{authorization:`Bearer ${guest.accessToken}`},payload:{}});
+      assert.equal(unconfirmed.statusCode,400);
+      assert.equal(await authenticate(f.db,`Bearer ${guest.accessToken}`,true),guest.guestID);
+      const response=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{authorization:`Bearer ${guest.accessToken}`,'x-mural-client-ip':'192.0.2.42','x-mural-proxy-token':'d'.repeat(64)},payload:{confirmCreditAccessLoss:true}});
+      assert.equal(response.statusCode,200,response.body);
+      await assert.rejects(authenticate(f.db,`Bearer ${guest.accessToken}`,true),{code:'sign_in_required'});
+      await assert.rejects(startGuestMinutes(f.db,proof,attestor),{code:'sign_in_to_continue'});
+      assert.equal((await f.db.query('SELECT balance_ms FROM minute_wallets WHERE account_id=$1',[guest.guestID])).rows[0].balance_ms,'0');
+    }finally{await service.close();}
+  }finally{await f.cleanup();}
+});
+
+
+test('guest deletion rejects exhausted trusted networks before authentication or database access',async()=>{
+  let queries=0;
+  const db={query:async()=>{queries++;return {rows:[],rowCount:0};}} as unknown as Parameters<typeof createApp>[0]['db'];
+  const admission={hmacKey:'c'.repeat(64),proxyToken:'d'.repeat(64),allowLocalLoopback:false};
+  const service=createApp({db,auth:{},accounts:{admission:new AuthAdmission(db,admission)}});
+  const headers={'x-mural-client-ip':'192.0.2.42','x-mural-proxy-token':admission.proxyToken,
+    authorization:`Bearer ${randomBytes(32).toString('base64url')}`};
+  try{
+    for(let i=0;i<120;i++){
+      const response=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{...headers,'x-forwarded-for':`203.0.113.${i+1}`},payload:{confirmCreditAccessLoss:true}});
+      assert.equal(response.statusCode,401,response.body);
+    }
+    assert.equal(queries,120);
+    for(const url of ['/v1/guest/account','/v1/%67uest/account','/v1/guest/%61ccount']){
+      const response=await service.inject({method:'DELETE',url,headers:{...headers,'x-forwarded-for':'198.51.100.42'},payload:{confirmCreditAccessLoss:true}});
+      assert.equal(response.statusCode,429,response.body);assert.deepEqual(response.json(),{error:{code:'rate_limit'}});
+      assert.ok(Number(response.headers['retry-after'])>=1&&Number(response.headers['retry-after'])<=60);
+    }
+    assert.equal(queries,120);
+    const forged=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{...headers,'x-mural-proxy-token':'wrong'},payload:{confirmCreditAccessLoss:true}});
+    assert.equal(forged.statusCode,503);assert.equal(forged.json().error.code,'trusted_proxy_required');assert.equal(queries,120);
+    const other=await service.inject({method:'DELETE',url:'/v1/guest/account',headers:{...headers,'x-mural-client-ip':'198.51.100.42'},payload:{confirmCreditAccessLoss:true}});
+    assert.equal(other.statusCode,401);assert.equal(queries,121);
+  }finally{await service.close();}
 });

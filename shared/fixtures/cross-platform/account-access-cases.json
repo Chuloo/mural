@@ -1,0 +1,21 @@
+{
+  "balances": [
+    { "milliseconds": 0, "seconds": 0, "eligible": false },
+    { "milliseconds": 1, "seconds": 1, "eligible": true },
+    { "milliseconds": 999, "seconds": 1, "eligible": true },
+    { "milliseconds": 1000, "seconds": 1, "eligible": true },
+    { "milliseconds": 59999, "seconds": 60, "eligible": true },
+    { "milliseconds": 60000, "seconds": 60, "eligible": true },
+    { "milliseconds": 534000, "seconds": 534, "eligible": true }
+  ],
+  "providerFailures": [
+    { "status": 429, "code": "credit_balance_exhausted", "kind": "creditExhausted" },
+    { "status": 429, "code": "organization_spend_limit_exceeded", "kind": "spendLimit" },
+    { "status": 429, "code": "project_spend_limit_exceeded", "kind": "spendLimit" },
+    { "status": 429, "code": "organization_usage_limit_exceeded", "kind": "usageLimit" },
+    { "status": 429, "code": "insufficient_quota", "kind": "quota" },
+    { "status": 429, "code": "slow_down", "kind": "rateLimit" },
+    { "status": 401, "code": "insufficient_quota", "kind": "authentication" },
+    { "status": 503, "code": "server_error", "kind": "unavailable" }
+  ]
+}

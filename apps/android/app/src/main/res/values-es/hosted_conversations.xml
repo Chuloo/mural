@@ -1,6 +1,5 @@
 <resources>
     <string name="hosted_checking_previous">Mural está comprobando tu conversación anterior. Vuelve a intentarlo en unos instantes.</string>
-    <string name="hosted_not_ready">Los minutos de Mural aún no están disponibles para esta cuenta.</string>
     <string name="hosted_typed_start">Inicia una conversación de voz antes de enviar una respuesta escrita con tus minutos de Mural.</string>
     <string name="provider_preference_save_failed">No se ha podido guardar tu preferencia de conversación.</string>
     <string name="hosted_sign_in">Inicia sesión para usar tus minutos de Mural.</string>

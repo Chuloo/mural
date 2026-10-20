@@ -4,7 +4,7 @@ import MuralCore
 
 /// Sample content for native simulator captures. Never loaded on a physical device.
 @MainActor enum ScreenshotPreview {
-    enum Screen: String { case greeting, conversation, themes, words }
+    enum Screen: String { case greeting, conversation, themes, words, mandarin, italian, settings, meaning }
     static var screen: Screen? {
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("--preview"),
@@ -30,7 +30,8 @@ import MuralCore
                 let passage = record.passages[0]
                 record.assessments = [Assessment(passageID: passage.id, revisionKey: passage.revisionKey,
                     outcome: .success, suggestedLevel: 1, nextGoal: "Hablar de planes cotidianos.", capability: "",
-                    words: [WordProposal(lemma: sample.lemma, meaning: sample.meaning, form: sample.form,
+                    words: [WordProposal(lemma: sample.lemma, meaning: index == 0 && ProcessInfo.processInfo.arguments.contains("--preview-long-flashcard")
+                        ? "Used when a person wants to do something now, such as meeting a friend for coffee. It expresses a wish or preference in a relaxed conversation." : sample.meaning, form: sample.form,
                         kind: .independent, confidence: 0.95, sourceIDs: passage.fragments.map(\.id), quote: sample.quote, language: "es")],
                     createdAt: date, context: context)]
                 store.save(record)

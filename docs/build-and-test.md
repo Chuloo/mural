@@ -60,9 +60,42 @@ The generator moves a team selected in Xcode into the ignored `apps/ios/Config/L
 
 After changing audio, prompts or a language module, check a short conversation on a real iPhone: greeting, learner reply, correction, subtitles, interruption, mute and final closure. Check speaker and headphones separately. Try cellular with the Mac disconnected.
 
+Close iPhone Mirroring before live voice checks. [Apple disables access to the iPhone microphone during mirroring](https://support.apple.com/en-us/120421). Install and launch through USB, unlock the physical phone for launch, and use the phone itself for Home and screen-lock actions. The content-free reports below can be retrieved over USB without mirroring.
+
 Debug-only `--verify-audio --verify-language=<language ID>` starts two real voice sessions using the phone’s saved key. `--verify-meaning` adds the translation/reset check. These flags incur API usage, use temporary learning data, and write content-free diagnostics in the app container. Run them only when live testing is intended; they are excluded from Release builds.
 
-For German, Italian, Brazilian Portuguese or Mandarin, `--verify-audio --verify-language-flow --verify-language=<de|it|pt|zh>` runs one live session with a support-language beginner request and a more complex target-language typed reply. It checks received audio, detected target language, meanings, word lookup, supported evidence, archive decoding and switching away and back. The microphone is muted once connected. The report is `Documents/language-verification-<ID>.json`; it contains no transcript, audio or credentials. These synthetic typed turns do not verify recognition of human speech or the quality of corrections and pronunciation. Reopen the app without verification flags to return to its persistent learning record.
+For German, Italian, Brazilian Portuguese, Mandarin, Serbian, Greek or Tagalog, `--verify-audio --verify-language-flow --verify-language=<de|it|pt|zh|sr|el|tl>` runs one live session with a support-language beginner request and a more complex target-language typed reply. It checks received audio, meanings, word lookup, supported evidence, archive decoding and switching away and back. It records target-language detection separately; detection is unreliable for Tagalog. The microphone is muted once connected. The report is `Documents/language-verification-<ID>.json`; it contains no transcript, audio or credentials. These synthetic typed turns do not verify recognition of human speech or the quality of corrections and pronunciation. Reopen the app without verification flags to return to its persistent learning record.
+
+Add `--verify-background` to that iPhone flow to check two new spoken replies, a helper request and the same active session for at least 30 seconds in the background, then end it there. At `ready-for-background`, send the app Home or lock the physical phone. Up to four 12-second windows, separated by short scripted turns, allow time to act without changing the product's silence policy. This flag leaves the normal idle timer enabled. The report records background entry and protected-storage lock separately, so sending the app Home does not count as a locked-phone check. Verification uses a separate continuation checkpoint and temporary learning data. It waits for an active app and available protected storage before starting and records those conditions with the connection state.
+
+With a person ready to speak, also add `--verify-spoken-background`. Lock the phone at the cue, wait five seconds and say a short sentence. This opt-in mode unmutes the microphone after background entry and checks a non-typed user fragment and a new assistant reply before muting again. It records the lifecycle state at speech input and response, and samples reply audio before any further scripted turn. Protected-storage availability is a separate diagnostic because it may lag physical locking; record the person's confirmation that the phone stayed locked. Language quality still requires listening review. Final learning checks wait for the latest user passage's assessment, rather than accepting an earlier support-language assessment.
+
+Add `--verify-background-return` to keep the iPhone check in the background for at least 60 seconds, then wait at `ready-for-unlock` for the user to return to the same active conversation. `--verify-audio-interruption` adds a `ready-for-interruption` cue: invoke Siri on the physical phone, and verify that the OS interruption ends the call and releases its audio. Bounded synthetic turns keep the call active while waiting for the user; the temporary verification session has a five-minute limit. These flags do not change the saved learning record or the product's silence policy.
+
+On Android, the explicit live variant installs as `chat.mural.android.verification`, preserving an existing Play installation and its data. It disables purchases and account sign-in. With a connected, unlocked phone and live usage authorized, run:
+
+```sh
+cd apps/android
+./gradlew --no-daemon -Pmural.liveDeviceVerification=true \
+  -Pmural.apiOrigin=https://api.mural.chat -Pmural.minutePurchasesEnabled=false \
+  -Pandroid.testInstrumentationRunnerArguments.class=chat.mural.LiveLanguageDeviceTest \
+  -Pandroid.testInstrumentationRunnerArguments.liveVerification=true \
+  :app:connectedVoiceVerificationAndroidTest
+```
+
+This performs one brief hosted voice call per new language using the test installation's guest minutes. It checks synthetic typed input, received audio, meanings, lookup, archive decoding, switching languages, an Activity stop/resume and the notification's End action. Reports are `files/language-verification-<ID>.json` in that app's container and contain no conversation text, audio or credentials. Activity lifecycle checks do not establish behavior during actual screen lock, human speech recognition or pronunciation quality; check those separately. Ordinary Android interface tests remain offline in the separate `.uitest` installation.
+
+If public welcome minutes are unavailable, keep that spending limit unchanged. The live runner also accepts `-e personalKey true`; the owner must enter an existing key directly in **Mural Verify → Settings → Advanced → API key**. Never pass a key through test arguments or logs. Build the APKs with `:app:assembleVoiceVerification :app:assembleVoiceVerificationAndroidTest` and the same Gradle properties above, then install them with `adb install -r`. Run the installed instrumentation directly to retain the test installation and its credentials between checks:
+
+```sh
+adb shell am instrument -w -r -e class chat.mural.LiveLanguageDeviceTest \
+  -e liveVerification true -e personalKey true \
+  chat.mural.android.verification.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+For a physical screen-off check, target one method, such as `-e class 'chat.mural.LiveLanguageDeviceTest#serbian'`, and add `-e screenOff true`. Lock the Samsung at the `ready-for-lock` report. The test requires its screen to remain off for at least 30 seconds while two new replies arrive. Add `-e spokenBackground true` with a person ready to speak: lock the phone, wait five seconds, then say a short sentence. The runner checks non-typed input and new response audio while the display is off. Add `-e returnFromScreenOff true` to wait for `ready-for-unlock`, wake the device and check the same active session. Lock and wake windows last up to two minutes, with bounded synthetic turns that keep the test call active without changing the product's silence policy.
+
+Add `-e interruptAudio true` to end via an Android audio-focus interruption and verify cleanup; otherwise the notification's End action closes the call. This verifies OS audio-focus loss, not an incoming cellular call. Diagnostics count protocol event kinds, audio levels and transcript fragments without collecting their content. Each language must receive a fresh spoken response after its typed turn; greeting audio alone is insufficient. The runner restores the original preferences after failures as well as successes.
 
 Record the build, checks and remaining limitations in `verification/validation.md`. Successful API transport does not establish pronunciation quality or teaching effectiveness.
 

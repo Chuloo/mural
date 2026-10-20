@@ -41,6 +41,16 @@ class SettingsParityTest {
         File(directory, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    @Test fun guestAccountOpensWithoutAStoredMinuteCardOrAccessSelector() {
+        compose.onNodeWithTag("managed-account-settings").performClick()
+        compose.onNodeWithTag("account-sheet").assertIsDisplayed()
+        compose.onNodeWithTag("account-minute-balance").assertDoesNotExist()
+        compose.onNodeWithTag("account-conversation-source").assertDoesNotExist()
+        capture("08-guest-account")
+        compose.onNodeWithTag("account-continue-guest").performClick()
+        compose.onNodeWithTag("settings-screen").assertIsDisplayed()
+    }
+
     @Test fun groupedSettingsKeepKeyAdvancedAndRestoreSubtitleLanguageAndMinutePreferences() {
         compose.onNodeWithText(compose.activity.getString(R.string.settings_navigation_title)).assertIsDisplayed()
         compose.onNodeWithTag("settings-meaning-visible").assertIsOn()
@@ -60,12 +70,18 @@ class SettingsParityTest {
         compose.onNodeWithTag("settings-conversation-limit").performClick()
         compose.onNodeWithTag("settings-conversation-limit-30").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(30, vm.archive.preferences.sessionMinutes) }
-        settings.performScrollToNode(hasTestTag("advanced-api-key"))
-        compose.onNodeWithTag("advanced-api-key").performClick()
-        settings.performScrollToNode(hasText(compose.activity.getString(R.string.settings_key_owner_footer)))
+        settings.performScrollToNode(hasTestTag("settings-conversation-access"))
+        compose.onNodeWithTag("settings-conversation-access").performClick()
+        compose.onNodeWithTag("settings-conversation-access-PERSONAL_KEY").performClick()
+        compose.onNodeWithTag("api-key-input").assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.common_cancel)).performClick()
+        compose.runOnIdle { assertEquals(chat.mural.core.ConversationProvider.HOSTED_MINUTES, vm.conversationProvider) }
         capture("03-advanced")
-        settings.performScrollToNode(hasTestTag("settings-history"))
+        settings.performScrollToNode(hasTestTag("settings-data"))
+        compose.onNodeWithTag("settings-data").performClick()
+        compose.onNodeWithTag("settings-history").assertExists()
         capture("04-data")
+        compose.onNodeWithTag("settings-done").performClick()
         compose.onNodeWithTag("settings-done").performClick()
         compose.onNodeWithTag("settings-screen").assertDoesNotExist()
         compose.onNodeWithTag("floating-navigation").assertIsDisplayed()
@@ -77,18 +93,17 @@ class SettingsParityTest {
         compose.onNodeWithTag("settings-done").assertIsDisplayed()
         capture("05-large-text")
         val settings = compose.onNodeWithTag("settings-screen")
-        settings.performScrollToNode(hasTestTag("advanced-api-key"))
-        compose.onNodeWithTag("advanced-api-key").performClick()
-        settings.performScrollToNode(hasText(compose.activity.getString(R.string.settings_key_owner_footer)))
+        settings.performScrollToNode(hasTestTag("settings-conversation-access"))
         capture("06-large-advanced")
         settings.performScrollToNode(hasTestTag("settings-interests"))
-        compose.onNodeWithTag("settings-interests").performClick().performTextInput("Music, food, and a little travel.")
+        compose.onNodeWithTag("settings-interests").performClick()
+        compose.onNodeWithTag("settings-interests-input").performTextInput("Music, food, and a little travel.")
         compose.waitUntil(5_000) {
             compose.runOnUiThread {
                 ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
             }
         }
-        compose.onNodeWithTag("settings-interests").assertIsDisplayed()
+        compose.onNodeWithTag("settings-interests-input").assertIsDisplayed()
         capture("07-large-keyboard")
         compose.runOnIdle { assertTrue(vm.archive.preferences.interests.contains("Music, food")) }
     }

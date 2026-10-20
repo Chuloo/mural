@@ -3,33 +3,65 @@ import XCTest
 final class MuralUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    private func confirmAdult(in app: XCUIApplication) {
+        let control = app.switches["onboarding-adult-confirmation"]
+        XCTAssertTrue(control.exists)
+        if app.launchArguments.contains("UICTContentSizeCategoryAccessibilityXXXL") { reveal(control, in: app) }
+        control.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertEqual(control.value as? String, "1")
+    }
+
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<8 {
+            let viewport = app.scrollViews.firstMatch
             let footer = app.buttons["onboarding-continue"].frame
-            if element.isHittable && element.frame.minY >= 110 && element.frame.maxY < footer.minY - 16 { return }
-            app.swipeUp()
+            let top = max(110, viewport.frame.minY)
+            let bottom = min(viewport.frame.maxY, footer.minY - 4)
+            if element.isHittable && element.frame.minY >= top && element.frame.maxY < bottom { return }
+            let desiredCenter = (top + bottom) / 2
+            let shift = max(-viewport.frame.height * 0.3, min(viewport.frame.height * 0.3, desiredCenter - element.frame.midY))
+            let start = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: 0, dy: shift))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)
+    }
+
+    private func selectOnboardingLanguage(_ id: String, in app: XCUIApplication) {
+        let picker = app.buttons["onboarding-language-picker"]
+        reveal(picker, in: app)
+        picker.tap()
+        let choice = app.buttons["onboarding-language-\(id)"]
+        let menu = app.collectionViews.firstMatch
+        for _ in 0..<6 {
+            if choice.exists && choice.isHittable { break }
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            menu.swipeUp()
+        }
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        XCTAssertTrue(choice.isHittable)
+        choice.tap()
     }
 
     private func checkNewOnboarding(id: String, greeting: String) {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding"]
         app.launch()
-        let choice = app.buttons["onboarding-language-\(id)"]
-        XCTAssertTrue(choice.waitForExistence(timeout: 10))
-        reveal(choice, in: app)
-        choice.tap()
-        XCTAssertTrue(choice.isSelected)
+        let picker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        selectOnboardingLanguage(id, in: app)
+        XCTAssertTrue(picker.exists)
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Language selection - \(id)"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        confirmAdult(in: app)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["target-caption"].label, greeting)
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "Hi!")
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
+        XCTAssertEqual(app.buttons["start-conversation"].label, "Start conversation")
         if id == "zh" {
             XCTAssertEqual(app.staticTexts["pinyin-reading"].label, "nǐhǎo！")
             app.buttons["pinyin-toggle"].tap()
@@ -39,20 +71,90 @@ final class MuralUITests: XCTestCase {
         }
     }
 
+    func testTagalogOnboarding() { checkNewOnboarding(id: "tl", greeting: "Kumusta!") }
+
+    private func checkOnboardingOrangeEdge(left: Bool, agreement: Bool) {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding"]
+        app.launch()
+        let button = app.buttons["onboarding-continue"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        selectOnboardingLanguage("es", in: app)
+        if agreement {
+            button.tap()
+            XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+            confirmAdult(in: app)
+        }
+        XCTAssertTrue(button.isEnabled)
+        XCTAssertTrue(button.isHittable)
+        let appFrame = app.frame
+        // The visible capsule fills the screen minus the footer's 26-point margins.
+        let x = left ? appFrame.minX + 40 : appFrame.maxX - 40
+        let y = button.frame.midY
+        XCTAssertTrue(appFrame.contains(CGPoint(x: x, y: y)))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "\(agreement ? "Agree" : "Continue") \(left ? "left" : "right") orange edge before tap"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTContext.runActivity(named: "Tap orange edge at (\(x), \(y)); accessibility frame \(button.frame)") { _ in
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: x - appFrame.minX, dy: y - appFrame.minY)).tap()
+        }
+        if agreement {
+            XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5),
+                          "Tapping the visible orange agreement capsule must finish onboarding")
+        } else {
+            XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5),
+                          "Tapping the visible orange Continue capsule must advance to meanings")
+        }
+    }
+
+    func testOnboardingContinueRespondsToLeftOrangeEdge() {
+        checkOnboardingOrangeEdge(left: true, agreement: false)
+    }
+    func testOnboardingContinueRespondsToRightOrangeEdge() {
+        checkOnboardingOrangeEdge(left: false, agreement: false)
+    }
+    func testOnboardingAgreeRespondsToLeftOrangeEdge() {
+        checkOnboardingOrangeEdge(left: true, agreement: true)
+    }
+    func testOnboardingAgreeRespondsToRightOrangeEdge() {
+        checkOnboardingOrangeEdge(left: false, agreement: true)
+    }
+
+    func testOnboardingAgreementRemainsDisabledUntilAdultConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding"]
+        app.launch()
+        let button = app.buttons["onboarding-continue"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        button.tap()
+        XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        XCTAssertFalse(button.isEnabled)
+        button.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["onboarding-meaning-picker"].exists)
+        XCTAssertFalse(button.isEnabled)
+        confirmAdult(in: app)
+        XCTAssertTrue(button.isEnabled)
+        button.tap()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+    }
+
     func testGermanOnboarding() { checkNewOnboarding(id: "de", greeting: "Hallo!") }
     func testItalianOnboarding() { checkNewOnboarding(id: "it", greeting: "Ciao!") }
     func testBrazilianPortugueseOnboarding() { checkNewOnboarding(id: "pt", greeting: "Olá!") }
+    func testGreekOnboarding() { checkNewOnboarding(id: "el", greeting: "Γεια σου!") }
+    func testSerbianOnboarding() { checkNewOnboarding(id: "sr", greeting: "Zdravo!") }
     func testMandarinOnboardingWithOptionalPinyin() { checkNewOnboarding(id: "zh", greeting: "你好！") }
 
     func testMandarinSelectionAtLargestAccessibilityTextSize() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
-        let choice = app.buttons["onboarding-language-zh"]
-        XCTAssertTrue(choice.waitForExistence(timeout: 10))
-        reveal(choice, in: app)
-        choice.tap()
-        XCTAssertTrue(choice.isSelected)
+        let picker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        selectOnboardingLanguage("zh", in: app)
+        XCTAssertTrue(picker.exists)
         XCTAssertTrue(app.buttons["onboarding-continue"].isHittable)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
@@ -60,6 +162,7 @@ final class MuralUITests: XCTestCase {
         reveal(privacy, in: app)
         XCTAssertTrue(app.staticTexts["onboarding-ai-consent"].exists)
         XCTAssertTrue(app.buttons["onboarding-continue"].isHittable)
+        confirmAdult(in: app)
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Mandarin onboarding - largest accessibility text"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["onboarding-continue"].tap()
@@ -73,11 +176,19 @@ final class MuralUITests: XCTestCase {
             ("German · Germany", "German", "Hallo!", "Ein Kaffee?"),
             ("Italian · Italy", "Italian", "Ciao!", "Un caffè?"),
             ("Portuguese · Brazil", "Portuguese", "Olá!", "Um cafezinho?"),
-            ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？")
+            ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？"),
+            ("Tagalog (Filipino) · Philippines", "Tagalog (Filipino)", "Kumusta!", "Kape tayo?"),
+            ("Dutch · Netherlands", "Dutch", "Hoi!", "Een koffie?"),
+            ("Russian · Standard", "Russian", "Привет!", "Выпьем кофе?")
         ] {
             app.buttons["Settings"].tap()
             app.buttons["learning-language-picker"].tap()
-            app.buttons[selection].tap()
+            let choice = app.buttons[selection]
+            for _ in 0..<6 {
+                if choice.exists && choice.isHittable { break }
+                app.collectionViews.firstMatch.swipeUp()
+            }
+            choice.tap()
             app.buttons["Done"].tap()
             XCTAssertEqual(app.staticTexts["target-caption"].label, greeting)
             app.tabBars.buttons["Themes"].tap()
@@ -88,7 +199,12 @@ final class MuralUITests: XCTestCase {
         }
         app.buttons["Settings"].tap()
         app.buttons["learning-language-picker"].tap()
-        app.buttons["Norwegian · Bokmål"].tap()
+        let norwegian = app.buttons["Norwegian · Bokmål"]
+        for _ in 0..<6 {
+            if norwegian.exists && norwegian.isHittable { break }
+            app.collectionViews.firstMatch.swipeDown()
+        }
+        norwegian.tap()
         app.buttons["Done"].tap()
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
         XCTAssertFalse(app.buttons["pinyin-toggle"].exists)
@@ -103,6 +219,7 @@ final class MuralUITests: XCTestCase {
         app.buttons["onboarding-meaning-picker"].tap()
         app.buttons["Chinese (Simplified)"].tap()
         XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "你好！")
+        confirmAdult(in: app)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["meaning-caption"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "你好！")
@@ -112,7 +229,8 @@ final class MuralUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--ended-conversation", "--preview-language=zh"]
         app.launch()
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "我喜欢喝咖啡。")
         XCTAssertEqual(app.staticTexts.matching(identifier: "pinyin-reading").firstMatch.label, "wǒ xǐhuān hē kāfēi。")
         app.buttons["Conversation transcript"].tap()
@@ -121,7 +239,9 @@ final class MuralUITests: XCTestCase {
         let screen = XCTAttachment(screenshot: app.screenshot())
         screen.name = "Mandarin transcript and pinyin"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["Done"].tap()
-        app.buttons["new-conversation"].tap()
+        let greeting = NSPredicate(format: "label == %@", "你好！")
+        expectation(for: greeting, evaluatedWith: app.staticTexts["target-caption"])
+        waitForExpectations(timeout: 18)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "你好！")
         app.tabBars.buttons["Words"].tap()
         app.buttons["Past conversations"].tap()
@@ -167,6 +287,130 @@ final class MuralUITests: XCTestCase {
         }
     }
 
+    func testTagalogOnboardingAtLargestAccessibilitySizePreservesSubtitleChoice() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-onboarding", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let picker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        selectOnboardingLanguage("tl", in: app)
+        XCTAssertTrue(picker.label.contains("Tagalog (Filipino) · Philippines"))
+        reveal(picker, in: app)
+        let viewport = app.scrollViews.firstMatch.frame
+        let continueButton = app.buttons["onboarding-continue"]
+        XCTAssertGreaterThan(picker.frame.height, 0)
+        XCTAssertTrue(viewport.contains(picker.frame), "The selected language must fit inside the visible scroll area")
+        XCTAssertTrue(app.frame.contains(continueButton.frame), "Continue must fit inside the screen")
+        XCTAssertLessThan(picker.frame.maxY, continueButton.frame.minY)
+        XCTAssertTrue(continueButton.isHittable)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Tagalog onboarding - largest accessibility text"; screen.lifetime = .keepAlways; add(screen)
+        app.buttons["onboarding-continue"].tap()
+        app.buttons["onboarding-meaning-picker"].tap()
+        app.buttons["French"].tap()
+        app.buttons["onboarding-back"].tap()
+        reveal(picker, in: app)
+        XCTAssertTrue(picker.label.contains("Tagalog (Filipino)"))
+        app.buttons["onboarding-continue"].tap()
+        XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "Salut !")
+        confirmAdult(in: app)
+        app.buttons["onboarding-continue"].tap()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Kumusta!")
+        XCTAssertEqual(app.staticTexts["meaning-caption"].label, "Salut !")
+        XCTAssertFalse(app.buttons["pinyin-toggle"].exists)
+    }
+
+    func testTagalogTranscriptAndMeaningSurviveResetAndLanguageSwitch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--ended-conversation", "--preview-language=tl", "--preview-free-boundary"]
+        app.launch()
+        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 10))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Gusto ko ng kape.")
+        XCTAssertEqual(app.staticTexts["meaning-caption"].label, "I like coffee.")
+        XCTAssertFalse(app.buttons["pinyin-toggle"].exists)
+        app.buttons["Conversation transcript"].tap()
+        XCTAssertTrue(app.staticTexts["Gusto ko ng kape."].exists)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Tagalog transcript and English meaning"; screen.lifetime = .keepAlways; add(screen)
+        app.buttons["Done"].tap()
+        app.buttons["start-conversation"].tap()
+        app.buttons["new-conversation"].tap()
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Kumusta!")
+        app.buttons["Settings"].tap()
+        app.buttons["learning-language-picker"].tap()
+        app.buttons["Spanish · Spain"].tap()
+        app.buttons["Done"].tap()
+        app.tabBars.buttons["Words"].tap()
+        app.buttons["Past conversations"].tap()
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Kape tayo?")).firstMatch.exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Talk"].tap()
+        app.buttons["Settings"].tap()
+        app.buttons["learning-language-picker"].tap()
+        app.buttons["Tagalog (Filipino) · Philippines"].tap()
+        app.buttons["Done"].tap()
+        app.tabBars.buttons["Words"].tap()
+        app.buttons["Past conversations"].tap()
+        let saved = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Kape tayo?")).firstMatch
+        XCTAssertTrue(saved.exists)
+        saved.tap()
+        XCTAssertTrue(app.staticTexts["Gusto ko ng kape."].exists)
+    }
+
+    func testTagalogLanguageSwitchIsDisabledDuringConversation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--active-conversation", "--preview-language=tl"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Gusto ko ng kape.")
+        app.buttons["Settings"].tap()
+        XCTAssertFalse(app.buttons["learning-language-picker"].isEnabled)
+        XCTAssertTrue(app.staticTexts["End this conversation to switch languages. Each language keeps its own words and progress."].exists)
+    }
+
+    func testTagalogSelectionPersistsAcrossNormalRelaunch() {
+        let app = XCUIApplication()
+        addTeardownBlock {
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+            app.buttons["Settings"].tap()
+            app.buttons["learning-language-picker"].tap()
+            app.buttons["Norwegian · Bokmål"].tap()
+            app.buttons["Done"].tap()
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+            XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
+            app.terminate()
+        }
+        app.launch()
+        if app.buttons["onboarding-continue"].waitForExistence(timeout: 5) {
+            let picker = app.buttons["onboarding-language-picker"]
+            reveal(picker, in: app)
+            picker.tap()
+            app.buttons["onboarding-language-tl"].tap()
+            app.buttons["onboarding-continue"].tap()
+            confirmAdult(in: app)
+            app.buttons["onboarding-continue"].tap()
+        }
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        app.buttons["Settings"].tap()
+        app.buttons["learning-language-picker"].tap()
+        app.buttons["Tagalog (Filipino) · Philippines"].tap()
+        app.buttons["Done"].tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "Kumusta!")
+        XCTAssertFalse(app.buttons["onboarding-continue"].exists)
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.buttons["learning-language-picker"].label.contains("Tagalog (Filipino)"))
+    }
+
     private func launch(ended: Bool = false) -> XCUIApplication {
         let app = XCUIApplication(); app.launchArguments = ["--preview"] + (ended ? ["--ended-conversation"] : [])
         app.launch(); return app
@@ -175,11 +419,54 @@ final class MuralUITests: XCTestCase {
         let app = launch()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
+        XCTAssertFalse(app.staticTexts["talk-guest-minutes"].exists)
+        XCTAssertFalse(app.staticTexts["Reply in whichever language comes to you."].exists)
+        XCTAssertEqual(app.buttons["start-conversation"].label, "Start conversation")
+        let target = app.staticTexts["target-caption"].frame
+        let meaning = app.staticTexts["meaning-caption"].frame
+        XCTAssertGreaterThanOrEqual(meaning.minY, target.maxY)
+        XCTAssertLessThan(meaning.minY - target.maxY, 40)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Quiet idle Talk"; screen.lifetime = .keepAlways; add(screen)
         app.buttons["Hide meaning subtitles"].tap()
         XCTAssertFalse(app.staticTexts["meaning-caption"].exists)
         app.buttons["Show meaning subtitles"].tap()
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "Hi!")
+    }
+    func testTalkControlsStayPutWhenConversationStartsAndMeaningFails() {
+        let idle = launch()
+        let idleMicY = idle.buttons["start-conversation"].frame.midY
+        let idleMeaningY = idle.buttons["Hide meaning subtitles"].frame.midY
+        let idleTranscriptY = idle.buttons["Conversation transcript"].frame.midY
+        idle.terminate()
+
+        let active = XCUIApplication()
+        active.launchArguments = ["--preview", "--screenshot=conversation"]
+        active.launch()
+        XCTAssertTrue(active.buttons["Type instead"].waitForExistence(timeout: 10))
+        XCTAssertEqual(active.buttons["start-conversation"].frame.midY, idleMicY, accuracy: 2)
+        XCTAssertEqual(active.buttons["Hide meaning subtitles"].frame.midY, idleMeaningY, accuracy: 2)
+        XCTAssertEqual(active.buttons["End conversation"].frame.midY, idleTranscriptY, accuracy: 2)
+        active.terminate()
+
+        let failed = XCUIApplication()
+        failed.launchArguments = ["--preview", "--preview-meaning-error"]
+        failed.launch()
+        XCTAssertTrue(failed.staticTexts["meaning-error"].waitForExistence(timeout: 10))
+        XCTAssertTrue(failed.staticTexts["meaning-error"].label.contains("Meaning isn’t available yet"))
+        XCTAssertTrue(failed.buttons["Try meaning again"].exists)
+        XCTAssertEqual(failed.buttons["start-conversation"].frame.midY, idleMicY, accuracy: 2)
+        let screen = XCTAttachment(screenshot: failed.screenshot())
+        screen.name = "Meaning failure keeps Talk controls fixed"; screen.lifetime = .keepAlways; add(screen)
+        failed.terminate()
+
+        let limited = XCUIApplication()
+        limited.launchArguments = ["--preview", "--preview-meaning-limit"]
+        limited.launch()
+        XCTAssertTrue(limited.staticTexts["meaning-error"].waitForExistence(timeout: 10))
+        XCTAssertTrue(limited.staticTexts["meaning-error"].label.contains("limit for extra meanings"))
+        XCTAssertFalse(limited.buttons["Try meaning again"].exists)
     }
     func testThemeSurvivesNavigationToWords() {
         let app = launch()
@@ -190,33 +477,294 @@ final class MuralUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your words."].exists)
         app.tabBars.buttons["Talk"].tap()
         XCTAssertTrue(app.staticTexts["A coffee?"].exists)
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
     }
     func testSettingsOfferSecureKeyEntryAndBackups() {
         let app = launch()
+        XCTAssertFalse(app.staticTexts["talk-guest-minutes"].exists)
         app.buttons["Settings"].tap()
+        XCTAssertFalse(app.staticTexts["Start talking"].exists)
         if app.buttons["managed-account-settings"].exists {
             app.buttons["managed-account-settings"].tap()
             XCTAssertTrue(app.staticTexts["managed-sign-in-agreement"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.buttons["managed-google-sign-in"].isHittable || app.buttons["managed-apple-sign-in"].isHittable)
             XCTAssertFalse(app.staticTexts["managedAccountMessage"].exists)
             XCTAssertFalse(app.buttons["Buy credits"].exists)
+            XCTAssertFalse(app.staticTexts["managed-account-minutes"].exists)
             let accountScreen = XCTAttachment(screenshot: app.screenshot())
             accountScreen.name = "Configured account signup"; accountScreen.lifetime = .keepAlways; add(accountScreen)
             app.navigationBars["Account"].buttons.element(boundBy: 0).tap()
         }
         XCTAssertFalse(app.secureTextFields["api-key"].exists)
-        app.buttons["advanced-api-key"].tap()
+        app.buttons["settings-conversation-access"].tap()
+        app.buttons["My API key"].tap()
         if !app.secureTextFields["api-key"].exists { app.swipeUp() }
         XCTAssertTrue(app.secureTextFields["api-key"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Done"].exists)
+        app.navigationBars["API key"].buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["advanced-api-key"].exists)
+        XCTAssertTrue(app.staticTexts["Mural minutes"].exists)
+        app.buttons["Learning backup & data"].tap()
+        XCTAssertTrue(app.buttons["Export learning backup"].exists)
+        app.navigationBars["Learning data"].buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["start-conversation"].exists)
+    }
+
+    func testPersonalKeyKeepsAccountFreeOfMuralMetersAndUsesQuietActions() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key", "--preview-apple", "--preview-purchases"]
+        app.launch()
+        XCTAssertFalse(app.staticTexts["talk-guest-minutes"].exists)
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        XCTAssertTrue(app.staticTexts["managed-account-email"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["managed-account-minutes"].exists)
+        XCTAssertFalse(app.buttons["account-add-minutes"].exists)
+        XCTAssertTrue(app.buttons["account-purchase-history"].exists)
+        XCTAssertTrue(app.buttons["managed-account-sign-out"].isHittable)
+        XCTAssertTrue(app.buttons["Delete account…"].isHittable)
+        app.buttons["managed-account-sign-out"].tap()
+        XCTAssertTrue(app.staticTexts["Sign out on all devices?"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.8)).tap()
+        XCTAssertTrue(app.staticTexts["managed-account-email"].exists)
+    }
+
+    func testMemberMuralBalanceUsesVerifiedFixture() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-member"]
+        app.launch()
+        XCTAssertFalse(app.staticTexts["talk-guest-minutes"].exists)
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        XCTAssertTrue(app.staticTexts["managed-account-minutes"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["managed-account-minutes"].label, "8 min 54 sec")
+        XCTAssertFalse(app.buttons["settings-conversation-access"].exists)
+    }
+
+    private func purchasePreview(_ extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-member", "--preview-purchases", "-AppleLocale", "en_US", "-AppleLanguages", "(en)"] + extra
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let add = app.buttons["account-add-minutes"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        if !add.isHittable { app.swipeUp() }
+        add.tap()
+        XCTAssertTrue(app.buttons["minute-continue"].waitForExistence(timeout: 5))
+        return app
+    }
+    func testPurchaseQuantityFloorsAfterAggregationAndKeepsCheckoutStationary() {
+        let app = purchasePreview()
+        let next = app.buttons["minute-continue"]
+        XCTAssertEqual(next.label, "Continue · $7.00")
+        let position = next.frame
+        let stepper = app.steppers["minute-quantity"]
+        stepper.buttons["minute-quantity-Increment"].tap()
+        XCTAssertTrue(app.staticTexts["minute-total"].label.contains("About 73 min"))
+        XCTAssertEqual(next.label, "Continue · $14.00")
+        XCTAssertEqual(next.frame.minY, position.minY, accuracy: 1)
+        app.buttons["minute-offer-large"].tap()
+        XCTAssertEqual(next.label, "Continue · $40.00")
+        XCTAssertTrue(app.staticTexts["minute-total"].label.contains("About 232 min"))
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Apple packs - quantity two"; screen.lifetime = .keepAlways; add(screen)
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Purchase preview · no payment was made."].exists)
+    }
+    func testPurchaseControlsRemainReachableAtLargestTextSize() {
+        let app = purchasePreview(["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        XCTAssertTrue(app.buttons["minute-continue"].isHittable)
+        XCTAssertTrue(app.steppers["minute-quantity"].buttons["minute-quantity-Increment"].isHittable)
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["minute-continue"].isHittable)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Apple packs - largest text"; screen.lifetime = .keepAlways; add(screen)
+    }
+    func testPendingPurchaseDisablesAnotherCheckout() {
+        let app = purchasePreview(["--preview-purchase-pending"])
+        XCTAssertFalse(app.buttons["minute-continue"].isEnabled)
+        XCTAssertFalse(app.steppers["minute-quantity"].isEnabled)
+        XCTAssertFalse(app.buttons["minute-offer-small"].isEnabled)
+        XCTAssertTrue(app.buttons["minute-check-purchases"].isEnabled)
+    }
+    func testPurchaseHistoryKeepsRefundsAccountBoundAndUsesMinutesOnly() {
+        let app = purchasePreview([])
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["account-purchase-history"].tap()
+        XCTAssertTrue(app.staticTexts["Recent Apple purchases"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Test refund recorded"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Quantity · 2"].exists)
+        XCTAssertFalse(app.buttons["Request a refund"].firstMatch.isEnabled)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "USD")).firstMatch.exists)
+    }
+    func testPurchaseAccessibilityAudit() throws {
+        let app = purchasePreview([])
+        try app.performAccessibilityAudit(for: [.contrast, .hitRegion, .sufficientElementDescription, .textClipped, .trait])
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["account-purchase-history"].tap()
+        XCTAssertTrue(app.staticTexts["Recent Apple purchases"].waitForExistence(timeout: 5))
+        try app.performAccessibilityAudit(for: [.contrast, .hitRegion, .sufficientElementDescription, .textClipped, .trait])
+    }
+    func testFreeBoundaryPreservesConversationAndWaitsForSettlement() { checkFreeBoundary(largeText: false) }
+    func testFreeBoundaryAtLargestTextSize() { checkFreeBoundary(largeText: true) }
+    func testSettledInsufficientContinuationOpensAccountWithoutStartingACall() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-member", "--ended-conversation", "--preview-free-boundary", "--preview-continuation-insufficient"]
+        app.launch()
+        let add = app.buttons["continuation-add-minutes"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertTrue(add.isEnabled)
+        XCTAssertFalse(app.buttons["continue-conversation"].exists)
+        XCTAssertTrue(app.staticTexts["Your conversation is saved. You don’t have enough minutes to continue. Add minutes in Account when you’re ready."].exists)
+        app.buttons["Done"].tap()
+        XCTAssertFalse(add.exists)
+        XCTAssertFalse(app.staticTexts["Your conversation is saved. You don’t have enough minutes to continue. Add minutes in Account when you’re ready."].exists)
+        app.buttons["Start conversation"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["End conversation"].exists)
+    }
+    private func checkFreeBoundary(largeText: Bool) {
+        for pending in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--preview", "--ended-conversation", "--preview-free-boundary"] + (pending ? ["--preview-settlement-pending"] : []) +
+                (largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : [])
+            app.launch()
+            let next = app.buttons["continue-conversation"]
+            XCTAssertTrue(next.waitForExistence(timeout: 5))
+            XCTAssertEqual(next.isEnabled, !pending)
+            if largeText { for _ in 0..<5 { if app.buttons["new-conversation"].isHittable { break }; app.swipeUp() } }
+            XCTAssertTrue(app.buttons["new-conversation"].isHittable)
+            if !pending { XCTAssertTrue(next.isHittable) }
+            let screen = XCTAttachment(screenshot: app.screenshot())
+            screen.name = (pending ? "Free boundary - updating minutes" : "Free boundary - continue conversation") + (largeText ? " - largest text" : "")
+            screen.lifetime = .keepAlways; add(screen)
+            app.buttons["Done"].tap()
+            XCTAssertFalse(app.buttons["continue-conversation"].exists)
+            XCTAssertFalse(app.buttons["new-conversation"].exists)
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Your free minutes have ended")).firstMatch.exists)
+            XCTAssertTrue(app.staticTexts["target-caption"].exists)
+            let home = XCTAttachment(screenshot: app.screenshot()); home.name = "Minimal Talk after dismissing continuation"
+            home.lifetime = .keepAlways; add(home)
+            let microphone = app.buttons["Start conversation"]
+            if largeText { for _ in 0..<5 { if microphone.isHittable { break }; app.swipeUp() } }
+            microphone.tap()
+            XCTAssertTrue(next.waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
+    func testMixedMuralMinutesFloorTheCombinedEstimate() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-member"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let balance = app.staticTexts["managed-account-minutes"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "About 41 min")
+        XCTAssertTrue(app.staticTexts["estimated conversation time remaining"].exists)
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Account with mixed Mural minutes"; screen.lifetime = .keepAlways; add(screen)
+    }
+
+    func testPaidOnlyMuralMinutesStayAvailable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-only"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let balance = app.staticTexts["managed-account-minutes"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "About 36 min")
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Account with paid Mural minutes"; screen.lifetime = .keepAlways; add(screen)
+    }
+
+    func testPaidOnlyBalanceCanSwitchFromPersonalKey() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key", "--preview-paid-only"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        let access = app.buttons["settings-conversation-access"]
+        XCTAssertTrue(access.waitForExistence(timeout: 5))
+        access.tap()
+        app.buttons["Mural minutes"].tap()
+        let balance = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "About 36 min")).firstMatch
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        app.buttons["Use Mural minutes"].tap()
+        XCTAssertTrue(access.label.contains("Mural minutes"))
+    }
+
+    func testReservedPaidMinutesAreNotShownAsSpendable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-paid-reserved"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["managed-account-settings"].tap()
+        let balance = app.staticTexts["managed-account-minutes"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        XCTAssertEqual(balance.label, "Updating your minutes…")
+        XCTAssertTrue(app.staticTexts["Some minutes are in use"].exists)
+    }
+
+    func testProviderFailureCanSwitchFromKeyDetailsToMural() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key", "--preview-provider-quota"]
+        app.launch()
+        let review = app.alerts.buttons["Review in Advanced"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        review.tap()
+        let key = app.buttons["advanced-api-key"]
+        XCTAssertTrue(key.waitForExistence(timeout: 5))
+        key.tap()
+        app.buttons["Use Mural minutes"].tap()
+        XCTAssertTrue(app.navigationBars["Conversation access"].waitForExistence(timeout: 5))
+        let confirm = app.buttons["Use Mural minutes"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        let balance = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "8 min 54 sec")).firstMatch
+        XCTAssertTrue(balance.waitForExistence(timeout: 5))
+        confirm.tap()
+        let access = app.buttons["settings-conversation-access"]
+        XCTAssertTrue(access.waitForExistence(timeout: 5))
+        XCTAssertTrue(access.label.contains("Mural minutes"))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["start-conversation"].exists)
+    }
+
+    func testPersonalKeySwitchToMuralRequiresFreshConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-key"]
+        app.launch()
+        app.buttons["Settings"].tap()
+        let access = app.buttons["settings-conversation-access"]
+        XCTAssertTrue(access.waitForExistence(timeout: 5))
+        XCTAssertTrue(access.label.contains("My API key"))
+
+        access.tap()
+        app.buttons["Mural minutes"].tap()
+        XCTAssertTrue(app.buttons["Use Mural minutes"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(access.label.contains("My API key"))
+
+        access.tap()
+        app.buttons["Mural minutes"].tap()
+        XCTAssertTrue(app.buttons["Use Mural minutes"].waitForExistence(timeout: 5))
+        app.buttons["Use Mural minutes"].tap()
+        XCTAssertTrue(access.label.contains("Mural minutes"))
     }
 
     func testSettingsKeepLicensesInNoticesWithoutTransportDetails() {
         let app = launch()
         app.buttons["Settings"].tap()
+        for _ in 0..<6 {
+            if app.buttons["About Mural"].isHittable { break }
+            app.swipeUp()
+        }
+        app.buttons["About Mural"].tap()
         for _ in 0..<6 {
             if app.buttons["Open-source notices"].isHittable { break }
             app.swipeUp()
@@ -237,7 +785,7 @@ final class MuralUITests: XCTestCase {
         app.buttons["start-conversation"].tap()
         XCTAssertTrue(app.staticTexts["ai-consent-title"].waitForExistence(timeout: 5))
         app.buttons["ai-consent-decline"].tap()
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
         app.buttons["start-conversation"].tap()
         XCTAssertTrue(app.staticTexts["ai-consent-title"].waitForExistence(timeout: 5))
         app.buttons["ai-consent-agree"].tap()
@@ -249,16 +797,94 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.buttons["onboarding-language-fr"].exists)
     }
 
+    func testAIConsentCanBeWithdrawnAndRestoredWithoutLosingSavedWords() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-existing-user", "--screenshot=words"]
+        app.launch()
+        let savedWord = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "me apetece")).firstMatch
+        XCTAssertTrue(savedWord.waitForExistence(timeout: 5))
+        app.tabBars.buttons["Talk"].tap()
+        app.buttons["start-conversation"].tap()
+        XCTAssertTrue(app.buttons["ai-consent-agree"].waitForExistence(timeout: 5))
+        app.buttons["ai-consent-agree"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            if app.buttons["settings-ai-processing"].isHittable { break }
+            app.swipeUp()
+        }
+        app.buttons["settings-ai-processing"].tap()
+        XCTAssertTrue(app.buttons["ai-processing-withdraw"].waitForExistence(timeout: 5))
+        app.buttons["ai-processing-withdraw"].tap()
+        app.buttons.matching(identifier: "ai-processing-confirm-withdraw").firstMatch.tap()
+        XCTAssertTrue(app.buttons["ai-processing-enable"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["ai-processing-status"].label.contains("saved words and conversations remain available"))
+        app.buttons["ai-processing-done"].tap()
+        app.buttons["Done"].tap()
+        app.buttons["start-conversation"].tap()
+        XCTAssertTrue(app.staticTexts["ai-consent-title"].waitForExistence(timeout: 5))
+        app.buttons["ai-consent-decline"].tap()
+        app.tabBars.buttons["Words"].tap()
+        XCTAssertTrue(savedWord.waitForExistence(timeout: 5))
+        app.tabBars.buttons["Talk"].tap()
+        app.buttons["start-conversation"].tap()
+        app.buttons["ai-consent-agree"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    }
+
+    func testWithdrawingAIConsentEndsActiveConversationAndPreservesTranscript() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=conversation"]
+        app.launch()
+        XCTAssertEqual(app.buttons["start-conversation"].label, "Mute microphone")
+        app.buttons["Settings"].tap()
+        for _ in 0..<8 {
+            if app.buttons["settings-ai-processing"].isHittable { break }
+            app.swipeUp()
+        }
+        app.buttons["settings-ai-processing"].tap()
+        XCTAssertTrue(app.buttons["ai-processing-enable"].waitForExistence(timeout: 5))
+        app.buttons["ai-processing-enable"].tap()
+        app.buttons["ai-processing-withdraw"].tap()
+        app.buttons.matching(identifier: "ai-processing-confirm-withdraw").firstMatch.tap()
+        XCTAssertTrue(app.buttons["ai-processing-enable"].waitForExistence(timeout: 5))
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "AI processing permission withdrawn"; screen.lifetime = .keepAlways; add(screen)
+        app.buttons["ai-processing-done"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(app.buttons["start-conversation"].label, "Start conversation")
+        app.buttons["Conversation transcript"].tap()
+        XCTAssertTrue(app.staticTexts["Un café con leche, por favor."].waitForExistence(timeout: 5))
+    }
+
+    func testAIConsentActionsRemainReachableAtLargestAccessibilitySize() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-existing-user", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        app.buttons["start-conversation"].tap()
+        XCTAssertTrue(app.staticTexts["ai-consent-title"].waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            if app.buttons["ai-consent-decline"].isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.buttons["ai-consent-decline"].isHittable)
+        app.buttons["ai-consent-decline"].tap()
+        XCTAssertTrue(app.buttons["start-conversation"].exists)
+    }
+
     func testOnboardingChoosesLearningAndSubtitleLanguagesWithoutAnAccount() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding"]
         app.launch()
-        XCTAssertTrue(app.buttons["onboarding-language-fr"].waitForExistence(timeout: 10))
+        let languagePicker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(languagePicker.waitForExistence(timeout: 10))
         let languageScreen = XCTAttachment(screenshot: app.screenshot())
         languageScreen.name = "Onboarding - language"; languageScreen.lifetime = .keepAlways; add(languageScreen)
+        languagePicker.tap()
         app.buttons["onboarding-language-fr"].tap()
+        XCTAssertTrue(languagePicker.label.contains("French · France"))
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Mural speaks French")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts["onboarding-ai-consent"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "onboarding-privacy-policy").firstMatch.exists)
         XCTAssertEqual(app.buttons["onboarding-continue"].label, "Agree and continue")
@@ -267,11 +893,14 @@ final class MuralUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "¡Hola!")
         let meaningScreen = XCTAttachment(screenshot: app.screenshot())
         meaningScreen.name = "Onboarding - meanings and consent"; meaningScreen.lifetime = .keepAlways; add(meaningScreen)
+        confirmAdult(in: app)
+        XCTAssertTrue(app.buttons["onboarding-continue"].isEnabled)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["onboarding-continue"].exists)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Salut !")
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "¡Hola!")
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
         XCTAssertFalse(app.secureTextFields["api-key"].exists)
     }
 
@@ -279,7 +908,9 @@ final class MuralUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-onboarding"]
         app.launch()
-        XCTAssertTrue(app.buttons["onboarding-language-en"].waitForExistence(timeout: 10))
+        let languagePicker = app.buttons["onboarding-language-picker"]
+        XCTAssertTrue(languagePicker.waitForExistence(timeout: 10))
+        languagePicker.tap()
         app.buttons["onboarding-language-en"].tap()
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.buttons["onboarding-meaning-picker"].waitForExistence(timeout: 5))
@@ -287,9 +918,11 @@ final class MuralUITests: XCTestCase {
         app.buttons["onboarding-meaning-picker"].tap()
         app.buttons["Spanish"].tap()
         app.buttons["onboarding-back"].tap()
+        languagePicker.tap()
         app.buttons["onboarding-language-fr"].tap()
         app.buttons["onboarding-continue"].tap()
         XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, "¡Hola!")
+        confirmAdult(in: app)
         app.buttons["onboarding-continue"].tap()
         XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "¡Hola!")
@@ -300,7 +933,12 @@ final class MuralUITests: XCTestCase {
         for (selection, greeting) in [("English · International", "Hi!"), ("French · France", "Salut !")] {
             app.buttons["Settings"].tap()
             app.buttons["learning-language-picker"].tap()
-            app.buttons[selection].tap()
+            let choice = app.buttons[selection]
+            for _ in 0..<6 {
+                if choice.exists && choice.isHittable { break }
+                app.collectionViews.firstMatch.swipeUp()
+            }
+            choice.tap()
             app.buttons["Done"].tap()
             XCTAssertEqual(app.staticTexts["target-caption"].label, greeting)
         }
@@ -327,10 +965,10 @@ final class MuralUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
     }
 
-    func testMeaningLabelWorksAfterEndingAndManualResetKeepsHistory() {
+    func testMeaningLabelWorksAfterEndingAndAutomaticResetKeepsHistory() {
         let app = launch(ended: true)
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["new-conversation"].isHittable)
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         XCTAssertTrue(app.buttons["start-conversation"].isHittable)
         XCTAssertTrue(app.buttons["Conversation transcript"].isHittable)
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "I like coffee.")
@@ -338,9 +976,11 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["meaning-caption"].exists)
         app.buttons["Show meaning subtitles"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.93)).tap()
         XCTAssertEqual(app.staticTexts["meaning-caption"].label, "I like coffee.")
-        app.buttons["new-conversation"].tap()
+        let greeting = NSPredicate(format: "label == %@", "Hei!")
+        expectation(for: greeting, evaluatedWith: app.staticTexts["target-caption"])
+        waitForExpectations(timeout: 18)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Hei!")
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
         XCTAssertFalse(app.staticTexts["A coffee?"].exists)
         app.tabBars.buttons["Words"].tap()
         app.buttons["Past conversations"].tap()
@@ -349,7 +989,8 @@ final class MuralUITests: XCTestCase {
 
     func testEndedConversationAutomaticallyReturnsToGreeting() {
         let app = launch(ended: true)
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         XCTAssertEqual(app.staticTexts["target-caption"].label, "Jeg liker kaffe.")
         let ready = NSPredicate(format: "label == %@", "Ready when you are")
         expectation(for: ready, evaluatedWith: app.staticTexts["conversation-status"])
@@ -361,7 +1002,8 @@ final class MuralUITests: XCTestCase {
 
     func testOpenTranscriptRemainsReadableAfterAutomaticReset() {
         let app = launch(ended: true)
-        XCTAssertTrue(app.buttons["new-conversation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Conversation transcript"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-conversation"].exists)
         app.buttons["Conversation transcript"].tap()
         XCTAssertTrue(app.staticTexts["I like coffee."].exists)
         let delay = expectation(description: "Allow the 15-second reset to finish")
@@ -395,13 +1037,13 @@ final class MuralUITests: XCTestCase {
         app.launch()
         let ended = app.staticTexts["Mural ended this quiet session to avoid running up usage."]
         XCTAssertTrue(ended.waitForExistence(timeout: 16))
-        XCTAssertEqual(app.staticTexts["microphone-status"].label, "Microphone off")
+        XCTAssertFalse(app.staticTexts["microphone-status"].exists)
     }
     func testProviderQuotaShowsUsefulAdviceAndSafeSupportReference() {
         let app = XCUIApplication()
         app.launchArguments = ["--preview", "--preview-provider-quota"]
         app.launch()
-        let message = app.alerts.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "no available API credit")).firstMatch
+        let message = app.alerts.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "OpenAI billing needs attention")).firstMatch
         XCTAssertTrue(message.waitForExistence(timeout: 10))
         XCTAssertTrue(message.label.contains("req_support_fixture"))
         XCTAssertFalse(message.label.contains("private"))
@@ -409,6 +1051,195 @@ final class MuralUITests: XCTestCase {
         screen.name = "Provider quota error"; screen.lifetime = .keepAlways; add(screen)
         app.alerts.buttons["OK"].tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    func testHostedMinutesExhaustedOpensKeyRecovery() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-hosted-no-minutes"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        XCTAssertTrue(alert.staticTexts["No Mural minutes are available for a new conversation. Check Account or use your own API key."].exists)
+        XCTAssertTrue(alert.buttons["Check minutes"].exists)
+        alert.buttons["Use my API key"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["settings-conversation-access"].exists)
+    }
+
+    func testHostedSignInRequiredOpensAccount() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-hosted-sign-in"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        alert.buttons["Sign in"].tap()
+        XCTAssertTrue(app.staticTexts["Welcome to Mural"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["managed-apple-sign-in"].exists)
+    }
+
+    func testDutchOnboarding() { checkNewOnboarding(id: "nl", greeting: "Hoi!") }
+    func testRussianOnboarding() { checkNewOnboarding(id: "ru", greeting: "Привет!") }
+
+    func testDutchAndRussianMeaningChoicesReachTalk() {
+        for (meaning, greeting) in [("Dutch", "Hoi!"), ("Russian", "Привет!")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--preview", "--preview-onboarding"]
+            app.launch()
+            XCTAssertTrue(app.buttons["onboarding-continue"].waitForExistence(timeout: 10))
+            app.buttons["onboarding-continue"].tap()
+            app.buttons["onboarding-meaning-picker"].tap()
+            let choice = app.buttons[meaning]
+            for _ in 0..<6 {
+                if choice.exists && choice.isHittable { break }
+                app.collectionViews.firstMatch.swipeUp()
+            }
+            choice.tap()
+            XCTAssertEqual(app.staticTexts["onboarding-meaning-example"].label, greeting)
+            confirmAdult(in: app)
+            app.buttons["onboarding-continue"].tap()
+            XCTAssertTrue(app.staticTexts["meaning-caption"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.staticTexts["meaning-caption"].label, greeting)
+            app.terminate()
+        }
+    }
+
+    func testFlashcardsRevealNavigateAndIgnoreVerticalSwipes() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=words"]
+        app.launch()
+        let trigger = app.buttons["open-flashcards"]
+        XCTAssertTrue(trigger.waitForExistence(timeout: 10))
+        let heading = app.staticTexts["Your words."]
+        XCTAssertGreaterThan(trigger.frame.minX, heading.frame.maxX)
+        XCTAssertEqual(trigger.frame.midY, heading.frame.midY, accuracy: 3)
+        trigger.tap()
+        let progress = app.descendants(matching: .any)["flashcard-pager"].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5))
+        XCTAssertEqual(progress.value as? String, "1 of 4")
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
+        let card = app.descendants(matching: .any)["flashcard-pager"].firstMatch
+        let shortDrag = card
+        let start = shortDrag.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -24, dy: 0)))
+        XCTAssertEqual(progress.value as? String, "1 of 4")
+        shortDrag.swipeRight()
+        XCTAssertEqual(progress.value as? String, "1 of 4")
+        XCTAssertFalse(app.buttons["Previous word"].exists)
+        XCTAssertFalse(app.staticTexts["flashcard-progress"].exists)
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+        let originalWord = app.staticTexts["flashcard-word"].label
+        app.buttons["reveal-flashcard"].tap()
+        XCTAssertTrue(app.staticTexts["flashcard-meaning"].waitForExistence(timeout: 3))
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
+        app.buttons["reveal-flashcard"].tap()
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
+        card.swipeLeft()
+        XCTAssertEqual(progress.value as? String, "2 of 4")
+        if ProcessInfo.processInfo.environment["MURAL_EXPERIENCE_RECORDING"] == "1" { Thread.sleep(forTimeInterval: 1.5) }
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+        card.swipeUp()
+        XCTAssertEqual(progress.value as? String, "2 of 4")
+        card.swipeDown()
+        XCTAssertEqual(progress.value as? String, "2 of 4")
+        card.swipeRight()
+        XCTAssertEqual(progress.value as? String, "1 of 4")
+        XCTAssertEqual(app.staticTexts["flashcard-word"].label, originalWord)
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+        for _ in 0..<3 { card.swipeLeft() }
+        XCTAssertEqual(progress.value as? String, "4 of 4")
+        card.swipeLeft()
+        XCTAssertEqual(progress.value as? String, "4 of 4")
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Flashcards on iPhone"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["close-flashcards"].tap()
+        XCTAssertTrue(trigger.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts[originalWord].exists)
+    }
+
+    func testFlashcardsLargeTextAndLanguageIsolation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=words", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-flashcards"].waitForExistence(timeout: 10))
+        app.buttons["open-flashcards"].tap()
+        XCTAssertTrue(app.staticTexts["flashcard-word"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["close-flashcards"].isHittable)
+        app.descendants(matching: .any)["flashcard-pager"].firstMatch.swipeLeft()
+        XCTAssertEqual(app.descendants(matching: .any)["flashcard-pager"].firstMatch.value as? String, "2 of 4")
+        app.buttons["close-flashcards"].tap()
+        // Screenshot fixtures hold their initial language; use a fresh Russian preview for isolation.
+        app.terminate()
+        app.launchArguments = ["--preview", "--preview-language=ru", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        app.tabBars.buttons["Words"].tap()
+        XCTAssertTrue(app.buttons["open-flashcards"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["open-flashcards"].isEnabled)
+    }
+
+    func testFlashcardLongMeaningScrollsWithoutChangingCards() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=words", "--preview-long-flashcard", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-flashcards"].waitForExistence(timeout: 10))
+        app.buttons["open-flashcards"].tap()
+        app.buttons["reveal-flashcard"].tap()
+        let meaning = app.staticTexts["flashcard-meaning"]
+        XCTAssertTrue(meaning.waitForExistence(timeout: 5))
+        let startY = meaning.frame.minY
+        app.scrollViews.firstMatch.swipeUp()
+        XCTAssertLessThan(meaning.frame.minY, startY - 10)
+        XCTAssertEqual(app.descendants(matching: .any)["flashcard-pager"].firstMatch.value as? String, "1 of 4")
+        XCTAssertTrue(app.buttons["close-flashcards"].isHittable)
+    }
+
+    func testCaptionPauseSurvivesMeaningVisibilityAndNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-caption-following", "--preview-caption-persistence"]
+        app.launch()
+        let target = app.descendants(matching: .any)["target-passage-scroll"].firstMatch
+        let meaning = app.descendants(matching: .any)["meaning-passage-scroll"].firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 10))
+        let moved = NSPredicate { _, _ in Int((target.value as? String ?? "0").split(separator: "|").first ?? "0") ?? 0 > 20 }
+        expectation(for: moved, evaluatedWith: target)
+        waitForExpectations(timeout: 5)
+        target.swipeDown()
+        meaning.swipeDown()
+        XCTAssertTrue((target.value as? String ?? "").contains("paused"))
+        XCTAssertTrue((meaning.value as? String ?? "").contains("paused"))
+        app.buttons["Hide meaning subtitles"].tap()
+        app.buttons["Show meaning subtitles"].tap()
+        XCTAssertTrue(meaning.waitForExistence(timeout: 3))
+        XCTAssertTrue((meaning.value as? String ?? "").contains("paused"))
+        app.tabBars.buttons["Words"].tap()
+        app.tabBars.buttons["Talk"].tap()
+        XCTAssertTrue((target.value as? String ?? "").contains("paused"))
+        XCTAssertTrue((meaning.value as? String ?? "").contains("paused"))
+    }
+
+    func testCaptionsFollowPauseAcrossStreamingAndResumeNextReply() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--preview-caption-following"]
+        app.launch()
+        let target = app.descendants(matching: .any)["target-passage-scroll"].firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 10))
+        func offset() -> Int { Int((target.value as? String ?? "0").split(separator: "|").first ?? "0") ?? 0 }
+        let moving = NSPredicate { _, _ in offset() > 20 }
+        expectation(for: moving, evaluatedWith: target)
+        waitForExpectations(timeout: 5)
+        let micFrame = app.buttons["start-conversation"].frame
+        target.swipeDown()
+        XCTAssertTrue((target.value as? String ?? "").contains("paused"))
+        let paused = offset()
+        let stream = NSPredicate { _, _ in app.staticTexts["target-caption"].label.count > 600 }
+        expectation(for: stream, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        XCTAssertEqual(offset(), paused, accuracy: 2)
+        XCTAssertTrue((target.value as? String ?? "").contains("paused"))
+        XCTAssertEqual(app.buttons["start-conversation"].frame.midY, micFrame.midY, accuracy: 2)
+        let next = NSPredicate { _, _ in app.staticTexts["target-caption"].label.hasPrefix("Ещё") && offset() > 20 }
+        expectation(for: next, evaluatedWith: app)
+        waitForExpectations(timeout: 12)
+        XCTAssertFalse((target.value as? String ?? "").contains("paused"))
     }
 
 }

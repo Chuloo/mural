@@ -64,6 +64,23 @@ class PlayBillingAdapter(context: Context, private val enabled: Boolean = false,
             }
         }
     }
+    override suspend fun billingRegion(): String = withContext(Dispatchers.Main.immediate) {
+        connect()
+        timed {
+            suspendCancellableCoroutine { continuation ->
+                billing.getBillingConfigAsync(GetBillingConfigParams.newBuilder().build()) { result, config ->
+                    if (continuation.isActive) {
+                        val region = config?.countryCode
+                        if (closed || result.responseCode != BillingClient.BillingResponseCode.OK || region == null)
+                            continuation.resumeWithException(MinuteCommerceFailure.Unavailable)
+                        else if (!Regex("[A-Z]{2}").matches(region))
+                            continuation.resumeWithException(MinuteCommerceFailure.InvalidResponse)
+                        else continuation.resume(region)
+                    }
+                }
+            }
+        }
+    }
     override suspend fun offers(productIDs: List<String>): List<MinuteStoreOffer> = withContext(Dispatchers.Main.immediate) {
         if (productIDs.isEmpty() || productIDs.size > 100 || productIDs.distinct().size != productIDs.size || productIDs.any { !minuteIdentifier.matches(it) })
             throw MinuteCommerceFailure.InvalidResponse
@@ -80,9 +97,7 @@ class PlayBillingAdapter(context: Context, private val enabled: Boolean = false,
                         details.clear()
                         val mapped = response.productDetailsList.flatMap { product ->
                             if (product.productId !in productIDs || product.productType != BillingClient.ProductType.INAPP) throw MinuteCommerceFailure.InvalidResponse
-                            val offers = product.oneTimePurchaseOfferDetailsList ?: listOfNotNull(product.oneTimePurchaseOfferDetails)
-                            if (offers.size > 100) throw MinuteCommerceFailure.InvalidResponse
-                            offers.filter { it.rentalDetails == null && it.preorderDetails == null }.map { offer ->
+                            baseOffers(product).map { offer ->
                                 val handle = UUID.randomUUID().toString()
                                 val view = MinuteStoreOffer(handle, product.productId, offer.priceCurrencyCode, offer.priceAmountMicros, offer.formattedPrice)
                                 val token = offer.offerToken?.takeIf { it.isNotEmpty() }
@@ -128,14 +143,14 @@ class PlayBillingAdapter(context: Context, private val enabled: Boolean = false,
     private fun mapPurchases(purchases: List<Purchase>): List<MinuteStorePurchase> {
         if (purchases.size > 100) throw MinuteCommerceFailure.InvalidResponse
         return purchases.map { purchase ->
-            if (purchase.packageName != PACKAGE || purchase.products.size != 1 || purchase.quantity != 1 || !minuteIdentifier.matches(purchase.products.single()))
+            if (purchase.packageName != PACKAGE || purchase.products.size != 1 || purchase.quantity <= 0 || !minuteIdentifier.matches(purchase.products.single()))
                 throw MinuteCommerceFailure.InvalidResponse
             val state = when (purchase.purchaseState) {
                 Purchase.PurchaseState.PENDING -> MinuteStorePurchaseState.PENDING
                 Purchase.PurchaseState.PURCHASED -> MinuteStorePurchaseState.PURCHASED
                 else -> throw MinuteCommerceFailure.InvalidResponse
             }
-            MinuteStorePurchase(purchase.purchaseToken, state)
+            MinuteStorePurchase(purchase.purchaseToken, state, purchase.quantity)
         }
     }
     private suspend fun <T : Any> timed(block: suspend () -> T): T =
@@ -147,6 +162,12 @@ class PlayBillingAdapter(context: Context, private val enabled: Boolean = false,
     }
     companion object {
         private const val PACKAGE = "chat.mural.android"
+        internal fun baseOffers(product: ProductDetails): List<ProductDetails.OneTimePurchaseOfferDetails> {
+            val offers = product.oneTimePurchaseOfferDetailsList ?: listOfNotNull(product.oneTimePurchaseOfferDetails)
+            if (offers.size > 100) throw MinuteCommerceFailure.InvalidResponse
+            // The server verifies standard buy options. Never open a variant it cannot fulfill.
+            return offers.filter { it.offerId.isNullOrEmpty() && it.rentalDetails == null && it.preorderDetails == null }
+        }
         internal fun outcome(code: Int, updated: Boolean = false) = when (code) {
             BillingClient.BillingResponseCode.OK -> if (updated) MinuteStoreOutcome.PURCHASES_UPDATED else MinuteStoreOutcome.OPENED
             BillingClient.BillingResponseCode.USER_CANCELED -> MinuteStoreOutcome.CANCELED

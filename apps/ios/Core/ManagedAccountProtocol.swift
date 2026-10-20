@@ -4,7 +4,7 @@ import CryptoKit
 public enum ManagedIdentityProvider: String, Codable, Hashable, Sendable { case google, apple }
 
 public enum ManagedAccountError: Error, Equatable, Sendable {
-    case unavailable, invalidResponse, invalidCallback, cancelled, secureStorage, transport
+    case unavailable, purchaseVerificationUnavailable, invalidResponse, invalidCallback, cancelled, secureStorage, transport
     case server(String)
 }
 
@@ -55,7 +55,7 @@ public struct ManagedAccountConfiguration: Equatable, Sendable {
     }
 
     public func endpoint(_ path: String) throws -> URL {
-        let allowed = ["/v1/auth/challenge", "/v1/auth/exchange", "/v1/wallet", "/v1/auth/sign-out", "/v1/account"]
+        let allowed = ["/v1/auth/challenge", "/v1/auth/exchange", "/v1/wallet", "/v1/auth/sign-out", "/v1/account", "/v1/account/connect-google", "/v1/guest/account"]
         guard allowed.contains(path), var c = URLComponents(url: origin, resolvingAgainstBaseURL: false)
         else { throw ManagedAccountError.unavailable }
         c.path = path

@@ -2,44 +2,58 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { transaction, type Database } from './db.js';
 import { ServiceError } from './errors.js';
+import type { PurchaseEnvironment } from './minute-purchases.js';
 import { RATE_VERSION } from './pricing.js';
 
 type Kind = 'purchase' | 'reversal' | 'reserve' | 'settle' | 'release';
-export async function lockWallet(sql: PoolClient, account: string, requireActive = false, requireMember = false) {
+export async function lockWallet(sql: PoolClient, account: string, requireActive = false, requireMember = false, environment?:PurchaseEnvironment) {
   // Every account mutation uses this lock order, including deletion and reconciliation.
-  const owner = (await sql.query('SELECT deleted_at,is_guest FROM accounts WHERE id=$1 FOR UPDATE', [account])).rows[0];
+  const owner = (await sql.query(`SELECT deleted_at,is_guest,
+    (SELECT environment FROM deployment_environment WHERE singleton) AS environment FROM accounts WHERE id=$1 FOR UPDATE`, [account])).rows[0];
   if (!owner || (requireActive && owner.deleted_at)) throw new ServiceError('account_not_found', 404);
   if (requireMember && owner.is_guest) throw new ServiceError('sign_in_required',401);
   const result = await sql.query('SELECT * FROM wallets WHERE account_id=$1 FOR UPDATE', [account]);
   const wallet = result.rows[0];
   if (!wallet) throw new ServiceError('account_not_found', 404);
   const balance = BigInt(wallet.balance_nano), reserved = BigInt(wallet.reserved_nano);
-  const sandboxBalance = BigInt(wallet.sandbox_balance_nano), fundedBalance = balance - sandboxBalance;
-  return { balance, reserved, sandboxBalance, fundedBalance, isGuest: Boolean(owner.is_guest),
+  const sandboxBalance = BigInt(wallet.sandbox_balance_nano), sandboxFunding = (environment??owner.environment)==='test';
+  const fundedBalance = sandboxFunding ? sandboxBalance : balance - sandboxBalance;
+  const holds=(await sql.query(`SELECT
+    (SELECT COALESCE(sum(reserved_nano),0) FROM reservations WHERE account_id=$1 AND state='open' AND funding_environment=$2)+
+    (SELECT COALESCE(sum(b.cash_pool_nano),0) FROM hosted_helper_sessions b JOIN hosted_sessions h ON h.id=b.session_id
+      WHERE h.account_id=$1 AND b.funding_environment=$2) AS scoped,
+    (SELECT COALESCE(sum(reserved_nano),0) FROM reservations WHERE account_id=$1 AND state='open')+
+    (SELECT COALESCE(sum(b.cash_pool_nano),0) FROM hosted_helper_sessions b JOIN hosted_sessions h ON h.id=b.session_id
+      WHERE h.account_id=$1) AS total`,[account,sandboxFunding?'test':'live'])).rows[0];
+  // Historical/manual holds without a reservation remain unavailable in either
+  // scope until reconciled; never infer their source from the remaining balance.
+  const unknown=reserved>BigInt(holds.total)?reserved-BigInt(holds.total):0n;
+  const fundedReserved=BigInt(holds.scoped)+unknown;
+  return { balance, reserved, fundedReserved,sandboxBalance, fundedBalance, sandboxFunding, isGuest: Boolean(owner.is_guest),
     cashProvenanceVerified: Boolean(wallet.cash_provenance_verified),
-    fundedAvailable: wallet.cash_provenance_verified && fundedBalance > reserved ? fundedBalance - reserved : 0n };
+    fundedAvailable: wallet.cash_provenance_verified && fundedBalance > fundedReserved ? fundedBalance - fundedReserved : 0n };
 }
 
-export async function lockPaidWallet(sql: PoolClient, account: string, requireActive = true) {
-  const wallet = await lockWallet(sql, account, requireActive, true);
+export async function lockPaidWallet(sql: PoolClient, account: string, requireActive = true, environment?:PurchaseEnvironment) {
+  const wallet = await lockWallet(sql, account, requireActive, true,environment);
   if (!wallet.cashProvenanceVerified) throw new ServiceError('cash_balance_reconciliation_required', 409);
   return wallet;
 }
 
-export async function paidAIBalance(db: Database, account: string) {
+export async function paidAIBalance(db: Database, account: string,environment?:PurchaseEnvironment,requireMember=true) {
   return transaction(db, async sql => {
-    const wallet = await lockWallet(sql, account, true, true);
-    return { balanceNanoUSD: wallet.fundedBalance.toString(), reservedNanoUSD: wallet.reserved.toString(),
+    const wallet = await lockWallet(sql, account, true, requireMember,environment);
+    return { balanceNanoUSD: wallet.fundedBalance.toString(), reservedNanoUSD: wallet.fundedReserved.toString(),
       availableNanoUSD: wallet.fundedAvailable.toString(), cashProvenanceVerified: wallet.cashProvenanceVerified };
   });
 }
 
 /** Caller holds the account lock; only public, verified funds may back a provider attempt. */
-export async function reservePaidInTransaction(sql: PoolClient, account: string, id: string, key: string, amount: bigint, rateVersion: string) {
-  const wallet = await lockPaidWallet(sql, account);
+export async function reservePaidInTransaction(sql: PoolClient, account: string, id: string, key: string, amount: bigint, rateVersion: string,environment?:PurchaseEnvironment) {
+  const wallet = await lockPaidWallet(sql, account,true,environment);
   if (amount <= 0n || wallet.fundedAvailable < amount) throw new ServiceError('insufficient_credit', 402);
-  await sql.query('INSERT INTO reservations(id,account_id,idempotency_key,reserved_nano,rate_version) VALUES($1,$2,$3,$4,$5)',
-    [id, account, key, amount.toString(), rateVersion]);
+  await sql.query('INSERT INTO reservations(id,account_id,idempotency_key,reserved_nano,rate_version,funding_environment) VALUES($1,$2,$3,$4,$5,$6)',
+    [id, account, key, amount.toString(), rateVersion,wallet.sandboxFunding?'test':'live']);
   await appendEntry(sql, account, `reservation:${id}`, 'reserve', 0n, amount, rateVersion);
 }
 
@@ -52,13 +66,14 @@ export async function settlePaidInTransaction(sql: PoolClient, account: string, 
   if (hold.state !== 'open') throw new ServiceError('reservation_closed', 409);
   const reserved = BigInt(hold.reserved_nano);
   if (actual < 0n || actual > reserved) throw new ServiceError('usage_exceeds_reservation', 409);
-  await appendEntry(sql, account, `settlement:${id}`, 'settle', -actual, -reserved, hold.rate_version);
+  await appendEntry(sql, account, `settlement:${id}`, 'settle', -actual, -reserved, hold.rate_version,hold.funding_environment==='test'?-actual:0n);
   await sql.query("UPDATE reservations SET state='settled',actual_nano=$2 WHERE id=$1", [id, actual.toString()]);
 }
 // Internal only. There is deliberately no HTTP endpoint that creates journal entries.
 export async function appendEntry(sql: PoolClient, account: string, reference: string, kind: Kind,
   balanceDelta: bigint, reservedDelta: bigint, version: string | null = null, sandboxDelta: bigint = 0n): Promise<boolean> {
   const wallet = await lockWallet(sql, account);
+  if (wallet.sandboxFunding && kind==='settle') sandboxDelta=balanceDelta;
   const existing = (await sql.query('SELECT * FROM ledger WHERE reference=$1', [reference])).rows[0];
   if (existing) {
     if (existing.account_id !== account || existing.kind !== kind || BigInt(existing.balance_delta_nano) !== balanceDelta ||

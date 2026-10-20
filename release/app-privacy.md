@@ -1,47 +1,28 @@
-# App Privacy inventory
+# Mural iOS App Privacy inventory
 
-Source reviewed on 12 September 2026. This describes the direct-to-OpenAI BYOK build. It is a submission draft, not a claim that App Store Connect answers have been entered. Accounts, credits and hosted access require a revised inventory before release.
+Reviewed for build 1.0 (3) on 25 September 2026. The App Store Connect privacy label was published for the hosted guest trial, optional Google and Apple accounts, and personal OpenAI keys. It declares no tracking. The nine collected data types are **Email Address, Audio Data, Other User Content, Search History, User ID, Device ID, Product Interaction, Other Usage Data, and Other Diagnostic Data**. Each is declared for App Functionality and linked to the user. This conservative label includes the app's service providers and account-linked use, not only data retained in Mural's database. Apple's [privacy guidance](https://developer.apple.com/app-store/app-privacy-details/) requires third-party processing to be included.
 
-## Actual data flow
+## Payment implementation — 28 September 2026
 
-| Data | Where it lives or goes | Source |
-| --- | --- | --- |
-| Conversations, vocabulary, evidence, language preferences and interests | Local SwiftData archive; selected text and learning context go to OpenAI for conversation and teaching | `App/Storage.swift`, `App/ConversationCoordinator.swift`, `apps/ios/Core/TeachingPolicy.swift` |
-| Microphone audio | Streamed to OpenAI over WebRTC during a live conversation; no raw-audio file written by Mural | `App/LiveTransport.swift` |
-| Meaning subtitles and lookup text | Selected text sent to OpenAI; translations cached in the local conversation | `App/APIClient.swift`, `App/ConversationCoordinator.swift` |
-| Topic search requests | Sent to OpenAI’s web-search tool; topic summaries and source URLs saved locally | `App/APIClient.swift`, `App/ConversationCoordinator.swift` |
-| API key | Device-only Keychain item; used as authorization only for OpenAI requests; absent from learning exports | `App/Storage.swift`, `App/APIClient.swift` |
-| Learning backup | A user-selected JSON export can leave the sandbox through Files or the share destination; no automatic Mural upload | `App/LibraryViews.swift` |
-| Legacy migration backup | Protected file in Application Support on upgraded installations; removed by Delete all learning | `App/Storage.swift` |
-| Debug verification | Content-free local diagnostics, only in an explicitly invoked Debug verification run | `App/AudioVerification.swift` |
+The payment build adds **Purchase History**, linked to the user for App Functionality, with no tracking. This includes account-bound orders, product and quantity, storefront, currency, verified Apple transaction references, fulfillment, refunds and recovery records. Sensitive receipt references are encrypted at rest. The app sends an opaque order identifier to Apple as its purchase account token; it does not send the Mural email address for that purpose. Apple processes payment credentials; Mural does not receive full card details. Production Apple purchases remain gated pending the release checks.
 
-The current iPhone build does not connect to a Mural account database. It has no ad SDK, analytics SDK, tracking identifier collection, CloudKit sync or saved raw audio. Account and server foundations exist in source but remain disabled. Ordinary iOS device backups are controlled by the user and Apple; local storage does not mean that a user-created backup can never leave the phone.
+The manifest now includes the nine existing label types plus Purchase History. The App Store Connect label was updated and published on 28 September 2026 with all ten types. Purchase History is for App Functionality, linked to identity, and not used for tracking. The pending build 3 submission was unchanged.
 
-## Provider retention
+## Data flows
 
-`store: false` is sent for Live sessions and Responses. OpenAI’s published default includes up to 30 days of abuse-monitoring retention for those endpoints. It is separate from stored application state and is not switched off by that flag. BYOK project policies may differ. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
+| Data | Handling |
+| --- | --- |
+| Speech and selected learning text | Sent to OpenAI during live conversation, meanings, feedback and optional topic search. With hosted time, Mural's server helps start the session and passes the needed text; with a personal key, the app connects to OpenAI directly. Mural does not save raw audio or ordinary transcript text in its server database. OpenAI's abuse-monitoring retention can still apply. |
+| Local learning history | Conversations, vocabulary, evidence, language preferences and interests are kept in the iPhone's local archive. Users can export a JSON backup. Account sign-in does not sync this archive. |
+| Optional account | Mural stores a random account ID, identity provider and provider subject, verified email when supplied, account dates and hashed session credentials. Apple may supply a relay email. Credentials stay in the iPhone Keychain; provider passwords are never sent to Mural. |
+| Guest installation and time | The app creates a random installation token. Mural stores its hash, a guest identifier, trial eligibility and balance, session duration, usage and settlement records. A guest-to-account link is recorded if unused time is transferred after sign-in. |
+| Operations | Request/session IDs, timing, usage totals and bounded diagnostic events support limits, reliability and abuse prevention. Ordinary prompts, transcripts and raw audio are excluded from application logs. |
+| Personal OpenAI key | Saved in the iPhone Keychain, excluded from learning exports and not sent to Mural's server. OpenAI receives it to authorize the user's direct API requests. |
 
-## Draft App Privacy answers
+No advertising SDK or tracking identifier is enabled. Build 3 had no in-app purchases; the new payment build uses StoreKit only when its purchase configuration is enabled. The public policy is at [mural.chat/privacy](https://mural.chat/privacy/), with [privacy choices](https://mural.chat/privacy/#privacy-choices). Account deletion is available in Settings → Account; deleting local learning history is a separate Settings action. Apple's account deletion requirements and Apple authorization revocation are implemented in the client and server. [OpenAI's API data controls](https://developers.openai.com/api/docs/guides/your-data) describe provider retention, including default abuse-monitoring records that can persist for up to 30 days.
 
-Apple’s definition includes relevant third-party retention, not only the app operator’s servers. Free-form speech/text are covered by Audio Data and Other User Content; arbitrary personal details volunteered within that content do not require separately guessing every possible category. Data used only on-device is treated separately. [Apple App Privacy guidance](https://developer.apple.com/app-store/app-privacy-details/)
+## Archive checks
 
-| Category | Draft treatment | Basis and remaining check |
-| --- | --- | --- |
-| Audio Data | Collected; App Functionality; linked to user; no tracking | Sent to a provider using the user’s OpenAI account; default retention applies |
-| Other User Content | Collected; App Functionality; linked to user; no tracking | Transcripts, interests and learning context sent through the same account |
-| Search History | Collected; App Functionality; linked to user; no tracking | Current-topic searches are sent to the provider |
-| User ID / Other Usage Data | Verify provider handling before final answers | The API credential identifies a provider project; provider billing records exist, but Mural sends no separate Mural user ID |
-| Device identifiers, contacts, location, advertising, purchases | No collection by the current app | Recheck when adding authentication, payment or abuse-prevention services |
-| Customer Support | Reassess with the chosen support channel | No in-app support form currently sends content to Mural’s operator |
+`App/PrivacyInfo.xcprivacy` is bundled in the app, and the pinned WebRTC framework has its own manifest. The first-party manifest declares UserDefaults with reason `CA92.1` for app-only preferences and purchase recovery, and SystemBootTime with reason `35F9.1` for elapsed event timing and timers. No system boot timestamp is transmitted. These declarations follow [Apple’s required-reason API list](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype). Inspect both manifests in each final archive and address any upload diagnostics. The app has microphone and camera purpose strings: the voice framework references camera APIs, although Mural does not capture images or video in this version.
 
-The first-party manifest conservatively declares audio, text and search as linked because requests use the learner’s provider account. It declares no tracking. Final App Store answers must include any additional provider or future backend processing confirmed during release review. Do not use a blanket “we don’t save anything” promise for the whole service.
-
-## Privacy manifests
-
-`App/PrivacyInfo.xcprivacy` is bundled by the project generator. The source audit found no direct first-party use of Apple’s listed required-reason APIs: there is no UserDefaults, boot-time API, file-timestamp access, disk-space query or active-keyboard enumeration. Ordinary `Date` values and file existence checks do not justify inventing a reason code. The first-party accessed-API array is empty; check the final archive’s report and validation diagnostics. [Required-reason API declarations](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)
-
-The pinned WebRTC artifact includes its own manifest. It declares system-boot-time reasons `35F9.1` and `8FFB.1`, file-timestamp reason `C617.1`, no tracking and no SDK-collected data. Verify the embedded artifact after archiving; do not replace its manifest with the app’s. WebRTC was not named on Apple’s published commonly used SDK list when checked, but privacy rules and upload validation still apply. [Apple SDK requirements](https://developer.apple.com/support/third-party-SDK-requirements/)
-
-## Before accounts or credits ship
-
-Update this inventory for name/email/provider subject, entitlements, credit balance and transaction records, metering, fraud controls and operational logs. Keeping conversations on-device remains possible; a credit service cannot safely promise to retain only signup data. Document required retention and account deletion separately from deleting local learning records.
+Update this inventory and the published label before enabling purchases, new analytics, remote learning sync or any new data use. The website policy already describes conditional purchase records; that description does not mean iOS purchases are active.

@@ -13,7 +13,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Before
@@ -78,7 +77,8 @@ class MuralOnboardingTest {
 
         compose.onNodeWithTag("tab-settings").performClick()
         compose.onNodeWithTag("settings-screen").assertIsDisplayed()
-        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-ai-permission"))
+        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-about"))
+        compose.onNodeWithTag("settings-about").performClick()
         compose.onNodeWithTag("settings-ai-permission").performClick()
         compose.onNodeWithTag("review-ai-consent").performClick()
         compose.onNodeWithTag("ai-consent-title").assertIsDisplayed()
@@ -86,13 +86,10 @@ class MuralOnboardingTest {
         compose.onNodeWithTag("settings-ai-permission").performClick()
         compose.onNodeWithTag("revoke-ai-consent").assertIsDisplayed()
         compose.onNode(hasText(compose.activity.getString(R.string.common_close))).performClick()
-        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("advanced-api-key"))
-        compose.onNodeWithTag("advanced-api-key").performClick()
-
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val keyButton = hasText(context.getString(R.string.settings_save_key)) or hasText(context.getString(R.string.settings_replace_key))
-        compose.onNodeWithTag("settings-screen").performScrollToNode(keyButton)
-        compose.onNode(keyButton).performClick()
+        compose.onNodeWithTag("settings-done").performClick()
+        compose.onNodeWithTag("settings-screen").performScrollToNode(hasTestTag("settings-conversation-access"))
+        compose.onNodeWithTag("settings-conversation-access").performClick()
+        compose.onNodeWithTag("settings-conversation-access-PERSONAL_KEY").performClick()
         compose.onNodeWithTag("api-key-input")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Password, Unit))
             .performTextInput("sk-do-not-save")

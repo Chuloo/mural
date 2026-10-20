@@ -1,0 +1,1259 @@
+{
+  "version": 1,
+  "reviewedOn": "2026-10-04",
+  "identitySources": [
+    "https://unstats.un.org/unsd/methodology/m49/overview/",
+    "https://developer.apple.com/help/app-store-connect/reference/app-information/app-store-localizations",
+    "https://committee.iso.org/sites/tc211/home/standards-in-action/domes.html"
+  ],
+  "serviceAvailability": {
+    "provider": "openai",
+    "sourceURL": "https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories",
+    "reviewedOn": "2026-10-04",
+    "supportedRegionCodes": [
+      "AD",
+      "AE",
+      "AF",
+      "AG",
+      "AL",
+      "AM",
+      "AO",
+      "AR",
+      "AT",
+      "AU",
+      "AZ",
+      "BA",
+      "BB",
+      "BD",
+      "BE",
+      "BF",
+      "BG",
+      "BH",
+      "BI",
+      "BJ",
+      "BN",
+      "BO",
+      "BR",
+      "BS",
+      "BT",
+      "BW",
+      "BZ",
+      "CA",
+      "CD",
+      "CF",
+      "CG",
+      "CH",
+      "CI",
+      "CL",
+      "CM",
+      "CO",
+      "CR",
+      "CV",
+      "CY",
+      "CZ",
+      "DE",
+      "DJ",
+      "DK",
+      "DM",
+      "DO",
+      "DZ",
+      "EC",
+      "EE",
+      "EG",
+      "ER",
+      "ES",
+      "ET",
+      "FI",
+      "FJ",
+      "FM",
+      "FR",
+      "GA",
+      "GB",
+      "GD",
+      "GE",
+      "GH",
+      "GM",
+      "GN",
+      "GQ",
+      "GR",
+      "GT",
+      "GW",
+      "GY",
+      "HN",
+      "HR",
+      "HT",
+      "HU",
+      "ID",
+      "IE",
+      "IL",
+      "IN",
+      "IQ",
+      "IS",
+      "IT",
+      "JM",
+      "JO",
+      "JP",
+      "KE",
+      "KG",
+      "KH",
+      "KI",
+      "KM",
+      "KN",
+      "KR",
+      "KW",
+      "KZ",
+      "LA",
+      "LB",
+      "LC",
+      "LI",
+      "LK",
+      "LR",
+      "LS",
+      "LT",
+      "LU",
+      "LV",
+      "LY",
+      "MA",
+      "MC",
+      "MD",
+      "ME",
+      "MG",
+      "MH",
+      "MK",
+      "ML",
+      "MM",
+      "MN",
+      "MR",
+      "MT",
+      "MU",
+      "MV",
+      "MW",
+      "MX",
+      "MY",
+      "MZ",
+      "NA",
+      "NE",
+      "NG",
+      "NI",
+      "NL",
+      "NO",
+      "NP",
+      "NR",
+      "NZ",
+      "OM",
+      "PA",
+      "PE",
+      "PG",
+      "PH",
+      "PK",
+      "PL",
+      "PS",
+      "PT",
+      "PW",
+      "PY",
+      "QA",
+      "RO",
+      "RS",
+      "RW",
+      "SA",
+      "SB",
+      "SC",
+      "SD",
+      "SE",
+      "SG",
+      "SI",
+      "SK",
+      "SL",
+      "SM",
+      "SN",
+      "SO",
+      "SR",
+      "SS",
+      "ST",
+      "SV",
+      "SZ",
+      "TD",
+      "TG",
+      "TH",
+      "TJ",
+      "TL",
+      "TM",
+      "TN",
+      "TO",
+      "TR",
+      "TT",
+      "TV",
+      "TW",
+      "TZ",
+      "UA",
+      "UG",
+      "US",
+      "UY",
+      "UZ",
+      "VA",
+      "VC",
+      "VN",
+      "VU",
+      "WS",
+      "YE",
+      "ZA",
+      "ZM",
+      "ZW"
+    ],
+    "regionalRestrictions": {
+      "UA": "Provider availability has regional exceptions; this country-level catalog does not override service access controls."
+    }
+  },
+  "storefronts": [
+    {
+      "name": "Afghanistan",
+      "regionCode": "AF",
+      "storefront": "AFG",
+      "eligible": true
+    },
+    {
+      "name": "Angola",
+      "regionCode": "AO",
+      "storefront": "AGO",
+      "eligible": true
+    },
+    {
+      "name": "Anguilla",
+      "regionCode": "AI",
+      "storefront": "AIA",
+      "eligible": false
+    },
+    {
+      "name": "Albania",
+      "regionCode": "AL",
+      "storefront": "ALB",
+      "eligible": true
+    },
+    {
+      "name": "United Arab Emirates",
+      "regionCode": "AE",
+      "storefront": "ARE",
+      "eligible": true
+    },
+    {
+      "name": "Argentina",
+      "regionCode": "AR",
+      "storefront": "ARG",
+      "eligible": true
+    },
+    {
+      "name": "Armenia",
+      "regionCode": "AM",
+      "storefront": "ARM",
+      "eligible": true
+    },
+    {
+      "name": "Antigua and Barbuda",
+      "regionCode": "AG",
+      "storefront": "ATG",
+      "eligible": true
+    },
+    {
+      "name": "Australia",
+      "regionCode": "AU",
+      "storefront": "AUS",
+      "eligible": true
+    },
+    {
+      "name": "Austria",
+      "regionCode": "AT",
+      "storefront": "AUT",
+      "eligible": true
+    },
+    {
+      "name": "Azerbaijan",
+      "regionCode": "AZ",
+      "storefront": "AZE",
+      "eligible": true
+    },
+    {
+      "name": "Belgium",
+      "regionCode": "BE",
+      "storefront": "BEL",
+      "eligible": true
+    },
+    {
+      "name": "Benin",
+      "regionCode": "BJ",
+      "storefront": "BEN",
+      "eligible": true
+    },
+    {
+      "name": "Burkina Faso",
+      "regionCode": "BF",
+      "storefront": "BFA",
+      "eligible": true
+    },
+    {
+      "name": "Bulgaria",
+      "regionCode": "BG",
+      "storefront": "BGR",
+      "eligible": true
+    },
+    {
+      "name": "Bahrain",
+      "regionCode": "BH",
+      "storefront": "BHR",
+      "eligible": true
+    },
+    {
+      "name": "Bahamas",
+      "regionCode": "BS",
+      "storefront": "BHS",
+      "eligible": true
+    },
+    {
+      "name": "Bosnia and Herzegovina",
+      "regionCode": "BA",
+      "storefront": "BIH",
+      "eligible": true
+    },
+    {
+      "name": "Belarus",
+      "regionCode": "BY",
+      "storefront": "BLR",
+      "eligible": false
+    },
+    {
+      "name": "Belize",
+      "regionCode": "BZ",
+      "storefront": "BLZ",
+      "eligible": true
+    },
+    {
+      "name": "Bermuda",
+      "regionCode": "BM",
+      "storefront": "BMU",
+      "eligible": false
+    },
+    {
+      "name": "Bolivia",
+      "regionCode": "BO",
+      "storefront": "BOL",
+      "eligible": true
+    },
+    {
+      "name": "Brazil",
+      "regionCode": "BR",
+      "storefront": "BRA",
+      "eligible": true
+    },
+    {
+      "name": "Barbados",
+      "regionCode": "BB",
+      "storefront": "BRB",
+      "eligible": true
+    },
+    {
+      "name": "Brunei",
+      "regionCode": "BN",
+      "storefront": "BRN",
+      "eligible": true
+    },
+    {
+      "name": "Bhutan",
+      "regionCode": "BT",
+      "storefront": "BTN",
+      "eligible": true
+    },
+    {
+      "name": "Botswana",
+      "regionCode": "BW",
+      "storefront": "BWA",
+      "eligible": true
+    },
+    {
+      "name": "Canada",
+      "regionCode": "CA",
+      "storefront": "CAN",
+      "eligible": true
+    },
+    {
+      "name": "Switzerland",
+      "regionCode": "CH",
+      "storefront": "CHE",
+      "eligible": true
+    },
+    {
+      "name": "Chile",
+      "regionCode": "CL",
+      "storefront": "CHL",
+      "eligible": true
+    },
+    {
+      "name": "China mainland",
+      "regionCode": "CN",
+      "storefront": "CHN",
+      "eligible": false
+    },
+    {
+      "name": "Côte d’Ivoire",
+      "regionCode": "CI",
+      "storefront": "CIV",
+      "eligible": true
+    },
+    {
+      "name": "Cameroon",
+      "regionCode": "CM",
+      "storefront": "CMR",
+      "eligible": true
+    },
+    {
+      "name": "Congo, Democratic Republic of the",
+      "regionCode": "CD",
+      "storefront": "COD",
+      "eligible": true
+    },
+    {
+      "name": "Congo, Republic of the",
+      "regionCode": "CG",
+      "storefront": "COG",
+      "eligible": true
+    },
+    {
+      "name": "Colombia",
+      "regionCode": "CO",
+      "storefront": "COL",
+      "eligible": true
+    },
+    {
+      "name": "Cape Verde",
+      "regionCode": "CV",
+      "storefront": "CPV",
+      "eligible": true
+    },
+    {
+      "name": "Costa Rica",
+      "regionCode": "CR",
+      "storefront": "CRI",
+      "eligible": true
+    },
+    {
+      "name": "Cayman Islands",
+      "regionCode": "KY",
+      "storefront": "CYM",
+      "eligible": false
+    },
+    {
+      "name": "Cyprus",
+      "regionCode": "CY",
+      "storefront": "CYP",
+      "eligible": true
+    },
+    {
+      "name": "Czech Republic",
+      "regionCode": "CZ",
+      "storefront": "CZE",
+      "eligible": true
+    },
+    {
+      "name": "Germany",
+      "regionCode": "DE",
+      "storefront": "DEU",
+      "eligible": true
+    },
+    {
+      "name": "Dominica",
+      "regionCode": "DM",
+      "storefront": "DMA",
+      "eligible": true
+    },
+    {
+      "name": "Denmark",
+      "regionCode": "DK",
+      "storefront": "DNK",
+      "eligible": true
+    },
+    {
+      "name": "Dominican Republic",
+      "regionCode": "DO",
+      "storefront": "DOM",
+      "eligible": true
+    },
+    {
+      "name": "Algeria",
+      "regionCode": "DZ",
+      "storefront": "DZA",
+      "eligible": true
+    },
+    {
+      "name": "Ecuador",
+      "regionCode": "EC",
+      "storefront": "ECU",
+      "eligible": true
+    },
+    {
+      "name": "Egypt",
+      "regionCode": "EG",
+      "storefront": "EGY",
+      "eligible": true
+    },
+    {
+      "name": "Spain",
+      "regionCode": "ES",
+      "storefront": "ESP",
+      "eligible": true
+    },
+    {
+      "name": "Estonia",
+      "regionCode": "EE",
+      "storefront": "EST",
+      "eligible": true
+    },
+    {
+      "name": "Finland",
+      "regionCode": "FI",
+      "storefront": "FIN",
+      "eligible": true
+    },
+    {
+      "name": "Fiji",
+      "regionCode": "FJ",
+      "storefront": "FJI",
+      "eligible": true
+    },
+    {
+      "name": "France",
+      "regionCode": "FR",
+      "storefront": "FRA",
+      "eligible": true
+    },
+    {
+      "name": "Micronesia",
+      "regionCode": "FM",
+      "storefront": "FSM",
+      "eligible": true
+    },
+    {
+      "name": "Gabon",
+      "regionCode": "GA",
+      "storefront": "GAB",
+      "eligible": true
+    },
+    {
+      "name": "United Kingdom",
+      "regionCode": "GB",
+      "storefront": "GBR",
+      "eligible": true
+    },
+    {
+      "name": "Georgia",
+      "regionCode": "GE",
+      "storefront": "GEO",
+      "eligible": true
+    },
+    {
+      "name": "Ghana",
+      "regionCode": "GH",
+      "storefront": "GHA",
+      "eligible": true
+    },
+    {
+      "name": "Gambia",
+      "regionCode": "GM",
+      "storefront": "GMB",
+      "eligible": true
+    },
+    {
+      "name": "Guinea-Bissau",
+      "regionCode": "GW",
+      "storefront": "GNB",
+      "eligible": true
+    },
+    {
+      "name": "Greece",
+      "regionCode": "GR",
+      "storefront": "GRC",
+      "eligible": true
+    },
+    {
+      "name": "Grenada",
+      "regionCode": "GD",
+      "storefront": "GRD",
+      "eligible": true
+    },
+    {
+      "name": "Guatemala",
+      "regionCode": "GT",
+      "storefront": "GTM",
+      "eligible": true
+    },
+    {
+      "name": "Guyana",
+      "regionCode": "GY",
+      "storefront": "GUY",
+      "eligible": true
+    },
+    {
+      "name": "Hong Kong",
+      "regionCode": "HK",
+      "storefront": "HKG",
+      "eligible": false
+    },
+    {
+      "name": "Honduras",
+      "regionCode": "HN",
+      "storefront": "HND",
+      "eligible": true
+    },
+    {
+      "name": "Croatia",
+      "regionCode": "HR",
+      "storefront": "HRV",
+      "eligible": true
+    },
+    {
+      "name": "Hungary",
+      "regionCode": "HU",
+      "storefront": "HUN",
+      "eligible": true
+    },
+    {
+      "name": "Indonesia",
+      "regionCode": "ID",
+      "storefront": "IDN",
+      "eligible": true
+    },
+    {
+      "name": "India",
+      "regionCode": "IN",
+      "storefront": "IND",
+      "eligible": true
+    },
+    {
+      "name": "Ireland",
+      "regionCode": "IE",
+      "storefront": "IRL",
+      "eligible": true
+    },
+    {
+      "name": "Iraq",
+      "regionCode": "IQ",
+      "storefront": "IRQ",
+      "eligible": true
+    },
+    {
+      "name": "Iceland",
+      "regionCode": "IS",
+      "storefront": "ISL",
+      "eligible": true
+    },
+    {
+      "name": "Israel",
+      "regionCode": "IL",
+      "storefront": "ISR",
+      "eligible": true
+    },
+    {
+      "name": "Italy",
+      "regionCode": "IT",
+      "storefront": "ITA",
+      "eligible": true
+    },
+    {
+      "name": "Jamaica",
+      "regionCode": "JM",
+      "storefront": "JAM",
+      "eligible": true
+    },
+    {
+      "name": "Jordan",
+      "regionCode": "JO",
+      "storefront": "JOR",
+      "eligible": true
+    },
+    {
+      "name": "Japan",
+      "regionCode": "JP",
+      "storefront": "JPN",
+      "eligible": true
+    },
+    {
+      "name": "Kazakhstan",
+      "regionCode": "KZ",
+      "storefront": "KAZ",
+      "eligible": true
+    },
+    {
+      "name": "Kenya",
+      "regionCode": "KE",
+      "storefront": "KEN",
+      "eligible": true
+    },
+    {
+      "name": "Kyrgyzstan",
+      "regionCode": "KG",
+      "storefront": "KGZ",
+      "eligible": true
+    },
+    {
+      "name": "Cambodia",
+      "regionCode": "KH",
+      "storefront": "KHM",
+      "eligible": true
+    },
+    {
+      "name": "St. Kitts and Nevis",
+      "regionCode": "KN",
+      "storefront": "KNA",
+      "eligible": true
+    },
+    {
+      "name": "Korea, Republic of",
+      "regionCode": "KR",
+      "storefront": "KOR",
+      "eligible": true
+    },
+    {
+      "name": "Kuwait",
+      "regionCode": "KW",
+      "storefront": "KWT",
+      "eligible": true
+    },
+    {
+      "name": "Laos",
+      "regionCode": "LA",
+      "storefront": "LAO",
+      "eligible": true
+    },
+    {
+      "name": "Lebanon",
+      "regionCode": "LB",
+      "storefront": "LBN",
+      "eligible": true
+    },
+    {
+      "name": "Liberia",
+      "regionCode": "LR",
+      "storefront": "LBR",
+      "eligible": true
+    },
+    {
+      "name": "Libya",
+      "regionCode": "LY",
+      "storefront": "LBY",
+      "eligible": true
+    },
+    {
+      "name": "St. Lucia",
+      "regionCode": "LC",
+      "storefront": "LCA",
+      "eligible": true
+    },
+    {
+      "name": "Sri Lanka",
+      "regionCode": "LK",
+      "storefront": "LKA",
+      "eligible": true
+    },
+    {
+      "name": "Lithuania",
+      "regionCode": "LT",
+      "storefront": "LTU",
+      "eligible": true
+    },
+    {
+      "name": "Luxembourg",
+      "regionCode": "LU",
+      "storefront": "LUX",
+      "eligible": true
+    },
+    {
+      "name": "Latvia",
+      "regionCode": "LV",
+      "storefront": "LVA",
+      "eligible": true
+    },
+    {
+      "name": "Macau",
+      "regionCode": "MO",
+      "storefront": "MAC",
+      "eligible": false
+    },
+    {
+      "name": "Morocco",
+      "regionCode": "MA",
+      "storefront": "MAR",
+      "eligible": true
+    },
+    {
+      "name": "Moldova",
+      "regionCode": "MD",
+      "storefront": "MDA",
+      "eligible": true
+    },
+    {
+      "name": "Madagascar",
+      "regionCode": "MG",
+      "storefront": "MDG",
+      "eligible": true
+    },
+    {
+      "name": "Maldives",
+      "regionCode": "MV",
+      "storefront": "MDV",
+      "eligible": true
+    },
+    {
+      "name": "Mexico",
+      "regionCode": "MX",
+      "storefront": "MEX",
+      "eligible": true
+    },
+    {
+      "name": "North Macedonia",
+      "regionCode": "MK",
+      "storefront": "MKD",
+      "eligible": true
+    },
+    {
+      "name": "Mali",
+      "regionCode": "ML",
+      "storefront": "MLI",
+      "eligible": true
+    },
+    {
+      "name": "Malta",
+      "regionCode": "MT",
+      "storefront": "MLT",
+      "eligible": true
+    },
+    {
+      "name": "Myanmar",
+      "regionCode": "MM",
+      "storefront": "MMR",
+      "eligible": true
+    },
+    {
+      "name": "Montenegro",
+      "regionCode": "ME",
+      "storefront": "MNE",
+      "eligible": true
+    },
+    {
+      "name": "Mongolia",
+      "regionCode": "MN",
+      "storefront": "MNG",
+      "eligible": true
+    },
+    {
+      "name": "Mozambique",
+      "regionCode": "MZ",
+      "storefront": "MOZ",
+      "eligible": true
+    },
+    {
+      "name": "Mauritania",
+      "regionCode": "MR",
+      "storefront": "MRT",
+      "eligible": true
+    },
+    {
+      "name": "Montserrat",
+      "regionCode": "MS",
+      "storefront": "MSR",
+      "eligible": false
+    },
+    {
+      "name": "Mauritius",
+      "regionCode": "MU",
+      "storefront": "MUS",
+      "eligible": true
+    },
+    {
+      "name": "Malawi",
+      "regionCode": "MW",
+      "storefront": "MWI",
+      "eligible": true
+    },
+    {
+      "name": "Malaysia",
+      "regionCode": "MY",
+      "storefront": "MYS",
+      "eligible": true
+    },
+    {
+      "name": "Namibia",
+      "regionCode": "NA",
+      "storefront": "NAM",
+      "eligible": true
+    },
+    {
+      "name": "Niger",
+      "regionCode": "NE",
+      "storefront": "NER",
+      "eligible": true
+    },
+    {
+      "name": "Nigeria",
+      "regionCode": "NG",
+      "storefront": "NGA",
+      "eligible": true
+    },
+    {
+      "name": "Nicaragua",
+      "regionCode": "NI",
+      "storefront": "NIC",
+      "eligible": true
+    },
+    {
+      "name": "Netherlands",
+      "regionCode": "NL",
+      "storefront": "NLD",
+      "eligible": true
+    },
+    {
+      "name": "Norway",
+      "regionCode": "NO",
+      "storefront": "NOR",
+      "eligible": true
+    },
+    {
+      "name": "Nepal",
+      "regionCode": "NP",
+      "storefront": "NPL",
+      "eligible": true
+    },
+    {
+      "name": "Nauru",
+      "regionCode": "NR",
+      "storefront": "NRU",
+      "eligible": true
+    },
+    {
+      "name": "New Zealand",
+      "regionCode": "NZ",
+      "storefront": "NZL",
+      "eligible": true
+    },
+    {
+      "name": "Oman",
+      "regionCode": "OM",
+      "storefront": "OMN",
+      "eligible": true
+    },
+    {
+      "name": "Pakistan",
+      "regionCode": "PK",
+      "storefront": "PAK",
+      "eligible": true
+    },
+    {
+      "name": "Panama",
+      "regionCode": "PA",
+      "storefront": "PAN",
+      "eligible": true
+    },
+    {
+      "name": "Peru",
+      "regionCode": "PE",
+      "storefront": "PER",
+      "eligible": true
+    },
+    {
+      "name": "Philippines",
+      "regionCode": "PH",
+      "storefront": "PHL",
+      "eligible": true
+    },
+    {
+      "name": "Palau",
+      "regionCode": "PW",
+      "storefront": "PLW",
+      "eligible": true
+    },
+    {
+      "name": "Papua New Guinea",
+      "regionCode": "PG",
+      "storefront": "PNG",
+      "eligible": true
+    },
+    {
+      "name": "Poland",
+      "regionCode": "PL",
+      "storefront": "POL",
+      "eligible": true
+    },
+    {
+      "name": "Portugal",
+      "regionCode": "PT",
+      "storefront": "PRT",
+      "eligible": true
+    },
+    {
+      "name": "Paraguay",
+      "regionCode": "PY",
+      "storefront": "PRY",
+      "eligible": true
+    },
+    {
+      "name": "Qatar",
+      "regionCode": "QA",
+      "storefront": "QAT",
+      "eligible": true
+    },
+    {
+      "name": "Romania",
+      "regionCode": "RO",
+      "storefront": "ROU",
+      "eligible": true
+    },
+    {
+      "name": "Russia",
+      "regionCode": "RU",
+      "storefront": "RUS",
+      "eligible": false
+    },
+    {
+      "name": "Rwanda",
+      "regionCode": "RW",
+      "storefront": "RWA",
+      "eligible": true
+    },
+    {
+      "name": "Saudi Arabia",
+      "regionCode": "SA",
+      "storefront": "SAU",
+      "eligible": true
+    },
+    {
+      "name": "Senegal",
+      "regionCode": "SN",
+      "storefront": "SEN",
+      "eligible": true
+    },
+    {
+      "name": "Singapore",
+      "regionCode": "SG",
+      "storefront": "SGP",
+      "eligible": true
+    },
+    {
+      "name": "Solomon Islands",
+      "regionCode": "SB",
+      "storefront": "SLB",
+      "eligible": true
+    },
+    {
+      "name": "Sierra Leone",
+      "regionCode": "SL",
+      "storefront": "SLE",
+      "eligible": true
+    },
+    {
+      "name": "El Salvador",
+      "regionCode": "SV",
+      "storefront": "SLV",
+      "eligible": true
+    },
+    {
+      "name": "Serbia",
+      "regionCode": "RS",
+      "storefront": "SRB",
+      "eligible": true
+    },
+    {
+      "name": "São Tomé and Príncipe",
+      "regionCode": "ST",
+      "storefront": "STP",
+      "eligible": true
+    },
+    {
+      "name": "Suriname",
+      "regionCode": "SR",
+      "storefront": "SUR",
+      "eligible": true
+    },
+    {
+      "name": "Slovakia",
+      "regionCode": "SK",
+      "storefront": "SVK",
+      "eligible": true
+    },
+    {
+      "name": "Slovenia",
+      "regionCode": "SI",
+      "storefront": "SVN",
+      "eligible": true
+    },
+    {
+      "name": "Sweden",
+      "regionCode": "SE",
+      "storefront": "SWE",
+      "eligible": true
+    },
+    {
+      "name": "Eswatini",
+      "regionCode": "SZ",
+      "storefront": "SWZ",
+      "eligible": true
+    },
+    {
+      "name": "Seychelles",
+      "regionCode": "SC",
+      "storefront": "SYC",
+      "eligible": true
+    },
+    {
+      "name": "Turks and Caicos Islands",
+      "regionCode": "TC",
+      "storefront": "TCA",
+      "eligible": false
+    },
+    {
+      "name": "Chad",
+      "regionCode": "TD",
+      "storefront": "TCD",
+      "eligible": true
+    },
+    {
+      "name": "Thailand",
+      "regionCode": "TH",
+      "storefront": "THA",
+      "eligible": true
+    },
+    {
+      "name": "Tajikistan",
+      "regionCode": "TJ",
+      "storefront": "TJK",
+      "eligible": true
+    },
+    {
+      "name": "Turkmenistan",
+      "regionCode": "TM",
+      "storefront": "TKM",
+      "eligible": true
+    },
+    {
+      "name": "Tonga",
+      "regionCode": "TO",
+      "storefront": "TON",
+      "eligible": true
+    },
+    {
+      "name": "Trinidad and Tobago",
+      "regionCode": "TT",
+      "storefront": "TTO",
+      "eligible": true
+    },
+    {
+      "name": "Tunisia",
+      "regionCode": "TN",
+      "storefront": "TUN",
+      "eligible": true
+    },
+    {
+      "name": "Türkiye",
+      "regionCode": "TR",
+      "storefront": "TUR",
+      "eligible": true
+    },
+    {
+      "name": "Taiwan",
+      "regionCode": "TW",
+      "storefront": "TWN",
+      "eligible": true
+    },
+    {
+      "name": "Tanzania",
+      "regionCode": "TZ",
+      "storefront": "TZA",
+      "eligible": true
+    },
+    {
+      "name": "Uganda",
+      "regionCode": "UG",
+      "storefront": "UGA",
+      "eligible": true
+    },
+    {
+      "name": "Ukraine",
+      "regionCode": "UA",
+      "storefront": "UKR",
+      "eligible": true
+    },
+    {
+      "name": "Uruguay",
+      "regionCode": "UY",
+      "storefront": "URY",
+      "eligible": true
+    },
+    {
+      "name": "United States",
+      "regionCode": "US",
+      "storefront": "USA",
+      "eligible": true
+    },
+    {
+      "name": "Uzbekistan",
+      "regionCode": "UZ",
+      "storefront": "UZB",
+      "eligible": true
+    },
+    {
+      "name": "St. Vincent and the Grenadines",
+      "regionCode": "VC",
+      "storefront": "VCT",
+      "eligible": true
+    },
+    {
+      "name": "Venezuela",
+      "regionCode": "VE",
+      "storefront": "VEN",
+      "eligible": false
+    },
+    {
+      "name": "British Virgin Islands",
+      "regionCode": "VG",
+      "storefront": "VGB",
+      "eligible": false
+    },
+    {
+      "name": "Vietnam",
+      "regionCode": "VN",
+      "storefront": "VNM",
+      "eligible": true
+    },
+    {
+      "name": "Vanuatu",
+      "regionCode": "VU",
+      "storefront": "VUT",
+      "eligible": true
+    },
+    {
+      "name": "Kosovo",
+      "regionCode": "XK",
+      "storefront": "XKS",
+      "eligible": false
+    },
+    {
+      "name": "Yemen",
+      "regionCode": "YE",
+      "storefront": "YEM",
+      "eligible": true
+    },
+    {
+      "name": "South Africa",
+      "regionCode": "ZA",
+      "storefront": "ZAF",
+      "eligible": true
+    },
+    {
+      "name": "Zambia",
+      "regionCode": "ZM",
+      "storefront": "ZMB",
+      "eligible": true
+    },
+    {
+      "name": "Zimbabwe",
+      "regionCode": "ZW",
+      "storefront": "ZWE",
+      "eligible": true
+    }
+  ]
+}
