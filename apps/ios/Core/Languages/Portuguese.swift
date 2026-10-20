@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let portuguese = LanguageModule(
-        id: "pt", name: "Portuguese", nativeName: "Português", variety: "Brazil", locale: "pt-BR",
+        id: "pt", name: "Portuguese", nativeName: "Português", variety: "Brazil", locale: "pt-BR", usesPlatformWordSegmentation: false,
         greeting: "Olá!", greetingWord: "olá",
         speechGuidance: "Use clear, natural Brazilian Portuguese with broadly intelligible pronunciation and consistent Brazilian vocabulary. Use você in friendly conversation and formal address when appropriate. Accept valid uses of tu, regional Brazilian accents and grammar, and European, African and other Portuguese varieties without marking them wrong. Do not imitate a regional caricature or infer pronunciation errors from a transcript alone.",
         writingGuidance: "Use standard contemporary Brazilian Portuguese spelling, accents, ã, õ and ç. Prefer everyday Brazilian wording, including a gente and conversational pronoun placement when natural. Accept valid regional and European Portuguese usage from the learner.",

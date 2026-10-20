@@ -1,5 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
+import WebKit
 import MuralCore
 
 struct ThemesView: View {
@@ -72,7 +74,7 @@ struct CurrentTopicView: View {
                     if let error { Text(error).font(.footnote).foregroundStyle(MuralColor.secondary) }
                     if let brief {
                         Text(.init(brief.text)).font(.body).textSelection(.enabled)
-                        SourcesView(sources: brief.sources, date: brief.retrievedAt)
+                        SourcesView(sources: brief.sources, date: brief.retrievedAt, searchEntryPointHTML: brief.searchEntryPointHTML)
                         Button("Talk about this", systemImage: "waveform") { coordinator.discuss(brief); selected(); dismiss() }
                             .font(.headline).padding(18).frame(maxWidth: .infinity).background(MuralColor.orange, in: Capsule())
                     }
@@ -181,10 +183,55 @@ struct WordDetailView: View {
 struct SourcesView: View {
     var sources: [SourceLink]
     var date: Date
+    var searchEntryPointHTML: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let searchEntryPointHTML, !searchEntryPointHTML.isEmpty {
+                Text("Google Search suggestions").font(.caption).foregroundStyle(MuralColor.secondary)
+                GoogleSearchSuggestionsView(html: searchEntryPointHTML).frame(height: 100).clipShape(RoundedRectangle(cornerRadius: 14))
+            }
             Text("Sources · \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(MuralColor.secondary)
             ForEach(sources) { source in if let url = source.safeURL { Link(destination: url) { Label(source.title, systemImage: "arrow.up.right").font(.subheadline) } } }
+        }
+    }
+}
+
+struct GoogleSearchSuggestionsView: UIViewRepresentable {
+    let html: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.preferences.javaScriptEnabled = false
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.isOpaque = false
+        view.backgroundColor = .clear
+        view.scrollView.isScrollEnabled = false
+        view.navigationDelegate = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: WKWebView, context: Context) {
+        guard context.coordinator.loadedHTML != html else { return }
+        context.coordinator.loadedHTML = html
+        let policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">"
+        view.loadHTMLString(policy + html, baseURL: URL(string: "https://www.google.com"))
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var loadedHTML: String?
+
+        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard action.navigationType == .linkActivated,
+                  let url = action.request.url,
+                  url.scheme == "https",
+                  url.host != nil else {
+                decisionHandler(.cancel)
+                return
+            }
+            UIApplication.shared.open(url)
+            decisionHandler(.cancel)
         }
     }
 }
@@ -209,7 +256,7 @@ struct TranscriptView: View {
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        ForEach(session.topics) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt) }
+                        ForEach(session.topics) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt, searchEntryPointHTML: topic.searchEntryPointHTML) }
                         if session.fragments.isEmpty && session.topics.isEmpty { Text("Your conversation will appear here.").foregroundStyle(MuralColor.secondary) }
                     } else { Text("Start a conversation and your words will appear here.") }
                 }.padding(26)
@@ -280,7 +327,7 @@ struct EditableTranscriptView: View {
                             if session?.languageID == "zh" { PinyinHelp(text: passage.text) }
                         }
                     }
-                    ForEach(session?.topics ?? []) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt) }
+                    ForEach(session?.topics ?? []) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt, searchEntryPointHTML: topic.searchEntryPointHTML) }
                 }.padding(26)
             }.background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .navigationTitle("Our conversation").navigationBarTitleDisplayMode(.inline)
@@ -361,13 +408,20 @@ struct SettingsView: View {
                     NavigationLink("Learning backup & data") { LearningBackupView(coordinator: coordinator) }
                 }
                 Section {
+                    Picker("Personal key provider", selection: Binding(get: { coordinator.aiProvider }, set: { provider in
+                        coordinator.selectAIProvider(provider)
+                        hasKey = Self.initialHasKey(provider: provider)
+                    })) {
+                        ForEach(AIProvider.allCases) { provider in Text(provider.title).tag(provider) }
+                    }.pickerStyle(.menu).disabled(coordinator.isRunning)
+                        .accessibilityIdentifier("settings-ai-provider")
                     Picker("Conversation access", selection: Binding(get: { coordinator.conversationProvider }, set: chooseProvider)) {
                         Text("Mural minutes").tag(ConversationProvider.hosted)
                         Text("My API key").tag(ConversationProvider.personalKey)
                     }.pickerStyle(.menu).disabled(coordinator.isRunning)
                         .accessibilityIdentifier("settings-conversation-access")
                     if coordinator.conversationProvider == .personalKey {
-                        Text("No Mural minute limit. OpenAI bills your account for usage.")
+                        Text("No Mural minute limit. \(coordinator.aiProvider.title) bills your account for usage.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     }
                     if hasKey || coordinator.conversationProvider == .personalKey {
@@ -386,7 +440,7 @@ struct SettingsView: View {
                     if coordinator.conversationProvider == .personalKey {
                         LabeledContent("Recorded voice time", value: "\(Int(store.sessions.reduce(0) { $0 + $1.voiceSeconds }) / 60) min")
                         LabeledContent("Search calls recorded", value: "\(store.sessions.reduce(0) { $0 + $1.searchCalls })")
-                        Text("Activity recorded on this iPhone; your OpenAI dashboard is authoritative for usage and charges.")
+                        Text("Activity recorded on this iPhone; your \(coordinator.aiProvider.title) dashboard is authoritative for usage and charges.")
                             .font(.footnote).foregroundStyle(MuralColor.secondary)
                     }
                 } header: { Text("Advanced") }.id("advanced-section")
@@ -402,7 +456,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settings-privacy-policy")
                     Link("Terms of use", destination: URL(string: "https://mural.chat/terms/")!)
                         .accessibilityIdentifier("settings-terms")
-                    NavigationLink("About Mural") { AboutMuralView() }
+                    NavigationLink("About Mural") { AboutMuralView(provider: coordinator.aiProvider) }
                 }
             }
             .scrollContentBackground(.hidden).background(MuralColor.cream).tint(MuralColor.ink)
@@ -412,6 +466,7 @@ struct SettingsView: View {
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .onAppear {
+                hasKey = Self.initialHasKey(provider: coordinator.aiProvider)
                 if coordinator.requestAccountFocus {
                     coordinator.requestAccountFocus = false
                     DispatchQueue.main.async { showingAccount = true }
@@ -440,7 +495,7 @@ struct SettingsView: View {
         .confirmationDialog("Use your API key?", isPresented: $confirmingPersonalKey, titleVisibility: .visible) {
             Button("Use my key") { coordinator.selectConversationProvider(.personalKey) }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("OpenAI bills your account for usage. Mural minutes stay available if you switch back later.") }
+        } message: { Text("\(coordinator.aiProvider.title) bills your account for usage. Mural minutes stay available if you switch back later.") }
         .task { account.refresh() }
     }
     private func chooseProvider(_ provider: ConversationProvider) {
@@ -449,13 +504,13 @@ struct SettingsView: View {
         else if hasKey { confirmingPersonalKey = true }
         else { saveAndUseKey = true; showingKey = true }
     }
-    private static func initialHasKey() -> Bool {
+    private static func initialHasKey(provider: AIProvider = AIProviderSelection.current) -> Bool {
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("--preview") {
             return ProcessInfo.processInfo.arguments.contains("--preview-key")
         }
         #endif
-        return CredentialStore.hasKey
+        return CredentialStore.hasKey(for: provider)
     }
 }
 
@@ -467,7 +522,7 @@ private extension ProviderFailureKind {
         case .usageLimit: "Usage limit reached"
         case .quota: "Billing needs attention"
         case .authentication: "Key not accepted"
-        default: "OpenAI needs attention"
+        default: "AI provider needs attention"
         }
     }
 }
@@ -506,10 +561,10 @@ private struct OpenAIKeyView: View {
                     do {
                         #if DEBUG && targetEnvironment(simulator)
                         if !ProcessInfo.processInfo.arguments.contains("--preview") {
-                            try CredentialStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
+                            try CredentialStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines), for: coordinator.aiProvider)
                         }
                         #else
-                        try CredentialStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
+                        try CredentialStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines), for: coordinator.aiProvider)
                         #endif
                         key = ""; hasKey = true; coordinator.clearPersonalKeyFailure()
                         if useAfterSave { coordinator.selectConversationProvider(.personalKey) }
@@ -520,9 +575,9 @@ private struct OpenAIKeyView: View {
                     Button("Remove key", role: .destructive) { removing = true }
                         .disabled(coordinator.isRunning)
                 }
-            } footer: { Text("No Mural minute limit. OpenAI bills your account for usage. The key stays in this iPhone’s Keychain and goes only to OpenAI.") }
+            } footer: { Text("No Mural minute limit. \(coordinator.aiProvider.title) bills your account for usage. The key stays in this iPhone’s Keychain and goes only to \(coordinator.aiProvider.title).") }
             if let failure = coordinator.personalKeyFailure {
-                Section("OpenAI issue") {
+                Section("\(coordinator.aiProvider.title) issue") {
                     Text(failure.localizedDescription)
                     if coordinator.conversationProvider == .personalKey {
                         Button("Use Mural minutes") { dismiss(); coordinator.requestHostedSwitch = true }
@@ -531,8 +586,8 @@ private struct OpenAIKeyView: View {
             }
             if let message { Section { Text(message).foregroundStyle(MuralColor.secondary) } }
             Section {
-                Link("Manage API keys", destination: URL(string: "https://platform.openai.com/api-keys")!)
-                Link("Usage and billing", destination: URL(string: "https://platform.openai.com/usage")!)
+                Link("Manage API keys", destination: coordinator.aiProvider.keyURL)
+                Link("Usage and billing", destination: coordinator.aiProvider.usageURL)
             }
         }.scrollContentBackground(.hidden).background(MuralColor.cream)
             .navigationTitle("API key").navigationBarTitleDisplayMode(.inline)
@@ -541,9 +596,9 @@ private struct OpenAIKeyView: View {
                 Button("Remove key", role: .destructive) {
                     do {
                         #if DEBUG && targetEnvironment(simulator)
-                        if !ProcessInfo.processInfo.arguments.contains("--preview") { try CredentialStore.delete() }
+                        if !ProcessInfo.processInfo.arguments.contains("--preview") { try CredentialStore.delete(for: coordinator.aiProvider) }
                         #else
-                        try CredentialStore.delete()
+                        try CredentialStore.delete(for: coordinator.aiProvider)
                         #endif
                         hasKey = false; key = ""
                         coordinator.clearPersonalKeyFailure()
@@ -578,7 +633,7 @@ private struct HostedAccessSwitchView: View {
                     else { Text("Couldn’t check your minutes. Try again.") }
                     if failed { Text("Your minutes changed. Check again before switching.").foregroundStyle(MuralColor.secondary) }
                     if !checking && available == nil { Button("Try again") { Task { await check() } } }
-                } header: { Text("Mural minutes") } footer: { Text("Your saved OpenAI key will remain on this iPhone. Switching changes the next conversation only.") }
+                } header: { Text("Mural minutes") } footer: { Text("Your saved \(coordinator.aiProvider.title) key will remain on this iPhone. Switching changes the next conversation only.") }
                 if let available, available.canStart, !checking {
                     Section {
                         Button("Use Mural minutes") {
@@ -647,16 +702,17 @@ private struct LearningBackupView: View {
 }
 
 private struct AboutMuralView: View {
+    let provider: AIProvider
     @State private var notices = false
     var body: some View {
         Form {
             Section {
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                Link("AI Data Controls", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                Link("AI Data Controls", destination: provider.dataControlsURL)
                 Button("Open-source notices") { notices = true }
             }
             Section {
-                Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to OpenAI. Raw audio is not saved by Mural.")
+                Text("For Mural minutes, audio and selected text pass through Mural’s server to OpenAI. With your own key, they go directly to \(provider.title). Raw audio is not saved by Mural.")
             }
         }.scrollContentBackground(.hidden).background(MuralColor.cream).navigationTitle("About Mural")
             .sheet(isPresented: $notices) {

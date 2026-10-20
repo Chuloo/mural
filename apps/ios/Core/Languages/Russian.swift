@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let russian = LanguageModule(
-        id: "ru", name: "Russian", nativeName: "Русский", variety: "Standard", locale: "ru-RU",
+        id: "ru", name: "Russian", nativeName: "Русский", variety: "Standard", locale: "ru-RU", usesPlatformWordSegmentation: false,
         greeting: "Привет!", greetingWord: "привет",
         speechGuidance: "Use clear, natural Standard Russian with conversational intonation, lexical stress, unstressed vowel reduction and appropriate hard and soft consonants. Use ты with friends and вы when polite address fits the situation. Accept valid regional pronunciation without treating an accent difference as an error. Never infer a stress or pronunciation error from a transcript alone.",
         writingGuidance: "Write contemporary Russian in Cyrillic with natural punctuation. Preserve ё where it clarifies the word and preserve learner-supplied ё and stress marks in quotations. Accept customary е for ё, composed and decomposed Unicode, and transliteration as learner support; model the Cyrillic form without calling the script choice a grammar error. Do not append transliteration, stress marks or English translations to ordinary replies.",

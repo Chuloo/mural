@@ -84,6 +84,9 @@ public enum CaptionWords {
                 CaptionSegment(text: $0.text, lookup: $0.text.contains(where: \.isLetter) ? $0.text : nil)
             }
         }
+        if LanguageRegistry.module(for: languageID)?.usesPlatformWordSegmentation == true {
+            return platformWordSegments(text)
+        }
         var result: [CaptionSegment] = []
         var run = ""
         for character in text {
@@ -99,5 +102,19 @@ public enum CaptionWords {
     private static func segment(_ text: String) -> CaptionSegment {
         let word = text.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
         return CaptionSegment(text: text, lookup: word.contains(where: \.isLetter) ? word : nil)
+    }
+
+    private static func platformWordSegments(_ text: String) -> [CaptionSegment] {
+        guard !text.isEmpty else { return [] }
+        var result: [CaptionSegment] = []
+        var cursor = text.startIndex
+        text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: [.byWords, .substringNotRequired]) { _, range, _, _ in
+            guard range.lowerBound >= cursor else { return }
+            if cursor < range.lowerBound { result.append(CaptionSegment(text: String(text[cursor..<range.lowerBound]), lookup: nil)) }
+            result.append(segment(String(text[range])))
+            cursor = range.upperBound
+        }
+        if cursor < text.endIndex { result.append(CaptionSegment(text: String(text[cursor..<text.endIndex]), lookup: nil)) }
+        return result
     }
 }

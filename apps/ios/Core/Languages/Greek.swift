@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let greek = LanguageModule(
-        id: "el", name: "Greek", nativeName: "Ελληνικά", variety: "Greece", locale: "el-GR",
+        id: "el", name: "Greek", nativeName: "Ελληνικά", variety: "Greece", locale: "el-GR", usesPlatformWordSegmentation: false,
         greeting: "Γεια σου!", greetingWord: "γεια",
         speechGuidance: "Use clear, natural Modern Standard Greek as spoken in Greece, with contemporary pronunciation, lexical stress and conversational intonation. Greek has lexical stress rather than lexical tones; do not model Ancient Greek pitch accents or reconstructed pronunciation. Model vowel digraphs, αυ/ευ voicing, and the modern sounds of β, γ, δ and θ naturally. Use friendly singular εσύ and polite plural εσείς as the situation requires. Accept valid regional and Cypriot Greek usage and a non-native accent without treating them alone as errors. Never infer an incorrect stress, sound or intonation from a possibly mistranscribed word; ask when uncertain.",
         writingGuidance: "Write contemporary Greek in the Greek alphabet with monotonic spelling. Preserve meaningful tonos and diaeresis, including ΐ and ΰ, and final sigma ς. Use the Greek question mark ; naturally. Accept equivalent composed and decomposed Unicode text, customary accent omission in all-capital text, and valid regional wording. Welcome Greeklish or another language as learner support and model the Greek form without calling the script choice a grammar error. Keep exact learner quotations unchanged. Do not add transliteration or English translations to ordinary replies.",

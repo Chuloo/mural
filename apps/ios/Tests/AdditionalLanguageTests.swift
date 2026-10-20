@@ -2,12 +2,13 @@ import XCTest
 @testable import MuralCore
 
 final class AdditionalLanguageTests: XCTestCase {
-    private let ids = ["de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru"]
+    private let ids = ["de", "it", "pt", "zh", "th", "sr", "el", "tl", "nl", "ru"]
     private let samples = [
         ("de", "Ich gehe über die Straße.", "die Straße", "Straße", "street"),
         ("it", "Vorrei un caffè.", "un caffè", "caffè", "coffee"),
         ("pt", "Eu gosto de pão e maçã.", "o pão", "pão", "bread"),
         ("zh", "我想去银行。", "银行", "银行", "bank"),
+        ("th", "ฉันอยากไปตลาด", "ตลาด", "ตลาด", "market"),
         ("sr", "Može jedna kafa sa mlekom?", "kafa", "kafa", "coffee"),
         ("tl", "Mag-aaral ako araw-araw.", "mag-aral", "Mag-aaral", "study"),
         ("el", "Θα ήθελα έναν καφέ.", "καφές", "καφέ", "coffee"),
@@ -29,13 +30,15 @@ final class AdditionalLanguageTests: XCTestCase {
     }
 
     func testRegistrationPreservesOldIDsAndSetsRequestedVarieties() {
-        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru"])
-        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("sr", "sr-Latn-RS", "Zdravo!"), ("el", "el-GR", "Γεια σου!"), ("tl", "tl-PH", "Kumusta!"), ("nl", "nl-NL", "Hoi!"), ("ru", "ru-RU", "Привет!")] {
+        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "th", "sr", "el", "tl", "nl", "ru"])
+        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("th", "th-TH", "สวัสดี!"), ("sr", "sr-Latn-RS", "Zdravo!"), ("el", "el-GR", "Γεια σου!"), ("tl", "tl-PH", "Kumusta!"), ("nl", "nl-NL", "Hoi!"), ("ru", "ru-RU", "Привет!")] {
             XCTAssertEqual(LanguageRegistry.module(for: id)?.locale, locale)
             XCTAssertEqual(LanguageRegistry.module(for: id)?.greeting, greeting)
         }
         XCTAssertTrue(MeaningLanguages.all.contains("Chinese (Simplified)"))
         XCTAssertEqual(MeaningLanguages.greeting(in: "Chinese (Simplified)"), "你好！")
+        XCTAssertTrue(MeaningLanguages.all.contains("Thai"))
+        XCTAssertEqual(MeaningLanguages.greeting(in: "Thai"), "สวัสดี!")
         XCTAssertTrue(MeaningLanguages.all.contains("Serbian (Latin)"))
         XCTAssertEqual(MeaningLanguages.greeting(in: "Serbian (Latin)"), "Zdravo!")
     }
@@ -181,5 +184,12 @@ final class AdditionalLanguageTests: XCTestCase {
             XCTAssertEqual(segments.map(\.text).joined(), text)
             XCTAssertEqual(segments.compactMap(\.lookup), expected)
         }
+    }
+
+    func testThaiWordLinksUsePlatformWordBoundaries() {
+        let text = "ฉันอยากไปตลาด"
+        let segments = CaptionWords.segments(text, languageID: "th")
+        XCTAssertEqual(segments.map(\.text).joined(), text)
+        XCTAssertEqual(segments.compactMap(\.lookup), ["ฉัน", "อยาก", "ไป", "ตลาด"])
     }
 }

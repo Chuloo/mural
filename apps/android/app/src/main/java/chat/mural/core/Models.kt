@@ -10,6 +10,7 @@ import kotlinx.serialization.json.*
 @Serializable enum class Outcome { success, partial, breakdown, uncertain }
 
 const val APPLE_EPOCH_UNIX_SECONDS = 978307200.0
+const val AI_CONSENT_VERSION = 2
 fun nowSeconds(): Double = System.currentTimeMillis() / 1000.0 - APPLE_EPOCH_UNIX_SECONDS
 
 @Serializable
@@ -112,7 +113,7 @@ data class SourceLink(val title: String, val url: String) {
 @Serializable
 data class TopicBrief(
     val id: String = UUID.randomUUID().toString(), val languageID: String, var query: String,
-    var text: String, var sources: List<SourceLink>, val retrievedAt: Double = nowSeconds()
+    var text: String, var sources: List<SourceLink>, var searchEntryPointHTML: String? = null, val retrievedAt: Double = nowSeconds()
 ) { val isFresh get() = nowSeconds() - retrievedAt < 6 * 3600 }
 
 @Serializable

@@ -58,7 +58,7 @@ class LiveLanguageDeviceTest {
                 handler?.invoke(event)
             }
             original = vm.archive.preferences.copy()
-            vm.updatePreferences(original.copy(hasOnboarded = true, aiConsentVersion = 1,
+            vm.updatePreferences(original.copy(hasOnboarded = true, aiConsentVersion = AI_CONSENT_VERSION,
                 meaningLanguage = "English", meaningVisible = true,
                 sessionMinutes = if (InstrumentationRegistry.getArguments().getString("screenOff") == "true") 5 else 2))
             vm.selectConversationProvider(if (personalKey) ConversationProvider.PERSONAL_KEY else ConversationProvider.HOSTED_MINUTES)

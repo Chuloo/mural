@@ -26,7 +26,16 @@ class IcuHanReader : HanReader {
     }
 
     override fun words(text: String): List<String> {
-        val iterator = BreakIterator.getWordInstance(ULocale.CHINA)
+        return HanWords.merge(localeWords(text, ULocale.CHINA), CAPTION_WORDS)
+    }
+
+    override fun languageWords(text: String, languageID: String): List<String>? = when (languageID) {
+        "th" -> localeWords(text, ULocale("th_TH"))
+        else -> null
+    }
+
+    private fun localeWords(text: String, locale: ULocale): List<String> {
+        val iterator = BreakIterator.getWordInstance(locale)
         iterator.setText(text)
         val pieces = mutableListOf<String>()
         var start = iterator.first()
@@ -35,7 +44,7 @@ class IcuHanReader : HanReader {
             pieces += text.substring(start, end)
             start = end; end = iterator.next()
         }
-        return HanWords.merge(pieces, CAPTION_WORDS)
+        return pieces
     }
 
     /** Prefer a word reading; use ICU only when a known ambiguous character does not need context. */

@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let spanish = LanguageModule(
-        id: "es", name: "Spanish", nativeName: "Español", variety: "Spain", locale: "es-ES",
+        id: "es", name: "Spanish", nativeName: "Español", variety: "Spain", locale: "es-ES", usesPlatformWordSegmentation: false,
         greeting: "¡Hola!", greetingWord: "hola",
         speechGuidance: "Use clear Spanish from Spain, with a natural distinction between s and z/soft c, tú for friendly singular address and vosotros for informal plural address. Accept seseo, ustedes, voseo and other valid regional forms without marking them wrong. Do not imitate a regional caricature.",
         writingGuidance: "Use standard Spanish spelling, accents and opening question and exclamation marks.",

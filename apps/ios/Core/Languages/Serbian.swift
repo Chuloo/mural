@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let serbian = LanguageModule(
-        id: "sr", name: "Serbian", nativeName: "Srpski", variety: "Serbia", locale: "sr-Latn-RS",
+        id: "sr", name: "Serbian", nativeName: "Srpski", variety: "Serbia", locale: "sr-Latn-RS", usesPlatformWordSegmentation: false,
         greeting: "Zdravo!", greetingWord: "zdravo",
         speechGuidance: "Use clear, natural Standard Serbian pronunciation as spoken in Serbia, with ekavian forms such as mleko, lepo and dete. Use ti for friendly conversation and Vi when the situation calls for formality. Model standard pitch accents, word stress, vowel length, syllabic r and the sounds č, ć, dž, đ, š and ž naturally. Accept valid regional accents, ijekavian forms such as mlijeko and dijete, and regional vocabulary without treating them or a non-native accent alone as an error. Do not infer a pronunciation error from spelling alone, including č and ć or dž and đ written the wrong way in a transcript.",
         writingGuidance: "Write Serbian only in the Latin script, never Cyrillic, with the standard letters č, ć, dž, đ, š and ž and ekavian spelling. Accept learner text in Cyrillic, in ijekavian spelling or typed without diacritics as valid input; you may model the standard Latin ekavian form, but never treat the script, ijekavian spelling or missing diacritics in a casual typed reply as a language error. Use standard punctuation and match the register to the situation.",

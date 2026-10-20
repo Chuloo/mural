@@ -199,11 +199,11 @@ struct OnboardingView: View {
 }
 
 enum AIProcessingConsent {
-    static let version = 1
-    static let summary = "With your permission, Mural sends audio and selected text to OpenAI for conversations and meanings. Mural minutes pass through our server; your own key connects directly. Provider retention rules apply. You can withdraw permission in Settings → AI processing."
+    static let version = 2
+    static let summary = "With your permission, Mural sends audio, selected text, and topic search text for conversations and meanings. Mural minutes pass through our server to OpenAI; your own key connects directly to the AI provider you select. Provider retention rules apply. You can withdraw permission in Settings → AI processing."
     enum ConsentError: LocalizedError {
         case required
-        var errorDescription: String? { "Before using AI features, open Talk and tap the microphone to review how OpenAI processes your audio and text." }
+        var errorDescription: String? { "Before using AI features, open Talk and tap the microphone to review how your selected AI provider processes your audio and text." }
     }
 }
 

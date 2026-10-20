@@ -1,6 +1,6 @@
 # How to enable optional sign-in on iPhone
 
-Configure Google or Apple sign-in without enabling hosted conversations, trial minutes or purchases. Users can still practise with their own OpenAI API key without an account. The source defaults to accounts disabled; the current local Mural build enables Google only. Mural’s Google project is in production with verified, published consent branding as of September 12, 2026.
+Configure Google or Apple sign-in without enabling hosted conversations, trial minutes or purchases. Users can still practise with their own OpenAI or Google AI Studio API key without an account. The source defaults to accounts disabled; the current local Mural build enables Google only. Mural’s Google project is in production with verified, published consent branding as of September 12, 2026.
 
 On 12 September 2026, the owner confirmed that real Google sign-in worked on the installed iPhone build. Session persistence, sign-out, expiry and account deletion still need their separate device checks below. Apple remains disabled pending enrollment and revocation setup.
 

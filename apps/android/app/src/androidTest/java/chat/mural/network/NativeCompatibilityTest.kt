@@ -18,13 +18,20 @@ class NativeCompatibilityTest {
         val namespace = UUID.randomUUID().toString()
         val store = CredentialStore(context, "mural_test_$namespace", "chat.mural.test.$namespace")
         val fake = "sk-offline-test-credential-never-sent"
+        val google = "AIza-offline-test-credential-never-sent"
         try {
             store.save(fake)
+            store.save(google, AIProvider.GOOGLE_AI_STUDIO)
             val raw = context.getSharedPreferences("mural_test_$namespace", Context.MODE_PRIVATE).all.values.joinToString()
             assertFalse(raw.contains(fake))
+            assertFalse(raw.contains(google))
             assertTrue(store.hasKey)
             assertEquals(fake, CredentialStore(context, "mural_test_$namespace", "chat.mural.test.$namespace").read())
+            assertEquals(google, store.read(AIProvider.GOOGLE_AI_STUDIO))
             assertThrows(CredentialStore.CredentialException.Invalid::class.java) { store.save("bad") }
+            assertEquals(fake, store.read())
+            store.delete(AIProvider.GOOGLE_AI_STUDIO)
+            assertFalse(store.hasKey(AIProvider.GOOGLE_AI_STUDIO))
             assertEquals(fake, store.read())
             store.delete(); assertFalse(store.hasKey)
         } finally { store.delete() }

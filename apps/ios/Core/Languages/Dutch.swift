@@ -2,7 +2,7 @@ import Foundation
 
 extension LanguageModule {
     public static let dutch = LanguageModule(
-        id: "nl", name: "Dutch", nativeName: "Nederlands", variety: "Netherlands", locale: "nl-NL",
+        id: "nl", name: "Dutch", nativeName: "Nederlands", variety: "Netherlands", locale: "nl-NL", usesPlatformWordSegmentation: false,
         greeting: "Hoi!", greetingWord: "hoi",
         speechGuidance: "Use clear, natural Standard Dutch as spoken in the Netherlands, with conversational rhythm, vowel length, the ui and ij/ei diphthongs, and natural g/ch sounds. Accept valid Belgian Dutch and regional pronunciation without treating an accent difference as an error. Use je and jij with friends and u when polite address fits the situation. Never infer a pronunciation error from a transcript alone.",
         writingGuidance: "Use contemporary Dutch spelling, preserving diacritics and meaningful compounds. Keep separable verb particles and word order natural. Accept valid regional wording, composed and decomposed Unicode, and learner support in another language. Keep exact quotations unchanged. Do not append English translations or pronunciation guides to ordinary replies.",

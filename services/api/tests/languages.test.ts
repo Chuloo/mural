@@ -21,6 +21,7 @@ test('all native locales reach the provider with the intended regional speech ta
       ['nb-NO', 'Norwegian Bokmål'], ['es-ES', 'Spanish from Spain'], ['en', 'English'], ['en-US', 'English'], ['fr-FR', 'French from France'],
       ['de-DE', 'Standard German as spoken in Germany'], ['it-IT', 'Italian as spoken in Italy'],
       ['pt-BR', 'Brazilian Portuguese'], ['zh-CN', 'Standard Mandarin with Simplified Chinese writing'],
+      ['th-TH', 'Central Thai as spoken in Thailand'],
       ['sr-Latn-RS', 'Standard Serbian as spoken in Serbia, with ekavian forms and the Latin script'],
       ['el-GR', 'Modern Standard Greek as spoken in Greece'],
       ['tl-PH', 'Tagalog as spoken in the Philippines'],
@@ -37,7 +38,7 @@ test('all native locales reach the provider with the intended regional speech ta
       assert.equal(supportsLanguage(unsupported), false);
       await assert.rejects(provider.create('v=0', unsupported), { code: 'invalid_language' });
     }
-    assert.equal(requests.length, 14);
+    assert.equal(requests.length, 15);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
@@ -51,7 +52,7 @@ test('hosted admission accepts every locale shipped by Android and iOS', async (
   const swift = await Promise.all((await readdir(directory)).filter(name => name.endsWith('.swift'))
     .map(name => readFile(new URL(name, directory), 'utf8')));
   const iosLocales = swift.flatMap(source => [...source.matchAll(/locale: "([^"\n]+)"/g)].map(match => match[1]!)).sort();
-  assert.equal(androidLocales.length, 13);
+  assert.equal(androidLocales.length, 14);
   assert.deepEqual(androidLocales, iosLocales);
   for (const locale of androidLocales) assert.equal(supportsLanguage(locale), true, `Native locale rejected: ${locale}`);
   assert.equal(supportsLanguage('en-US'), true, 'Preserve existing client compatibility');

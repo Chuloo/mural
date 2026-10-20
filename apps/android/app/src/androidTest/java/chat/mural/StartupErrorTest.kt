@@ -29,7 +29,7 @@ class StartupErrorTest {
             AccountViewModel::class.java.getDeclaredField("configuration").apply { isAccessible = true }
                 .set(account, requireNotNull(ManagedAccountConfiguration.parse("https://offline.invalid", "123-offline.apps.googleusercontent.com")))
             preferences = vm.archive.preferences
-            vm.updatePreferences(preferences.copy(hasOnboarded = true, aiConsentVersion = 1))
+            vm.updatePreferences(preferences.copy(hasOnboarded = true, aiConsentVersion = chat.mural.core.AI_CONSENT_VERSION))
         }
     }
     @After fun restore() {

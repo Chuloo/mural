@@ -70,6 +70,8 @@ import chat.mural.core.Passage
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.UsageSummary
+import chat.mural.core.AI_CONSENT_VERSION
+import chat.mural.network.AIProvider
 import chat.mural.core.ProviderFailureKind
 import kotlinx.coroutines.launch
 
@@ -193,6 +195,11 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     }
                     item {
                         SettingsGroup(stringResource(R.string.settings_advanced)) {
+                            SettingsChoiceRow(stringResource(R.string.settings_ai_provider), vm.aiProvider.displayName, vm.aiProvider.name,
+                                AIProvider.entries.map { it.name to it.displayName }, "settings-ai-provider", !vm.isRunning) {
+                                vm.selectAIProvider(AIProvider.valueOf(it))
+                            }
+                            SettingsDivider()
                             SettingsChoiceRow(stringResource(R.string.settings_conversation_access),
                                 stringResource(if (vm.conversationProvider == chat.mural.core.ConversationProvider.HOSTED_MINUTES)
                                     R.string.account_mural_minutes else R.string.settings_my_openai_key),
@@ -263,7 +270,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     }
                 }
                 "key" -> item {
-                    SettingsGroup(footer = stringResource(R.string.settings_key_owner_footer)) {
+                    SettingsGroup(footer = stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_key_owner_footer else R.string.settings_google_key_owner_footer)) {
                         SettingsRow(stringResource(R.string.settings_openai_key),
                             stringResource(if (vm.hasKey) R.string.settings_key_saved_short else R.string.settings_key_required))
                         SettingsDivider()
@@ -273,7 +280,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 keyDialog = true
                             })
                         SettingsDivider()
-                        SettingsRow(stringResource(R.string.settings_open_api_keys), onClick = { open("https://platform.openai.com/api-keys") })
+                        SettingsRow(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_open_api_keys else R.string.settings_open_google_api_keys), onClick = { open(vm.aiProvider.keyUrl) })
                         if (vm.hasKey) {
                             SettingsDivider()
                             SettingsRow(stringResource(R.string.settings_remove_key), enabled = !vm.isRunning,
@@ -289,8 +296,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 })
                         }
                         SettingsDivider()
-                        SettingsRow(stringResource(R.string.settings_usage_billing_link),
-                            onClick = { open("https://platform.openai.com/usage") })
+                        SettingsRow(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_usage_billing_link else R.string.settings_google_usage_billing_link),
+                            onClick = { open(vm.aiProvider.usageUrl) })
                         if (vm.conversationProvider == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
                             val usage = UsageSummary.of(vm.archive.sessions)
                             SettingsDivider()
@@ -311,9 +318,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         SettingsRow(stringResource(R.string.settings_section_ai_permission), chevron = true,
                             modifier = Modifier.testTag("settings-ai-permission"), onClick = { permissionDetails = true })
                         SettingsDivider()
-                        SettingsRow(stringResource(R.string.settings_openai_data_controls),
-                            onClick = { open("https://developers.openai.com/api/docs/guides/your-data") })
-                        Text(stringResource(R.string.settings_data_use_footer), style = MaterialTheme.typography.bodySmall,
+                        SettingsRow(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_openai_data_controls else R.string.settings_google_data_controls),
+                            onClick = { open(vm.aiProvider.dataControlsUrl) })
+                        Text(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_data_use_footer else R.string.settings_google_data_use_footer), style = MaterialTheme.typography.bodySmall,
                             color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                         SettingsDivider()
                         SettingsRow(stringResource(R.string.settings_open_source_notices), chevron = true,
@@ -460,7 +467,7 @@ private fun KeyDialog(vm: MuralViewModel, useAfterSave: Boolean, onDismiss: () -
         }
         Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-                Text(stringResource(R.string.settings_key_dialog_title), style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(if (vm.aiProvider == AIProvider.OPENAI) R.string.settings_key_dialog_title else R.string.settings_google_key_dialog_title), style = MaterialTheme.typography.headlineMedium)
                 Text(stringResource(R.string.settings_key_dialog_note), color = MuralColors.Secondary)
                 MuralTextField(
                     key,
@@ -525,6 +532,11 @@ fun TranscriptDialog(vm: MuralViewModel, session: SessionRecord, onDismiss: () -
                         SelectionContainer { Text(passage.text) }
                         if (liveSession.languageID == "zh") PinyinHelp(passage.text)
                         if (passage.speaker == Speaker.user && !vm.isRunning) MuralTextButton(onClick = { correcting = passage }) { Text(stringResource(R.string.history_edit_passage_button)) }
+                    }
+                }
+                liveSession.topics.forEach { topic ->
+                    topic.searchEntryPointHTML?.takeIf { html -> html.isNotBlank() }?.let { html ->
+                        item(key = "topic-search-${topic.id}") { GoogleSearchSuggestions(html) }
                     }
                 }
                 liveSession.topics.flatMap { it.sources }.filter { it.safeUrl() != null }.takeIf { it.isNotEmpty() }?.let { sources ->

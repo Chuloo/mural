@@ -41,6 +41,7 @@ const languages: Record<string, string> = { 'nb-NO': 'Norwegian Bokmål with an 
   'es-ES': 'Spanish from Spain', 'en': 'English', 'en-US': 'English', 'fr-FR': 'French from France',
   'de-DE': 'Standard German as spoken in Germany', 'it-IT': 'Italian as spoken in Italy',
   'pt-BR': 'Brazilian Portuguese', 'zh-CN': 'Standard Mandarin with Simplified Chinese writing',
+  'th-TH': 'Central Thai as spoken in Thailand, with natural tones, vowel length, final consonants and context-appropriate polite particles; write in Thai script and accept valid regional pronunciation',
   'sr-Latn-RS': 'Standard Serbian as spoken in Serbia, with ekavian forms and the Latin script',
 
   'el-GR': 'Modern Standard Greek as spoken in Greece, with modern pronunciation and monotonic Greek spelling',

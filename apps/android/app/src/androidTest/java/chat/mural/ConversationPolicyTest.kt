@@ -23,7 +23,7 @@ class ConversationPolicyTest {
         vm = compose.awaitHistoryLoaded()
         compose.runOnIdle {
             original = ArchiveCodec.encode(vm.archive)
-            vm.updatePreferences(vm.archive.preferences.copy(hasOnboarded = true, aiConsentVersion = 1))
+            vm.updatePreferences(vm.archive.preferences.copy(hasOnboarded = true, aiConsentVersion = AI_CONSENT_VERSION))
         }
     }
     @Suppress("UNCHECKED_CAST") private fun state(name: String, value: Any?) {
