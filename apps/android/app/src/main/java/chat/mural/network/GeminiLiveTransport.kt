@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -93,14 +94,7 @@ class GeminiLiveTransport(
         val generation = connectionGeneration.incrementAndGet()
         activeResumptionHandle = resumptionHandle
         synchronized(controlLock) { socketReady = false }
-        val url = HttpUrl.Builder()
-            .scheme("wss")
-            .host("generativelanguage.googleapis.com")
-            .addPathSegments("ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent")
-            .addQueryParameter("key", key)
-            .build()
-        val request = Request.Builder().url(url).build()
-        socket = client.newWebSocket(request, listener(generation))
+        socket = client.newWebSocket(webSocketRequest(key), listener(generation))
     }
 
     fun send(event: JsonObject): Boolean {
@@ -286,6 +280,9 @@ class GeminiLiveTransport(
 
     private fun startAudio(expectedGeneration: Long, expectedSocket: WebSocket) {
         if (!isCurrent(expectedSocket, expectedGeneration)) return
+        if (ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            throw SecurityException("Microphone permission is required.")
+        }
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE_IN, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             .coerceAtLeast(SAMPLES_PER_PACKET * 2)
         val recorder = record ?: AudioRecord(
@@ -464,6 +461,17 @@ class GeminiLiveTransport(
     }
 
     companion object {
+        internal fun webSocketRequest(key: String): Request {
+            // OkHttp upgrades this HTTPS request to a secure WebSocket connection.
+            val url = HttpUrl.Builder()
+                .scheme("https")
+                .host("generativelanguage.googleapis.com")
+                .addPathSegments("ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent")
+                .addQueryParameter("key", key)
+                .build()
+            return Request.Builder().url(url).build()
+        }
+
         private const val SAMPLE_RATE_IN = 16_000
         private const val SAMPLE_RATE_OUT = 24_000
         private const val SAMPLES_PER_PACKET = 1_600
