@@ -39,7 +39,8 @@ object LearningEngine {
         return proposal.copy(nextGoal=proposal.nextGoal.take(300),capability=proposal.capability.take(160),words=words)
     }
     fun project(sessions:List<SessionRecord>,languageID:String=LanguageRegistry.defaultID,hiddenWords:List<String> = emptyList(),now:Double=nowSeconds()):LearnerState {
-        val hidden=hiddenWords.map { it.canonical() }
+        // Legacy hidden keys carry the meaning as a third segment and predate lemma normalisation; current ids are stored as projected.
+        val hidden=hiddenWords.map { stored -> stored.split('|').let { if(it.size>=3) wordKey(it[0],it[1]) else stored } }
         var level=0; var count=0; var successes=0
         var nextGoal="Start with a greeting and one small question. Adjust from what the learner actually says."
         val caps=mutableMapOf<String,MutableSet<String>>()

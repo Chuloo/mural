@@ -78,14 +78,14 @@ final class LanguageTests: XCTestCase {
         let migrated = try Archive.decode(JSONSerialization.data(withJSONObject: legacy))
         XCTAssertEqual(migrated.schemaVersion, 2)
         XCTAssertEqual(migrated.preferences.learningLanguageID, "nb")
-        XCTAssertEqual(migrated.preferences.hiddenWords, original.preferences.hiddenWords)
+        XCTAssertEqual(migrated.preferences.hiddenWords, ["nb|radio|radio"])
         XCTAssertEqual(migrated.sessions[0].id, session.id)
         XCTAssertEqual(migrated.sessions[0].fragments, session.fragments)
         XCTAssertEqual(migrated.sessions[0].topics[0].languageID, "nb")
         XCTAssertEqual(migrated.sessions[0].topics[0].text, session.topics[0].text)
         XCTAssertEqual(LearningEngine.project(migrated.sessions).words.first?.independentCount, 1)
         XCTAssertTrue(LearningEngine.project(migrated.sessions, hiddenWords: migrated.preferences.hiddenWords).words.isEmpty)
-        XCTAssertEqual(try Archive.decode(migrated.encoded()).preferences.hiddenWords, original.preferences.hiddenWords)
+        XCTAssertEqual(try Archive.decode(migrated.encoded()).preferences.hiddenWords, ["nb|radio|radio"])
     }
 
     func testBilingualArchiveRoundTripAndSelection() throws {
@@ -162,6 +162,7 @@ final class LanguageTests: XCTestCase {
                 XCTAssertFalse(prompt.contains("no headings or English translation"))
             }
             XCTAssertTrue(TeachingPolicy.assessment(language: language).contains("Use language \(language.id) for target-language evidence"))
+            XCTAssertTrue(TeachingPolicy.assessment(language: language).contains("Reuse one stable sense for the same lemma"))
             XCTAssertTrue(language.themes.allSatisfy { !$0.situation.contains("Norway") && !$0.situation.contains("Norwegian") })
         }
         XCTAssertEqual(LanguageRegistry.module(for: "en")?.greeting, "Hi!")

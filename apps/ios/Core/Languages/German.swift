@@ -7,6 +7,7 @@ extension LanguageModule {
         speechGuidance: "Use clear, natural Standard German as spoken in Germany. Use du for friendly conversation and Sie when the situation calls for formality. Accept valid Austrian, Swiss and other regional pronunciation, vocabulary and grammar. Do not treat a regional difference or a non-native accent alone as an error. Correct pronunciation only when supported by the audio, not a transcript alone.",
         writingGuidance: "Use standard German spelling, noun capitalization, umlauts and ß. Accept Swiss ss spellings and valid regional wording. Match the register to the situation.",
         lemmaGuidance: "Give nouns with their singular article and verbs in the infinitive, for example das Haus, die Straße and sprechen. Preserve umlauts and ß. Keep separable verbs such as aufstehen and reflexive verbs such as sich erinnern together as dictionary entries, while quoting the learner's actual word order exactly.",
+        lemmaPrefixes: ["der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "eines"],
         teachingFocus: [
             "Greetings, introductions and useful everyday chunks such as ich heiße and ich möchte.",
             "Everyday questions, grammatical gender, present tense, verb-second word order and common accusative objects.",

@@ -7,6 +7,7 @@ extension LanguageModule {
         speechGuidance: "Use natural Eastern Norwegian pronunciation. Accept other Norwegian dialects without treating dialect differences as errors.",
         writingGuidance: "Use Norwegian Bokmål spelling and wording.",
         lemmaGuidance: "Give nouns with their singular grammatical article and verbs in the infinitive, for example en tur and å gå. Accept valid gender variants.",
+        lemmaPrefixes: ["en", "ei", "et", "å"],
         teachingFocus: [
             "Greetings, introductions and short everyday chunks.",
             "Simple questions, noun gender and present-tense everyday exchanges.",

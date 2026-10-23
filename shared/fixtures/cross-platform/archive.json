@@ -393,6 +393,135 @@
       },
       "usageFinal" : true,
       "voiceSeconds" : 90
+    },
+    {
+      "assessments" : [
+        {
+          "capability" : "Talks about software updates",
+          "context" : "work",
+          "createdAt" : 810659100,
+          "nextGoal" : "Say what changed in the update.",
+          "outcome" : "success",
+          "passageID" : "s5-u1",
+          "revisionKey" : "s5-u1:0",
+          "suggestedLevel" : 2,
+          "words" : [
+            {
+              "confidence" : 0.9,
+              "form" : "version",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "a version",
+              "meaning" : "a particular form or release of software",
+              "quote" : "a new version",
+              "sourceIDs" : [
+                "s5-u1"
+              ]
+            }
+          ]
+        },
+        {
+          "capability" : "Talks about software updates",
+          "context" : "work",
+          "createdAt" : 810659200,
+          "nextGoal" : "Compare two versions.",
+          "outcome" : "success",
+          "passageID" : "s5-u2",
+          "revisionKey" : "s5-u2:0",
+          "suggestedLevel" : 2,
+          "words" : [
+            {
+              "confidence" : 0.9,
+              "form" : "version",
+              "kind" : "independent",
+              "language" : "en",
+              "lemma" : "version",
+              "meaning" : "a particular form of a product or software",
+              "quote" : "This version is faster",
+              "sourceIDs" : [
+                "s5-u2"
+              ]
+            }
+          ]
+        }
+      ],
+      "endReason" : "Ended by you",
+      "endedAt" : 810659300,
+      "fragments" : [
+        {
+          "endMS" : 2000,
+          "id" : "s5-a1",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810659001,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 0,
+          "text" : "What did you update at work?",
+          "typed" : false
+        },
+        {
+          "endMS" : 7000,
+          "id" : "s5-u1",
+          "meaningVisible" : false,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810659004,
+          "revision" : 0,
+          "speaker" : "user",
+          "startMS" : 4000,
+          "text" : "I installed a new version yesterday.",
+          "typed" : false
+        },
+        {
+          "endMS" : 10000,
+          "id" : "s5-a2",
+          "meaningVisible" : true,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810659009,
+          "revision" : 0,
+          "speaker" : "assistant",
+          "startMS" : 9000,
+          "text" : "And how is it?",
+          "typed" : false
+        },
+        {
+          "endMS" : 14000,
+          "id" : "s5-u2",
+          "meaningVisible" : false,
+          "previousTexts" : [
+
+          ],
+          "receivedAt" : 810659012,
+          "revision" : 0,
+          "speaker" : "user",
+          "startMS" : 12000,
+          "text" : "This version is faster.",
+          "typed" : false
+        }
+      ],
+      "id" : "0B1F6E2A-5C3D-4E8F-9A7B-1C2D3E4F5A65",
+      "inputTokens" : 400,
+      "languageID" : "en",
+      "outputTokens" : 100,
+      "providerID" : "sess_fixture_5",
+      "searchCalls" : 0,
+      "startedAt" : 810659000,
+      "themeID" : "work",
+      "title" : "At work",
+      "topics" : [
+
+      ],
+      "translations" : {
+
+      },
+      "usageFinal" : true,
+      "voiceSeconds" : 14
     }
   ]
 }

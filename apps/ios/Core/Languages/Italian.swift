@@ -7,6 +7,7 @@ extension LanguageModule {
         speechGuidance: "Use clear, natural Standard Italian pronunciation. Use tu for friendly conversation and Lei when the situation calls for formality. Model vowel sounds, word stress and consonant length naturally. Accept valid regional accents and vocabulary without treating regional variation or a non-native accent alone as an error. Do not infer a pronunciation error from spelling alone.",
         writingGuidance: "Use standard Italian spelling, accents, apostrophes and punctuation. Preserve meaningful contrasts such as e and è. Match the register to the situation and accept valid regional usage.",
         lemmaGuidance: "Give nouns with their singular article and verbs in the infinitive, for example la casa, lo studente and parlare. Preserve elisions and accents. Keep reflexive verbs such as chiamarsi and pronominal verbs such as farcela distinct.",
+        lemmaPrefixes: ["il", "lo", "la", "l'", "l’", "i", "gli", "le", "un", "uno", "una", "un'", "un’"],
         teachingFocus: [
             "Greetings, introductions and useful everyday chunks such as mi chiamo and vorrei.",
             "Everyday questions, gender and number agreement, present tense and common prepositions.",
