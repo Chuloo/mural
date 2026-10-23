@@ -59,7 +59,7 @@ object LearningEngine {
                 if(a.nextGoal.isNotEmpty()) nextGoal=a.nextGoal
                 if(a.outcome==Outcome.success && a.capability.isNotEmpty()) caps.getOrPut(a.capability){mutableSetOf()}.add("${dayKey(a.createdAt)}|${a.context}")
                 val seenWords=mutableSetOf<String>()
-                for(word in a.words) if(hidden.none { it==word.key } && seenWords.add(word.key)) events.getOrPut(word.key){mutableListOf()}.add(Triple(word,a.createdAt,a.context))
+                for(word in a.words) if(!WordProposal.isHidden(word.key, hidden) && seenWords.add(word.key)) events.getOrPut(word.key){mutableListOf()}.add(Triple(word,a.createdAt,a.context))
             }
         }
         val words=events.mapNotNull { (key,obs) ->

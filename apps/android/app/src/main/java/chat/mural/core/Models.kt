@@ -93,7 +93,43 @@ data class WordProposal(
     val lemma: String, val meaning: String, val form: String, val kind: EvidenceKind,
     val confidence: Double, val sourceIDs: List<String>, val quote: String,
     val language: String = LanguageRegistry.defaultID
-) { val key get() = "${language}|${lemma.trim().lowercase().canonical()}|${meaning.lowercase().canonical()}" }
+) {
+    val key get() = "$language|${normalizedLemma(lemma)}"
+
+    companion object {
+        /** Dictionary identity for vocabulary: language + lemma, ignoring paraphrase and leading articles. */
+        fun normalizedLemma(lemma: String): String {
+            var text = lemma.trim().lowercase().canonical()
+            val articles = listOf(
+                "unas ", "unos ", "une ", "uno ", "una ", "los ", "las ", "les ", "des ",
+                "der ", "die ", "das ", "den ", "dem ", "ein ", "eine ", "gli ", "the ",
+                "el ", "la ", "lo ", "le ", "un ", "an ", "os ", "as ", "um ", "uma ",
+                "il ", "en ", "et ", "ei ", "å ", "o ", "a ", "i ", "l’", "l'",
+            ).sortedByDescending { it.length }
+            for (article in articles) {
+                if (text.startsWith(article)) {
+                    text = text.removePrefix(article)
+                    break
+                }
+            }
+            return text.trim()
+        }
+
+        /** Matches current keys and legacy `language|lemma|meaning` hide entries. */
+        fun isHidden(key: String, hiddenWords: List<String>): Boolean =
+            hiddenWords.any { hidden ->
+                val h = canonicalHiddenKey(hidden)
+                h == key || h.startsWith("$key|")
+            }
+
+        /** Collapse legacy `language|lemma|meaning` hide rows to `language|lemma`. */
+        fun canonicalHiddenKey(key: String): String {
+            val parts = key.split('|', ignoreCase = false, limit = 0)
+            if (parts.size < 2) return key.canonical()
+            return "${parts[0]}|${normalizedLemma(parts[1])}"
+        }
+    }
+}
 
 @Serializable
 data class Assessment(
@@ -174,7 +210,9 @@ object ArchiveCodec {
             requireFields(migrated)
             json.decodeFromJsonElement<Archive>(migrated)
         } catch (e: ArchiveError) { throw e } catch (_: Exception) { throw ArchiveError.INVALID }
-        validate(a); return a
+        validate(a)
+        a.preferences = a.preferences.copy(hiddenWords = a.preferences.hiddenWords.map { WordProposal.canonicalHiddenKey(it) })
+        return a
     }
     fun merge(current: Archive, incoming: Archive): Archive {
         validate(incoming)

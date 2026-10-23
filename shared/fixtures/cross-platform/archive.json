@@ -3,7 +3,7 @@
     "aiConsentVersion" : 1,
     "hasOnboarded" : true,
     "hiddenWords" : [
-      "en|soup|a hot liquid food"
+      "en|soup"
     ],
     "interests" : "cooking, travel",
     "learningLanguageID" : "en",

@@ -90,6 +90,33 @@ final class LearningTests: XCTestCase {
                 quote: "Me gusta el café", language: "es")])]
         XCTAssertEqual(LearningEngine.validate(session.assessments[0], session: session)?.words.count, 1)
     }
+    func testParaphrasedMeaningsAndArticleVariantsCollapseToOneWord() {
+        func session(day: Double, lemma: String, meaning: String) -> SessionRecord {
+            let date = Date(timeIntervalSince1970: 1_780_000_000 + day * 86400)
+            var s = SessionRecord(languageID: "en", themeID: "work")
+            s.startedAt = date
+            s.append(Fragment(id: "f-\(Int(day))", speaker: .user, text: "version", startMS: 0, endMS: 1000, receivedAt: date))
+            let p = s.passages[0]
+            s.assessments = [Assessment(passageID: p.id, revisionKey: p.revisionKey, outcome: .success,
+                suggestedLevel: 2, nextGoal: "Keep going.", capability: "Names software releases",
+                words: [WordProposal(lemma: lemma, meaning: meaning, form: "version", kind: .independent,
+                    confidence: 0.95, sourceIDs: p.fragments.map(\.id), quote: "version", language: "en")],
+                createdAt: date, context: "work")]
+            return s
+        }
+        let sessions = [
+            session(day: 0, lemma: "a version", meaning: "a particular form of a product or software"),
+            session(day: 2, lemma: "version", meaning: "a particular form or release of software"),
+            session(day: 4, lemma: "version", meaning: "a particular form or release of something"),
+        ]
+        let projected = LearningEngine.project(sessions, languageID: "en", now: sessions[2].startedAt)
+        XCTAssertEqual(projected.words.count, 1)
+        XCTAssertEqual(projected.words[0].id, "en|version")
+        XCTAssertEqual(projected.words[0].independentCount, 3)
+        XCTAssertTrue(LearningEngine.project(sessions, languageID: "en",
+            hiddenWords: ["en|version|a particular form of a product or software"],
+            now: sessions[2].startedAt).words.isEmpty)
+    }
     func testDuplicateAssessmentsNeverDoubleCredit() {
         var s = fixture(); s.assessments += s.assessments
         let projection = LearningEngine.project([s], now: s.startedAt)
