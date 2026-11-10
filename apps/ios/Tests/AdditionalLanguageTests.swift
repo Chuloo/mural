@@ -2,7 +2,7 @@ import XCTest
 @testable import MuralCore
 
 final class AdditionalLanguageTests: XCTestCase {
-    private let ids = ["de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru"]
+    private let ids = ["de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru", "ja"]
     private let samples = [
         ("de", "Ich gehe über die Straße.", "die Straße", "Straße", "street"),
         ("it", "Vorrei un caffè.", "un caffè", "caffè", "coffee"),
@@ -12,7 +12,8 @@ final class AdditionalLanguageTests: XCTestCase {
         ("tl", "Mag-aaral ako araw-araw.", "mag-aral", "Mag-aaral", "study"),
         ("el", "Θα ήθελα έναν καφέ.", "καφές", "καφέ", "coffee"),
         ("nl", "Ik fiets naar huis.", "fietsen", "fiets", "to cycle"),
-        ("ru", "Я читаю книгу.", "книга", "книгу", "book")
+        ("ru", "Я читаю книгу.", "книга", "книгу", "book"),
+        ("ja", "私は本を読みます。", "本", "本", "book")
     ]
 
     private func session(_ id: String, text: String = "radio", lemma: String = "radio", form: String = "radio", meaning: String = "radio", day: Int = 0, supported: Bool = false, typed: Bool = false) -> SessionRecord {
@@ -29,8 +30,8 @@ final class AdditionalLanguageTests: XCTestCase {
     }
 
     func testRegistrationPreservesOldIDsAndSetsRequestedVarieties() {
-        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru"])
-        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("sr", "sr-Latn-RS", "Zdravo!"), ("el", "el-GR", "Γεια σου!"), ("tl", "tl-PH", "Kumusta!"), ("nl", "nl-NL", "Hoi!"), ("ru", "ru-RU", "Привет!")] {
+        XCTAssertEqual(LanguageRegistry.all.map(\.id), ["nb", "es", "en", "fr", "de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru", "ja"])
+        for (id, locale, greeting) in [("de", "de-DE", "Hallo!"), ("it", "it-IT", "Ciao!"), ("pt", "pt-BR", "Olá!"), ("zh", "zh-CN", "你好！"), ("sr", "sr-Latn-RS", "Zdravo!"), ("el", "el-GR", "Γεια σου!"), ("tl", "tl-PH", "Kumusta!"), ("nl", "nl-NL", "Hoi!"), ("ru", "ru-RU", "Привет!"), ("ja", "ja-JP", "こんにちは！")] {
             XCTAssertEqual(LanguageRegistry.module(for: id)?.locale, locale)
             XCTAssertEqual(LanguageRegistry.module(for: id)?.greeting, greeting)
         }

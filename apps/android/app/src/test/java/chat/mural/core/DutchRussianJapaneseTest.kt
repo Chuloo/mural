@@ -3,7 +3,7 @@ package chat.mural.core
 import org.junit.Test
 import org.junit.Assert.*
 
-class DutchRussianTest {
+class DutchRussianJapaneseTest {
     private fun evidence(id: String, text: String, lemma: String, form: String, supported: Boolean = false): SessionRecord {
         val session = SessionRecord(languageID = id, startedAt = 1_780_000_000.0)
         session.append(Fragment(id = "native-$id", speaker = Speaker.user, text = text, startMS = 0, endMS = 1000, meaningVisible = supported))
@@ -13,7 +13,7 @@ class DutchRussianTest {
         return session
     }
     @Test fun allTeachingPathsUseSelectedLanguageAndExistingIDsRemainAvailable() {
-        for ((id, locale, greeting) in listOf(Triple("nl", "nl-NL", "Hoi!"), Triple("ru", "ru-RU", "Привет!"))) {
+        for ((id, locale, greeting) in listOf(Triple("nl", "nl-NL", "Hoi!"), Triple("ru", "ru-RU", "Привет!"), Triple("ja", "ja-JP", "こんにちは！"))) {
             val language = LanguageRegistry.get(id)!!
             assertEquals(locale, language.locale); assertEquals(greeting, language.greeting)
             assertEquals(greeting, MeaningLanguages.greeting(language.name)); assertTrue(MeaningLanguages.all.contains(language.name))
@@ -29,7 +29,7 @@ class DutchRussianTest {
         }
     }
     @Test fun archiveRoundTripEvidenceSupportAndLanguageIsolation() {
-        for ((id, text, lemma, form) in listOf(listOf("nl", "Ik fiets naar huis.", "fietsen", "fiets"), listOf("ru", "Я читаю книгу.", "книга", "книгу"))) {
+        for ((id, text, lemma, form) in listOf(listOf("nl", "Ik fiets naar huis.", "fietsen", "fiets"), listOf("ru", "Я читаю книгу.", "книга", "книгу"), listOf("ja", "私は本を読みます。", "本", "本"))) {
             val session = evidence(id, text, lemma, form)
             val archive = Archive(sessions = mutableListOf(session), preferences = Preferences(learningLanguageID = id, meaningLanguage = "Russian"))
             val restored = ArchiveCodec.decode(ArchiveCodec.encode(archive))

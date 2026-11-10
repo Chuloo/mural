@@ -30,7 +30,7 @@ internal fun WordLookupSheet(word: String, sentence: String, languageID: String,
             Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())
                 .padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 Text(word, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("word-lookup-word"))
-                if (languageID == "zh") PinyinHelp(word)
+                ReadingHelp(word, languageID)
                 SelectionContainer {
                     Text(sentence, style = MaterialTheme.typography.titleLarge, color = MuralColors.Secondary,
                         modifier = Modifier.testTag("word-lookup-sentence"))

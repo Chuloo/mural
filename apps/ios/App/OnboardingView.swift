@@ -161,7 +161,7 @@ struct OnboardingView: View {
                 .accessibilityIdentifier("onboarding-meaning-picker")
             VStack(spacing: 8) {
                 Text(target.greeting).font(.system(.title2, design: .rounded, weight: .medium))
-                if target.id == "zh", let reading = MandarinPinyin.reading(target.greeting) {
+                if let reading = ReadingAid.reading(target.greeting, languageID: target.id) {
                     Text(reading).font(.callout).foregroundStyle(MuralColor.secondary)
                 }
                 Text(MeaningLanguages.greeting(in: meaningLanguage)).font(.body).foregroundStyle(MuralColor.secondary)

@@ -146,6 +146,8 @@ class CaptionParityTest {
         if (language == "zh") compose.waitUntil(10_000) {
             compose.onAllNodesWithTag("pinyin-reading").fetchSemanticsNodes().isNotEmpty()
         }
+        // Japanese word links appear once the bundled dictionary has loaded off the main thread.
+        if (language == "ja") { compose.waitUntil(30_000) { JapaneseKana.ready }; compose.waitForIdle() }
     }
     private fun capture(name: String) {
         compose.waitForIdle()
@@ -255,6 +257,23 @@ class CaptionParityTest {
         compose.onNodeWithTag("word-lookup-sheet").assertDoesNotExist()
     }
 
+    @Test fun japaneseCaptionToggleAndContextualLookupMatchIOS() {
+        val sentence = "銀行に行ってから、旅行します。"
+        show("ja", sentence, "I will go to the bank, then travel.")
+        response = "銀行 means ‘bank’ here: the place you will visit first."
+        compose.onNodeWithTag("pinyin-toggle").assertDoesNotExist()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("kana-reading").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("kana-reading").assertTextEquals("ぎんこうにいってから、りょこうします。")
+        compose.onNodeWithTag("kana-toggle").performScrollTo().performClick()
+        compose.onNodeWithTag("kana-reading").assertDoesNotExist()
+        compose.onNodeWithTag("kana-toggle").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("kana-reading").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("target-caption").performScrollTo()
+        tap("銀行", sentence); assertTextVisible("word-lookup-explanation", true)
+        compose.onNodeWithTag("word-lookup-close").performClick()
+        compose.onNodeWithTag("word-lookup-sheet").assertDoesNotExist()
+    }
+
     @Test fun spanishCaptionAndContextualLookupMatchIOS() {
         show("zh", "我想去银行。", "I want to go to the bank.")
         compose.onNodeWithTag("pinyin-toggle").assertExists()
@@ -276,7 +295,8 @@ class CaptionParityTest {
             Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"),
             Triple("sr", "Hoću jednu kafu.", "kafu"), Triple("el", "Θα ήθελα έναν καφέ.", "καφέ"),
             Triple("tl", "Gusto ko ng kape.", "kape"),
-            Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"))
+            Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"),
+            Triple("ja", "コーヒーをください。", "コーヒー"))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
@@ -301,7 +321,8 @@ class CaptionParityTest {
             "el" to listOf("Πώς εί", "σαι; Μα", "ΐου."),
             "tl" to listOf("Mag-", "aaral ako araw-", "araw."),
             "nl" to listOf("Ik fiets ", "elke dag naar ", "huis."),
-            "ru" to listOf("Я чита", "ю интересную ", "книгу."))
+            "ru" to listOf("Я чита", "ю интересную ", "книгу."),
+            "ja" to listOf("日本語を勉", "強して", "います。"))
         assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.keys)
         for ((language, parts) in samples) {
             show(language, "", "")

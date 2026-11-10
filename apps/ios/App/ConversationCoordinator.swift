@@ -617,7 +617,7 @@ import MuralCore
         }
         selectedTheme = language.themes.first { $0.id == "coffee" }
         var record = SessionRecord(languageID: language.id, themeID: selectedTheme?.id, title: selectedTheme?.title)
-        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "sr": "Volim kafu.", "el": "Μου αρέσει ο καφές.", "tl": "Gusto ko ng kape.", "nl": "Ik houd van koffie.", "ru": "Я люблю кофе."]
+        let sample = ["nb": "Jeg liker kaffe.", "de": "Ich mag Kaffee.", "it": "Mi piace il caffè.", "pt": "Eu gosto de café.", "zh": "我喜欢喝咖啡。", "sr": "Volim kafu.", "el": "Μου αρέσει ο καφές.", "tl": "Gusto ko ng kape.", "nl": "Ik houd van koffie.", "ru": "Я люблю кофе.", "ja": "私はコーヒーが好きです。"]
         record.append(Fragment(speaker: .assistant, text: sample[language.id] ?? language.greeting, startMS: 0, endMS: 1000))
         record.translations[MeaningRequest.cacheKey(revisionKey: record.passages[0].revisionKey, language: "English")] = "I like coffee."
         let arguments = ProcessInfo.processInfo.arguments

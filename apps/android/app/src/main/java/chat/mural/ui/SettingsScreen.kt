@@ -523,7 +523,7 @@ fun TranscriptDialog(vm: MuralViewModel, session: SessionRecord, onDismiss: () -
                             }
                         }
                         SelectionContainer { Text(passage.text) }
-                        if (liveSession.languageID == "zh") PinyinHelp(passage.text)
+                        ReadingHelp(passage.text, liveSession.languageID)
                         if (passage.speaker == Speaker.user && !vm.isRunning) MuralTextButton(onClick = { correcting = passage }) { Text(stringResource(R.string.history_edit_passage_button)) }
                     }
                 }

@@ -28,26 +28,29 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import chat.mural.R
-import chat.mural.core.MandarinPinyin
+import chat.mural.core.ReadingAid
 
-/** Keeps Han text and its word links intact, with an optional reading below it. */
+/** Keeps Han text and its word links intact, with an optional pinyin or kana reading below it. */
 @Composable
-fun PinyinHelp(text: String) {
+fun ReadingHelp(text: String, languageID: String) {
+    if (!ReadingAid.supports(languageID)) return
+    val kana = languageID == "ja"
     var expanded by rememberSaveable { mutableStateOf(true) }
-    val reading by produceState<Pair<String, String?>?>(null, text) {
-        value = text to withContext(Dispatchers.Default) { MandarinPinyin.reading(text) }
+    val reading by produceState<Pair<String, String?>?>(null, text, languageID) {
+        value = text to withContext(Dispatchers.Default) { ReadingAid.reading(text, languageID) }
     }
     val displayed = reading?.takeIf { it.first == text }?.second ?: return
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        TextButton(onClick = { expanded = !expanded }, modifier = Modifier.testTag("pinyin-toggle"),
+        TextButton(onClick = { expanded = !expanded }, modifier = Modifier.testTag(if (kana) "kana-toggle" else "pinyin-toggle"),
             colors = ButtonDefaults.textButtonColors(contentColor = MuralColors.Secondary),
             contentPadding = PaddingValues(horizontal = 8.dp)) {
             MuralIcon(MuralSymbol.ChevronDown, Modifier.size(12.dp).rotate(if (expanded) 180f else 0f))
             Spacer(Modifier.width(5.dp))
-            Text(stringResource(if (expanded) R.string.talk_pinyin_hide else R.string.talk_pinyin_show), style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(if (kana) (if (expanded) R.string.talk_reading_hide else R.string.talk_reading_show)
+                else if (expanded) R.string.talk_pinyin_hide else R.string.talk_pinyin_show), style = MaterialTheme.typography.labelMedium)
         }
         if (expanded) SelectionContainer {
-            Text(displayed, color = MuralColors.Secondary, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("pinyin-reading"))
+            Text(displayed, color = MuralColors.Secondary, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag(if (kana) "kana-reading" else "pinyin-reading"))
         }
     }
 }

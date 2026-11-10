@@ -179,7 +179,8 @@ final class MuralUITests: XCTestCase {
             ("Mandarin Chinese · Mainland China", "Mandarin Chinese", "你好！", "喝杯咖啡？"),
             ("Tagalog (Filipino) · Philippines", "Tagalog (Filipino)", "Kumusta!", "Kape tayo?"),
             ("Dutch · Netherlands", "Dutch", "Hoi!", "Een koffie?"),
-            ("Russian · Standard", "Russian", "Привет!", "Выпьем кофе?")
+            ("Russian · Standard", "Russian", "Привет!", "Выпьем кофе?"),
+            ("Japanese · Standard", "Japanese", "こんにちは！", "コーヒーでもどう？")
         ] {
             app.buttons["Settings"].tap()
             app.buttons["learning-language-picker"].tap()
@@ -1080,8 +1081,30 @@ final class MuralUITests: XCTestCase {
     func testDutchOnboarding() { checkNewOnboarding(id: "nl", greeting: "Hoi!") }
     func testRussianOnboarding() { checkNewOnboarding(id: "ru", greeting: "Привет!") }
 
+    func testJapaneseOnboarding() { checkNewOnboarding(id: "ja", greeting: "こんにちは！") }
+
+    func testJapaneseTranscriptRetainsSourceTextAndOptionalKanaReading() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--ended-conversation", "--preview-language=ja"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["target-caption"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["target-caption"].label, "私はコーヒーが好きです。")
+        XCTAssertFalse(app.buttons["pinyin-toggle"].exists)
+        let reading = app.staticTexts.matching(identifier: "kana-reading").firstMatch
+        XCTAssertEqual(reading.label, "わたしはコーヒーがすきです。")
+        app.buttons["kana-toggle"].firstMatch.tap()
+        XCTAssertFalse(reading.exists)
+        app.buttons["kana-toggle"].firstMatch.tap()
+        XCTAssertTrue(reading.exists)
+        app.buttons["Conversation transcript"].tap()
+        XCTAssertTrue(app.staticTexts["私はコーヒーが好きです。"].exists)
+        XCTAssertEqual(app.staticTexts.matching(identifier: "kana-reading").firstMatch.label, "わたしはコーヒーがすきです。")
+        let screen = XCTAttachment(screenshot: app.screenshot())
+        screen.name = "Japanese transcript and kana reading"; screen.lifetime = .keepAlways; add(screen)
+    }
+
     func testDutchAndRussianMeaningChoicesReachTalk() {
-        for (meaning, greeting) in [("Dutch", "Hoi!"), ("Russian", "Привет!")] {
+        for (meaning, greeting) in [("Dutch", "Hoi!"), ("Russian", "Привет!"), ("Japanese", "こんにちは！")] {
             let app = XCUIApplication()
             app.launchArguments = ["--preview", "--preview-onboarding"]
             app.launch()
