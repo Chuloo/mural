@@ -17,6 +17,9 @@ Language-specific content lives in `apps/ios/Core/Languages/`. Each module defin
 | `sr` | Standard Serbian, ekavian, Latin script | `sr-Latn-RS` |
 | `el` | Modern Standard Greek from Greece | `el-GR` |
 | `tl` | Tagalog/Filipino from the Philippines | `tl-PH` |
+| `nl` | Standard Dutch from the Netherlands | `nl-NL` |
+| `ru` | Standard Russian | `ru-RU` |
+| `ja` | Standard Japanese, kanji and kana | `ja-JP` |
 
 These locales describe the initial teaching targets. Modules accept valid regional usage from learners. Regional pronunciation is a model instruction and still needs listening checks. Portuguese's stable `pt` storage ID currently belongs to the Brazilian module; a future independently selectable variety must not silently reinterpret existing progress.
 
@@ -31,6 +34,8 @@ Archive version 2 stores language IDs explicitly. Version 1 records migrate to N
 Mandarin builds on [richardguerre's contribution in #4](https://github.com/Chuloo/mural/pull/4). Its module and pinyin approach were adapted after review. `MandarinPinyin` uses the system word tokenizer's Latin transcription, which distinguishes common readings such as 银行 (yínháng) and 旅行 (lǚxíng). It normalizes the dictionary's `v` notation to `ü` and preserves the source text, including punctuation, whitespace and mixed scripts. Unrecognized readings receive no annotation. This is a dictionary reading aid, not a pronunciation assessment or a complete treatment of tone sandhi.
 
 Pinyin appears separately below selectable Chinese text, with a Show/Hide control. Word links use Chinese word boundaries. Lemmas stay in characters, observed forms and quotations stay unchanged, and generated pinyin never becomes learning evidence. Script identifiers such as `zh-Hans` and `zh-Hant` are accepted by the spoken-language check, so Chinese text does not trigger a false language redirect. Simplified Chinese is also available for meaning subtitles.
+
+Japanese follows the same pattern with a kana reading. On iPhone, `JapaneseKana` uses the system word tokenizer's transcription, converted to hiragana. On Android it uses the bundled Kuromoji analyser with the IPADIC dictionary, because the platform offers word boundaries but no readings. Only words containing kanji receive a reading; kana, punctuation, mixed scripts and unrecognized words keep the source text, and the reading never becomes learning evidence. A short list of everyday words (私, 日本, 一人, 二人) corrects formal or character-by-character dictionary readings. The two platforms use different dictionaries, so word boundaries and occasional readings can differ; the shared fixture covers sentences on which they agree. The module teaches the polite です/ます style by default, keeps lemmas in dictionary form without readings, and accepts kana-only or rōmaji input as learner support.
 
 These are compiled modules. Adding one ships with an app update and matching hosted locale support; there is no remote module download. Every new language needs a proficient-speaker teaching and pronunciation review. Regenerate Android's catalog after changing a Swift module.
 

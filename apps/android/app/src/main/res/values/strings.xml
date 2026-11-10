@@ -89,6 +89,8 @@
     <string name="talk_lookup_dialog_title">A little meaning</string>
     <string name="talk_pinyin_show">Show pinyin</string>
     <string name="talk_pinyin_hide">Hide pinyin</string>
+    <string name="talk_reading_show">Show reading</string>
+    <string name="talk_reading_hide">Hide reading</string>
     <string name="talk_status_connecting">Getting comfortable…</string>
     <string name="talk_status_muted">Microphone muted</string>
     <string name="talk_status_listening">I\'m listening</string>

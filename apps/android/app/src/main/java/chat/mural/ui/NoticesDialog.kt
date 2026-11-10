@@ -29,7 +29,7 @@ import chat.mural.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private val NOTICE_FILES = listOf("Nunito-OFL.txt", "THIRD-PARTY-NOTICES.txt", "Mural-LICENSE.txt", "Apache-2.0.txt", "WebRTC-SDK-LICENSE.txt", "WebRTC-THIRD-PARTY-NOTICES.md")
+private val NOTICE_FILES = listOf("Nunito-OFL.txt", "THIRD-PARTY-NOTICES.txt", "Mural-LICENSE.txt", "Apache-2.0.txt", "WebRTC-SDK-LICENSE.txt", "Kuromoji-NOTICE.md", "WebRTC-THIRD-PARTY-NOTICES.md")
 
 private data class NoticeBlock(val text: String, val isFileTitle: Boolean)
 

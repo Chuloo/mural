@@ -164,7 +164,7 @@ struct WordDetailView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
                 Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
-                if store.language.id == "zh" { PinyinHelp(text: word.lemma) }
+                ReadingHelp(text: word.lemma, languageID: store.language.id)
                 Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary)
                 HStack { RecallBars(count: word.bars); Text(word.label).font(.subheadline) }
                 Text(word.explanation).font(.body)
@@ -203,7 +203,7 @@ struct TranscriptView: View {
                                 Text(passage.speaker == .assistant ? "MURAL" : "YOU").font(.caption).tracking(1).foregroundStyle(MuralColor.secondary)
                                 Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
                                     .accessibilityIdentifier(passage.speaker == .user ? "transcript-user-passage" : "transcript-assistant-passage")
-                                if session.languageID == "zh" { PinyinHelp(text: passage.text) }
+                                ReadingHelp(text: passage.text, languageID: session.languageID)
                                 if let translation = session.translations[MeaningRequest.cacheKey(revisionKey: passage.revisionKey, language: meaningLanguage)] ?? session.translations[meaningLanguage + "::" + passage.revisionKey] ?? session.translations[passage.revisionKey] {
                                     Text(translation).font(.subheadline).foregroundStyle(MuralColor.secondary)
                                 }
@@ -277,7 +277,7 @@ struct EditableTranscriptView: View {
                             }.foregroundStyle(MuralColor.secondary)
                             Text(passage.text).font(.system(.title3, design: .rounded)).textSelection(.enabled)
                                     .accessibilityIdentifier(passage.speaker == .user ? "transcript-user-passage" : "transcript-assistant-passage")
-                            if session?.languageID == "zh" { PinyinHelp(text: passage.text) }
+                            if let session { ReadingHelp(text: passage.text, languageID: session.languageID) }
                         }
                     }
                     ForEach(session?.topics ?? []) { topic in Text(.init(topic.text)); SourcesView(sources: topic.sources, date: topic.retrievedAt) }

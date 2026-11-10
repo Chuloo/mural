@@ -14,7 +14,8 @@ final class CaptionAssemblyTests: XCTestCase {
             ("zh", ["我", "喜欢", "学习", "中文。", "你呢？"], "我喜欢学习中文。你呢？"),
             ("sr", ["Volim da uči", "m srp", "ski."], "Volim da učim srpski."),
             ("el", ["Πώς εί", "σαι; Μα", "ΐου."], "Πώς είσαι; Μαΐου."),
-            ("tl", ["Mag-", "aaral ako araw-", "araw."], "Mag-aaral ako araw-araw.")
+            ("tl", ["Mag-", "aaral ako araw-", "araw."], "Mag-aaral ako araw-araw."),
+            ("ja", ["日本語を勉", "強して", "います。", "あなたは？"], "日本語を勉強しています。あなたは？")
         ]
         for (id, parts, expected) in examples {
             XCTAssertNotNil(LanguageRegistry.module(for: id))

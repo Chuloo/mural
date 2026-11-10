@@ -89,6 +89,8 @@
     <string name="talk_lookup_dialog_title">Un pequeño significado</string>
     <string name="talk_pinyin_show">Mostrar pinyin</string>
     <string name="talk_pinyin_hide">Ocultar pinyin</string>
+    <string name="talk_reading_show">Mostrar lectura</string>
+    <string name="talk_reading_hide">Ocultar lectura</string>
     <string name="talk_status_connecting">Preparando la conversación…</string>
     <string name="talk_status_muted">Micrófono en pausa</string>
     <string name="talk_status_listening">Te escucho</string>

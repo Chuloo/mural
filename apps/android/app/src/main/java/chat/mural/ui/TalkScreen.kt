@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -80,7 +81,10 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.window.Dialog
 import chat.mural.MuralViewModel
 import chat.mural.R
+import chat.mural.core.JapaneseKana
 import chat.mural.core.SessionRecord
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import chat.mural.core.Speaker
 import chat.mural.core.ConversationProvider
 
@@ -119,16 +123,22 @@ fun TalkScreen(
     BoxWithConstraints(Modifier.fillMaxSize().testTag("talk-screen")) {
     val scrollPage = LocalDensity.current.fontScale > 1.3f || maxHeight < 480.dp
     val compact = !scrollPage && maxHeight < 620.dp
-    val hasMandarinReading = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-        vm.language.id == "zh" && chat.mural.core.MandarinPinyin.containsHan(caption)
-    val compactReading = compact && hasMandarinReading
+    val hasReading = chat.mural.core.MandarinPinyin.containsHan(caption) &&
+        (vm.language.id == "ja" || vm.language.id == "zh" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+    val compactReading = compact && hasReading
+    // The Japanese dictionary loads off the main thread; captions gain word links once it is ready.
+    val japanese = vm.language.id == "ja"
+    val dictionaryReady by produceState(JapaneseKana.ready, japanese) {
+        if (japanese && !value) value = withContext(Dispatchers.Default) { JapaneseKana.warmUp(); true }
+    }
+    val wordLinksReady = !japanese || dictionaryReady
     val captionWidth = with(LocalDensity.current) { (maxWidth - 56.dp).roundToPx().coerceAtLeast(1) }
     val longPassage = passage != null && !scrollPage && textMeasurer.measure(
         caption, style = MaterialTheme.typography.headlineSmall,
         constraints = Constraints(maxWidth = captionWidth),
     ).lineCount > 2
     val readingSpace by animateFloatAsState(
-        if (longPassage || hasMandarinReading) 1f else 0f, spring(dampingRatio = 1f, stiffness = 260f), label = "passage reading space",
+        if (longPassage || hasReading) 1f else 0f, spring(dampingRatio = 1f, stiffness = 260f), label = "passage reading space",
     )
     val orbSize = when {
         scrollPage -> 170.dp
@@ -190,12 +200,12 @@ fun TalkScreen(
             verticalArrangement = Arrangement.Center,
         ) {
         Column(
-            modifier = (if (passage == null) Modifier else Modifier.height(with(LocalDensity.current) { 90.dp * fontScale } + (if (hasMandarinReading) 58.dp else 0.dp)).passageScroll(targetScroll).then(targetFollowing))
+            modifier = (if (passage == null) Modifier else Modifier.height(with(LocalDensity.current) { 90.dp * fontScale } + (if (hasReading) 58.dp else 0.dp)).passageScroll(targetScroll).then(targetFollowing))
                 .fillMaxWidth().testTag("target-passage-scroll"),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                if (passage == null) AnnotatedString(caption)
+                if (passage == null || !wordLinksReady) AnnotatedString(caption)
                 else captionLinks(caption, vm.language.id) { word ->
                     vm.clearLookup(); lookupWord = word; lookupSentence = caption
                     lookup = true; onLookup(word, caption)
@@ -204,7 +214,7 @@ fun TalkScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().testTag("target-caption"),
             )
-            if (vm.language.id == "zh") PinyinHelp(caption)
+            ReadingHelp(caption, vm.language.id)
         }
         if (vm.archive.preferences.meaningVisible) {
             Spacer(Modifier.height(10.dp))

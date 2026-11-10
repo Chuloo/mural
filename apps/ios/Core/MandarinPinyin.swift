@@ -14,34 +14,16 @@ public enum MandarinPinyin {
     /// Uses the system's word readings so 银行 and 旅行 keep different readings of 行.
     /// Punctuation, spacing and unrecognized characters remain exactly as supplied.
     public static func tokens(_ text: String) -> [MandarinPronunciationToken] {
-        guard !text.isEmpty else { return [] }
-        let source = text as NSString
-        let tokenizer = CFStringTokenizerCreate(nil, text as CFString,
-            CFRange(location: 0, length: source.length), kCFStringTokenizerUnitWord,
-            CFLocaleCreate(nil, CFLocaleIdentifier("zh_CN" as CFString)))!
-        var result: [MandarinPronunciationToken] = []
-        var cursor = 0
-        while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
-            let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-            guard range.location >= cursor, range.length > 0, range.location + range.length <= source.length else { continue }
-            if range.location > cursor {
-                result.append(.init(text: source.substring(with: NSRange(location: cursor, length: range.location - cursor)), pinyin: nil))
-            }
-            let word = source.substring(with: NSRange(location: range.location, length: range.length))
+        SystemWordReadings.tokens(text, locale: "zh_CN").map { token in
             var reading: String?
-            if containsHan(word), let latin = CFStringTokenizerCopyCurrentTokenAttribute(tokenizer, kCFStringTokenizerAttributeLatinTranscription) as? String {
+            if containsHan(token.text), let latin = token.latin {
                 // Apple's dictionary uses v for ü in some readings (e.g. 旅行).
                 let normalized = String(String.UnicodeScalarView(latin.lowercased().unicodeScalars.map { $0 == "v" ? "ü" : $0 }))
                     .precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !normalized.isEmpty && !containsHan(normalized) { reading = normalized }
             }
-            result.append(.init(text: word, pinyin: reading))
-            cursor = range.location + range.length
+            return .init(text: token.text, pinyin: reading)
         }
-        if cursor < source.length {
-            result.append(.init(text: source.substring(from: cursor), pinyin: nil))
-        }
-        return result
     }
 
     /// A separate reading aid; source text and learning evidence are never replaced.
@@ -60,7 +42,7 @@ public enum MandarinPinyin {
         return result
     }
 
-    private static func containsHan(_ text: String) -> Bool {
+    static func containsHan(_ text: String) -> Bool {
         text.unicodeScalars.contains { scalar in
             switch scalar.value {
             case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
@@ -71,16 +53,42 @@ public enum MandarinPinyin {
     }
 }
 
+/// The system word tokenizer's segmentation and Latin transcription for a CJK locale.
+enum SystemWordReadings {
+    /// Consecutive pieces whose concatenation is the original text; text between words has no transcription.
+    static func tokens(_ text: String, locale: String) -> [(text: String, latin: String?)] {
+        guard !text.isEmpty else { return [] }
+        let source = text as NSString
+        let tokenizer = CFStringTokenizerCreate(nil, text as CFString,
+            CFRange(location: 0, length: source.length), kCFStringTokenizerUnitWord,
+            CFLocaleCreate(nil, CFLocaleIdentifier(locale as CFString)))!
+        var result: [(text: String, latin: String?)] = []
+        var cursor = 0
+        while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
+            let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+            guard range.location >= cursor, range.length > 0, range.location + range.length <= source.length else { continue }
+            if range.location > cursor {
+                result.append((source.substring(with: NSRange(location: cursor, length: range.location - cursor)), nil))
+            }
+            result.append((source.substring(with: NSRange(location: range.location, length: range.length)),
+                CFStringTokenizerCopyCurrentTokenAttribute(tokenizer, kCFStringTokenizerAttributeLatinTranscription) as? String))
+            cursor = range.location + range.length
+        }
+        if cursor < source.length { result.append((source.substring(from: cursor), nil)) }
+        return result
+    }
+}
+
 public struct CaptionSegment: Equatable, Sendable {
     public let text: String
     public let lookup: String?
 }
 
 public enum CaptionWords {
-    /// Keeps every source character, linking Chinese words instead of whole sentences.
+    /// Keeps every source character, linking Chinese and Japanese words instead of whole sentences.
     public static func segments(_ text: String, languageID: String) -> [CaptionSegment] {
-        if languageID == "zh" {
-            return MandarinPinyin.tokens(text).map {
+        if let locale = ["zh": "zh_CN", "ja": "ja_JP"][languageID] {
+            return SystemWordReadings.tokens(text, locale: locale).map {
                 CaptionSegment(text: $0.text, lookup: $0.text.contains(where: \.isLetter) ? $0.text : nil)
             }
         }

@@ -15,7 +15,7 @@ Built with SwiftUI and Liquid Glass on iPhone, and Jetpack Compose on Android. L
 
 ## Android
 
-A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same eleven language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and supports Mural minutes or your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
+A native Android client is available in [`apps/android/`](apps/android/README.md), with voice and written conversation, the same fourteen language modules, local learning records and iPhone-compatible JSON backups. Its interface is English, and Spanish on a phone set to Spanish. It runs on Android 8.0 or later and supports Mural minutes or your own OpenAI API key stored with Android Keystore. The iPhone client remains available below.
 
 See the [Android installation/build guide](docs/run-on-android.md) and [Android verification record](verification/android-validation.md). Build a personal-install APK with Java 17 and Android SDK 36:
 
@@ -83,11 +83,13 @@ A free Personal Team can run the app on your own phone; TestFlight and App Store
 - **A fresh start:** the Talk screen returns to its greeting 15 seconds after a conversation ends. Tap **New conversation** to reset immediately. Your saved conversations and learning remain.
 - **Local records:** export or import a JSON learning backup, delete a conversation, or delete all learning data from Settings.
 
-The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Spanish from Spain, international English, French from France, German from Germany, Italian from Italy, Brazilian Portuguese, Standard Mandarin with Simplified Chinese, Standard Serbian (Ekavian, Latin script), Modern Standard Greek from Greece , Tagalog/Filipino from the Philippines, Dutch from the Netherlands and Standard Russian. Each language has its own conversation themes, teaching guidance and progress. Valid regional alternatives are accepted; Serbian also accepts Cyrillic input. See the [new language guidance](docs/serbian-greek-tagalog.md) for writing, pronunciation and vocabulary rules.
+The modules teach Norwegian Bokmål with an Eastern Norwegian voice target, Spanish from Spain, international English, French from France, German from Germany, Italian from Italy, Brazilian Portuguese, Standard Mandarin with Simplified Chinese, Standard Serbian (Ekavian, Latin script), Modern Standard Greek from Greece, Tagalog/Filipino from the Philippines, Dutch from the Netherlands, Standard Russian and Standard Japanese. Each language has its own conversation themes, teaching guidance and progress. Valid regional alternatives are accepted; Serbian also accepts Cyrillic input. See the [new language guidance](docs/serbian-greek-tagalog.md) for writing, pronunciation and vocabulary rules.
 
 An active voice conversation continues when the phone dims, locks or Mural moves to the background. Android shows an ongoing notification with an End action. Returning to Mural restores the same conversation. Audio interruptions, the chosen duration and the existing silence limit still end the call.
 
 On iPhone, Mandarin includes optional pinyin in Talk, transcripts and word details. Chinese word lookup uses word boundaries, and the original characters remain available for copying from transcripts. Pinyin uses system dictionary readings; names, ambiguous words and tone changes in connected speech still need listening checks. Voice accent and teaching guidance are model instructions, and fluent-speaker review is still needed before making pronunciation or learning-effectiveness claims.
+
+Japanese includes an optional kana reading in the same places on iPhone and Android. Kanji words are shown in hiragana; kana, punctuation and words without a dictionary reading stay as written. Word lookup uses Japanese word boundaries. Readings come from a dictionary and can differ from the spoken reading for names, counters and words with several readings.
 
 ## Privacy and API costs
 

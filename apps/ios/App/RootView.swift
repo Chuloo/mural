@@ -188,7 +188,7 @@ struct TalkView: View {
     }
     private func talkContent(scrollPage: Bool, compact: Bool) -> some View {
         let hasLongPassage = coordinator.assistantPassage != nil &&
-            (coordinator.caption.count > 60 || coordinator.language.id == "zh")
+            (coordinator.caption.count > 60 || ReadingAid.supports(languageID: coordinator.language.id))
         let orbSide: CGFloat = scrollPage ? 170 : compact ? (hasLongPassage ? 124 : 150) : (hasLongPassage ? 156 : 220)
         return VStack(spacing: 0) {
             Text(coordinator.selectedTheme?.title ?? coordinator.language.talkTitle)
@@ -233,7 +233,7 @@ struct TalkView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 followingPassage(text: coordinator.caption) { targetPassage }
-                    .frame(height: targetLineHeight * 3 + (coordinator.language.id == "zh" ? 58 : 0))
+                    .frame(height: targetLineHeight * 3 + (ReadingAid.supports(languageID: coordinator.language.id) ? 58 : 0))
                     .accessibilityIdentifier("target-passage-scroll")
                 if coordinator.store.preferences.meaningVisible {
                     followingPassage(text: coordinator.meaning, isMeaning: true) { meaningPassage }
@@ -269,7 +269,7 @@ struct TalkView: View {
                     guard url.scheme == "mural-word", let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first?.value else { return .discarded }
                     lookup = WordLookup(word: word, sentence: coordinator.caption); return .handled
                 }).accessibilityIdentifier("target-caption")
-            if coordinator.language.id == "zh" { PinyinHelp(text: coordinator.caption) }
+            ReadingHelp(text: coordinator.caption, languageID: coordinator.language.id)
         }.frame(maxWidth: .infinity)
     }
     private var meaningPassage: some View {
@@ -352,7 +352,7 @@ struct LookupView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
                 Text(item.word).font(.system(.largeTitle, design: .rounded, weight: .medium))
-                if coordinator.language.id == "zh" { PinyinHelp(text: item.word) }
+                ReadingHelp(text: item.word, languageID: coordinator.language.id)
                 Text(item.sentence).font(.title3).foregroundStyle(MuralColor.secondary)
                 if let explanation { Text(explanation).font(.body).textSelection(.enabled) }
                 else if let error { Text(error).foregroundStyle(MuralColor.secondary) }

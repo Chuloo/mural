@@ -79,8 +79,9 @@ object HanWords {
 data class CaptionSegment(val text: String, val lookup: String?)
 
 object CaptionWords {
-    /** Keeps every source character, linking Chinese words instead of whole sentences. */
+    /** Keeps every source character, linking Chinese and Japanese words instead of whole sentences. */
     fun segments(text: String, languageID: String, reader: HanReader? = MandarinPinyin.reader): List<CaptionSegment> {
+        if (languageID == "ja") return JapaneseKana.tokens(text).map { CaptionSegment(it.text, it.text.takeIf(::containsLetter)) }
         if (languageID == "zh") {
             if (text.isEmpty()) return emptyList()
             val words = MandarinPinyin.words(text, reader) ?: return listOf(CaptionSegment(text, null))

@@ -279,7 +279,7 @@ private fun WordDialog(word: WordState, onRemove: () -> Unit, onDismiss: () -> U
         Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
                 Text(word.lemma, style = MaterialTheme.typography.headlineLarge)
-                if (word.id.startsWith("zh|")) PinyinHelp(word.lemma)
+                ReadingHelp(word.lemma, word.id.substringBefore('|'))
                 Text(word.meaning, style = MaterialTheme.typography.titleLarge, color = MuralColors.Secondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     RecallBars(word.bars); Text(wordLabel(word.label))

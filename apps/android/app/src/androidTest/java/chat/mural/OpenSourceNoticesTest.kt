@@ -49,7 +49,7 @@ class OpenSourceNoticesTest {
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodes(hasText("Nunito-OFL.txt")).fetchSemanticsNodes().isNotEmpty()
         }
-        for (file in listOf("Nunito-OFL.txt", "THIRD-PARTY-NOTICES.txt", "Mural-LICENSE.txt", "Apache-2.0.txt", "WebRTC-SDK-LICENSE.txt", "WebRTC-THIRD-PARTY-NOTICES.md")) {
+        for (file in listOf("Nunito-OFL.txt", "THIRD-PARTY-NOTICES.txt", "Mural-LICENSE.txt", "Apache-2.0.txt", "WebRTC-SDK-LICENSE.txt", "Kuromoji-NOTICE.md", "WebRTC-THIRD-PARTY-NOTICES.md")) {
             compose.onNodeWithTag("notices-list").performScrollToNode(hasText(file))
             compose.onNode(hasText(file)).assertIsDisplayed()
         }

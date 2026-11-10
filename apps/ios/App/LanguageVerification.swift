@@ -67,7 +67,7 @@ extension AudioVerification {
             var failure: String?
             var flowPassed: Bool {
                 connected && receivedGreeting && typedReplies == 2 && translated &&
-                lookupReturned && (languageID != "zh" || pinyinAvailable) && assessedLastReply && supportedEvidenceOnly &&
+                lookupReturned && (!ReadingAid.supports(languageID: languageID) || pinyinAvailable) && assessedLastReply && supportedEvidenceOnly &&
                 archiveRoundTrip && switchedAwayAndBack && cachedMeaningAfterEnd && closed && audioReleased &&
                 peakAudioLevel > 0.001 && outputPorts.contains(AVAudioSession.Port.builtInSpeaker.rawValue) && failure == nil &&
                 (!spokenCheckRequested || (spokenInputReceived && spokenInputInBackground && spokenReplyReceived && spokenReplyInBackground && spokenReplyAudioPeak > 0.001)) &&
@@ -168,7 +168,8 @@ extension AudioVerification {
                 "el": "Αν άνοιγες μια καφετέρια, πώς θα κρατούσες προσιτές τις τιμές χρησιμοποιώντας τοπικά υλικά;",
                 "tl": "Kung magbubukas ka ng kapihan, paano mo mapapanatiling abot-kaya ang mga presyo habang gumagamit ng mga lokal na sangkap?",
                 "nl": "Als je een café zou openen, hoe zou je lokale producten en betaalbare prijzen combineren?",
-                "ru": "Если бы ты открыл кафе, как бы ты использовал местные продукты и сохранял доступные цены?"
+                "ru": "Если бы ты открыл кафе, как бы ты использовал местные продукты и сохранял доступные цены?",
+                "ja": "もしカフェを開くなら、地元の食材を使いながら、どうやって手頃な値段を保ちますか？"
             ]
             for reply in ["I am learning. How can I politely order a coffee?", advanced[id] ?? "Tell me more."] {
                 _ = await waitFor(10) { !coordinator.working }
@@ -190,9 +191,9 @@ extension AudioVerification {
                 report.detectedLanguageConfidence = detected.value
                 report.targetLanguageDetected = TeachingPolicy.detectedLanguageMatches(language: coordinator.language, detectedLanguageID: detected.key.rawValue)
             }
-            report.pinyinAvailable = MandarinPinyin.reading(coordinator.caption) != nil
+            report.pinyinAvailable = ReadingAid.reading(coordinator.caption, languageID: id) != nil
             report.translated = await waitFor(20) { !coordinator.meaning.isEmpty && !coordinator.translating }
-            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡", "sr": "kafa", "el": "καφές", "tl": "kape", "nl": "koffie", "ru": "кофе"]
+            let lookupWords = ["de": "Kaffee", "it": "caffè", "pt": "café", "zh": "咖啡", "sr": "kafa", "el": "καφές", "tl": "kape", "nl": "koffie", "ru": "кофе", "ja": "コーヒー"]
             do {
                 let result = try await coordinator.lookup(word: lookupWords[id] ?? coordinator.language.greetingWord, sentence: coordinator.caption)
                 report.lookupReturned = !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
