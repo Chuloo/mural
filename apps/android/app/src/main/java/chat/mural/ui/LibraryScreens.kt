@@ -284,6 +284,9 @@ fun WordsScreen(vm: MuralViewModel) {
     selected?.let { word -> WordDialog(word, speaker = speaker, onRemove = { speaker.stop(); vm.hideWord(word.id); selected = null }, onDismiss = { speaker.stop(); selected = null }) }
 }
 
+/**
+ * Detail modal displaying full vocabulary definition, pronunciation controls, and proficiency progress.
+ */
 @Composable
 internal fun WordDialog(word: WordState, speaker: WordSpeaker = rememberWordSpeaker(), onRemove: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = { speaker.stop(); onDismiss() }) {

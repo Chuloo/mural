@@ -38,9 +38,13 @@ sealed class WordPlaybackState {
 
 /** Controls on-device word pronunciation and playback state. */
 interface WordSpeaker {
+    /** Current playback progress across registered words. */
     val state: State<WordPlaybackState>
+    /** Initiates spoken audio for the specified word. */
     fun speak(wordId: String, text: String, languageID: String)
+    /** Immediately interrupts and halts any active pronunciation audio. */
     fun stop()
+    /** Cleans up underlying audio synthesizer resources. */
     fun release()
 }
 

@@ -844,15 +844,20 @@ private struct FlashcardFaceRotation: AnimatableModifier {
 final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     static let shared = WordSpeaker()
 
+    /// Playback states reflecting on-device speech synthesis progress.
     enum State: Equatable {
         case idle
+        case loading(String)
         case playing(String)
         case unavailable(String)
+        case error(String)
     }
 
+    /// Current playback state observed by UI controls.
     @Published var state: State = .idle
     private let synthesizer = AVSpeechSynthesizer()
     private var activeUtterance: AVSpeechUtterance?
+    private var activeWordID: String?
 
     override init() {
         super.init()
@@ -876,33 +881,48 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
         activeUtterance = utterance
-        state = .playing(wordID)
+        activeWordID = wordID
+        state = .loading(wordID)
         synthesizer.speak(utterance)
     }
 
     /// Stops any active speech and resets state to idle.
     func stop() {
         activeUtterance = nil
+        activeWordID = nil
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
         state = .idle
     }
 
+    /// Delegate callback invoked when utterance playback begins.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        nonisolated(unsafe) let started = utterance
+        Task { @MainActor in
+            guard self.activeUtterance === started else { return }
+            self.state = .playing(self.activeWordID ?? "")
+        }
+    }
+
+    /// Delegate callback invoked when utterance playback completes.
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         nonisolated(unsafe) let finished = utterance
         Task { @MainActor in
             guard self.activeUtterance === finished else { return }
             self.activeUtterance = nil
+            self.activeWordID = nil
             self.state = .idle
         }
     }
 
+    /// Delegate callback invoked when utterance playback is interrupted or canceled.
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         nonisolated(unsafe) let cancelled = utterance
         Task { @MainActor in
             guard self.activeUtterance === cancelled else { return }
             self.activeUtterance = nil
+            self.activeWordID = nil
             self.state = .idle
         }
     }
@@ -942,6 +962,16 @@ struct PronunciationButton: View {
         return false
     }
 
+    private var isLoading: Bool {
+        if case .loading(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var isError: Bool {
+        if case .error(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
     private var isUnavailable: Bool {
         if case .unavailable(let id) = speaker.state { return id == wordID }
         return false
@@ -949,6 +979,8 @@ struct PronunciationButton: View {
 
     private var accessibilityDescription: String {
         if isPlaying { return "Stop pronunciation" }
+        if isLoading { return "Loading pronunciation" }
+        if isError { return "Retry pronunciation" }
         if isUnavailable { return "Pronunciation unavailable on this device" }
         return "Play pronunciation"
     }
@@ -963,13 +995,23 @@ struct PronunciationButton: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(isPlaying ? MuralColor.peach.opacity(0.85) : .white.opacity(0.78))
+                    .fill(isPlaying ? MuralColor.peach.opacity(0.85) : (isLoading ? MuralColor.butter.opacity(0.85) : .white.opacity(0.78)))
                     .frame(width: size, height: size)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
                     .shadow(color: MuralColor.secondary.opacity(0.08), radius: 8, x: 0, y: 4)
-                Image(systemName: isPlaying ? "waveform" : (isUnavailable ? "speaker.slash" : "speaker.wave.2"))
-                    .font(.system(size: size * 0.44, weight: .regular))
-                    .foregroundStyle(isPlaying ? MuralColor.orange : (isUnavailable ? MuralColor.secondary.opacity(0.5) : MuralColor.ink))
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .scaleEffect(0.7)
+                } else if isError {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: size * 0.44, weight: .semibold))
+                        .foregroundStyle(Color.red)
+                } else {
+                    Image(systemName: isPlaying ? "waveform" : (isUnavailable ? "speaker.slash" : "speaker.wave.2"))
+                        .font(.system(size: size * 0.44, weight: .regular))
+                        .foregroundStyle(isPlaying ? MuralColor.orange : (isUnavailable ? MuralColor.secondary.opacity(0.5) : MuralColor.ink))
+                }
             }
         }
         .buttonStyle(.plain)
