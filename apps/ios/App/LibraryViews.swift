@@ -852,7 +852,7 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     @Published var state: State = .idle
     private let synthesizer = AVSpeechSynthesizer()
-    private var activeUtterance: ObjectIdentifier?
+    private var activeUtterance: AVSpeechUtterance?
 
     override init() {
         super.init()
@@ -875,7 +875,7 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
-        activeUtterance = ObjectIdentifier(utterance)
+        activeUtterance = utterance
         state = .playing(wordID)
         synthesizer.speak(utterance)
     }
@@ -890,18 +890,18 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        let id = ObjectIdentifier(utterance)
+        nonisolated(unsafe) let finished = utterance
         Task { @MainActor in
-            guard self.activeUtterance == id else { return }
+            guard self.activeUtterance === finished else { return }
             self.activeUtterance = nil
             self.state = .idle
         }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        let id = ObjectIdentifier(utterance)
+        nonisolated(unsafe) let cancelled = utterance
         Task { @MainActor in
-            guard self.activeUtterance == id else { return }
+            guard self.activeUtterance === cancelled else { return }
             self.activeUtterance = nil
             self.state = .idle
         }
