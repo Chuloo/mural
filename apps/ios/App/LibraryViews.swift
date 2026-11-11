@@ -839,26 +839,27 @@ private struct FlashcardFaceRotation: AnimatableModifier {
     }
 }
 
+/// Manages on-device speech synthesis and playback state for vocabulary words.
 @MainActor
 final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     static let shared = WordSpeaker()
 
     enum State: Equatable {
         case idle
-        case loading(String)
         case playing(String)
         case unavailable(String)
-        case error(String)
     }
 
     @Published var state: State = .idle
     private let synthesizer = AVSpeechSynthesizer()
+    private var activeUtterance: ObjectIdentifier?
 
     override init() {
         super.init()
         synthesizer.delegate = self
     }
 
+    /// Speaks the given text in the appropriate voice for the language identifier.
     func speak(wordID: String, text: String, languageID: String) {
         if case .playing(let current) = state, current == wordID {
             stop()
@@ -874,11 +875,14 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        activeUtterance = ObjectIdentifier(utterance)
         state = .playing(wordID)
         synthesizer.speak(utterance)
     }
 
+    /// Stops any active speech and resets state to idle.
     func stop() {
+        activeUtterance = nil
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
@@ -886,17 +890,24 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        let id = ObjectIdentifier(utterance)
         Task { @MainActor in
+            guard self.activeUtterance == id else { return }
+            self.activeUtterance = nil
             self.state = .idle
         }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        let id = ObjectIdentifier(utterance)
         Task { @MainActor in
+            guard self.activeUtterance == id else { return }
+            self.activeUtterance = nil
             self.state = .idle
         }
     }
 
+    /// Resolves the preferred BCP-47 speech synthesis voice for the given language.
     func resolveVoice(languageID: String) -> AVSpeechSynthesisVoice? {
         let tag: String = switch languageID {
         case "nb": "nb-NO"
@@ -918,6 +929,7 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 }
 
+/// Accessible glass play control for spoken word pronunciation.
 struct PronunciationButton: View {
     let wordID: String
     let text: String
@@ -930,14 +942,15 @@ struct PronunciationButton: View {
         return false
     }
 
-    private var isLoading: Bool {
-        if case .loading(let id) = speaker.state { return id == wordID }
+    private var isUnavailable: Bool {
+        if case .unavailable(let id) = speaker.state { return id == wordID }
         return false
     }
 
-    private var isError: Bool {
-        if case .error(let id) = speaker.state { return id == wordID }
-        return false
+    private var accessibilityDescription: String {
+        if isPlaying { return "Stop pronunciation" }
+        if isUnavailable { return "Pronunciation unavailable on this device" }
+        return "Play pronunciation"
     }
 
     var body: some View {
@@ -954,19 +967,13 @@ struct PronunciationButton: View {
                     .frame(width: size, height: size)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
                     .shadow(color: MuralColor.secondary.opacity(0.08), radius: 8, x: 0, y: 4)
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .scaleEffect(0.7)
-                } else {
-                    Image(systemName: isPlaying ? "waveform" : "speaker.wave.2")
-                        .font(.system(size: size * 0.44, weight: .regular))
-                        .foregroundStyle(isPlaying ? MuralColor.orange : (isError ? Color.red : MuralColor.ink))
-                }
+                Image(systemName: isPlaying ? "waveform" : (isUnavailable ? "speaker.slash" : "speaker.wave.2"))
+                    .font(.system(size: size * 0.44, weight: .regular))
+                    .foregroundStyle(isPlaying ? MuralColor.orange : (isUnavailable ? MuralColor.secondary.opacity(0.5) : MuralColor.ink))
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isPlaying ? "Stop pronunciation" : "Play pronunciation")
+        .accessibilityLabel(accessibilityDescription)
         .accessibilityIdentifier("pronounce-button")
     }
 }

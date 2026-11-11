@@ -27,6 +27,7 @@ import chat.mural.R
 import chat.mural.core.LanguageRegistry
 import java.util.Locale
 
+/** Represents playback progress for a specific vocabulary word. */
 sealed class WordPlaybackState {
     object Idle : WordPlaybackState()
     data class Loading(val wordId: String) : WordPlaybackState()
@@ -35,6 +36,7 @@ sealed class WordPlaybackState {
     data class Error(val wordId: String) : WordPlaybackState()
 }
 
+/** Controls on-device word pronunciation and playback state. */
 interface WordSpeaker {
     val state: State<WordPlaybackState>
     fun speak(wordId: String, text: String, languageID: String)
@@ -42,7 +44,9 @@ interface WordSpeaker {
     fun release()
 }
 
+/** Resolves candidate locales for each learning language in order of regional preference. */
 object WordSpeakerLocales {
+    /** Returns prioritized locales to query with TextToSpeech for the given language identifier. */
     fun candidateLocales(languageID: String): List<Locale> {
         val module = LanguageRegistry.get(languageID)
         val tagLocale = module?.locale?.let { Locale.forLanguageTag(it) }
@@ -70,6 +74,7 @@ object WordSpeakerLocales {
     }
 }
 
+/** Android TextToSpeech implementation managing engine lifecycle and utterance progression. */
 class AndroidWordSpeaker(private val context: Context) : WordSpeaker {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val _state = mutableStateOf<WordPlaybackState>(WordPlaybackState.Idle)
@@ -77,6 +82,7 @@ class AndroidWordSpeaker(private val context: Context) : WordSpeaker {
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    private var initFailed = false
     private var isShutDown = false
     private var pendingRequest: (() -> Unit)? = null
 
@@ -86,13 +92,17 @@ class AndroidWordSpeaker(private val context: Context) : WordSpeaker {
                 if (isShutDown) return@post
                 if (status == TextToSpeech.SUCCESS) {
                     isInitialized = true
+                    initFailed = false
                     setupUtteranceListener()
                     pendingRequest?.invoke()
                     pendingRequest = null
                 } else {
                     isInitialized = false
-                    _state.value = WordPlaybackState.Idle
+                    initFailed = true
+                    val request = pendingRequest
                     pendingRequest = null
+                    _state.value = WordPlaybackState.Idle
+                    request?.invoke()
                 }
             }
         }
@@ -160,6 +170,12 @@ class AndroidWordSpeaker(private val context: Context) : WordSpeaker {
         // Interrupt any ongoing utterance
         stop()
 
+        if (initFailed) {
+            _state.value = WordPlaybackState.Unavailable(wordId, languageID)
+            Toast.makeText(context, context.getString(R.string.pronounce_unavailable), Toast.LENGTH_SHORT).show()
+            return
+        }
+
         if (!isInitialized) {
             _state.value = WordPlaybackState.Loading(wordId)
             pendingRequest = { speak(wordId, text, languageID) }
@@ -217,6 +233,7 @@ class AndroidWordSpeaker(private val context: Context) : WordSpeaker {
     }
 }
 
+/** Remembers and manages the lifecycle of an on-device [WordSpeaker]. */
 @Composable
 fun rememberWordSpeaker(): WordSpeaker {
     val context = LocalContext.current
@@ -239,6 +256,9 @@ fun rememberWordSpeaker(): WordSpeaker {
     return speaker
 }
 
+/**
+ * Accessible audio playback control for spoken word pronunciation.
+ */
 @Composable
 fun PronunciationButton(
     wordId: String,
