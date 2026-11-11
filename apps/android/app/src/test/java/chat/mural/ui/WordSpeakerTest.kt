@@ -37,6 +37,13 @@ class WordSpeakerTest {
     }
 
     @Test
+    fun portuguesePrioritizesBrazilianLocale() {
+        val candidates = WordSpeakerLocales.candidateLocales("pt")
+        assertEquals(Locale.forLanguageTag("pt-BR"), candidates.first())
+        assertFalse("Should not include European Portuguese fallback", candidates.contains(Locale.forLanguageTag("pt-PT")))
+    }
+
+    @Test
     fun unknownLanguageFallsBackGracefully() {
         val candidates = WordSpeakerLocales.candidateLocales("xyz")
         assertEquals(listOf(Locale.forLanguageTag("xyz")), candidates)

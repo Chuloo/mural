@@ -64,7 +64,7 @@ object WordSpeakerLocales {
             "de" -> listOf(Locale.GERMANY, Locale.GERMAN)
             "fr" -> listOf(Locale.FRANCE, Locale.FRENCH)
             "it" -> listOf(Locale.ITALY, Locale.ITALIAN)
-            "pt" -> listOf(Locale.forLanguageTag("pt-PT"), Locale.forLanguageTag("pt-BR"), Locale.forLanguageTag("pt"))
+            "pt" -> listOf(Locale.forLanguageTag("pt-BR"), Locale.forLanguageTag("pt"))
             "sr" -> listOf(Locale.forLanguageTag("sr-RS"), Locale.forLanguageTag("sr"))
             "el" -> listOf(Locale.forLanguageTag("el-GR"), Locale.forLanguageTag("el"))
             "tl" -> listOf(Locale.forLanguageTag("fil-PH"), Locale.forLanguageTag("tl-PH"), Locale.forLanguageTag("fil"), Locale.forLanguageTag("tl"))

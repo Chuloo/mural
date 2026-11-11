@@ -859,9 +859,24 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     private var activeUtterance: AVSpeechUtterance?
     private var activeWordID: String?
 
+    private var backgroundObserver: NSObjectProtocol?
+
     override init() {
         super.init()
         synthesizer.delegate = self
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.stop()
+        }
+    }
+
+    deinit {
+        if let observer = backgroundObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     /// Speaks the given text in the appropriate voice for the language identifier.
@@ -940,7 +955,7 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         case "fr": "fr-FR"
         case "de": "de-DE"
         case "it": "it-IT"
-        case "pt": "pt-PT"
+        case "pt": "pt-BR"
         case "zh": "zh-CN"
         case "sr": "sr-RS"
         case "el": "el-GR"
@@ -948,6 +963,9 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         case "nl": "nl-NL"
         case "ru": "ru-RU"
         default: languageID
+        }
+        if languageID == "pt" {
+            return AVSpeechSynthesisVoice(language: "pt-BR")
         }
         return AVSpeechSynthesisVoice(language: tag) ?? AVSpeechSynthesisVoice(language: languageID)
     }
