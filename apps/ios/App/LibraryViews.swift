@@ -874,6 +874,10 @@ final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
         guard let voice = resolveVoice(languageID: languageID) else {
             state = .unavailable(wordID)
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "Pronunciation unavailable on this device"
+            )
             return
         }
 
