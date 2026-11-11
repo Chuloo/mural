@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import MuralCore
+import AVFoundation
 
 struct ThemesView: View {
     let coordinator: ConversationCoordinator
@@ -125,12 +126,13 @@ struct WordsView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(words) { word in
                             Button { selected = word } label: {
-                                HStack(spacing: 18) {
+                                HStack(spacing: 14) {
                                     VStack(alignment: .leading, spacing: 6) {
                                         Text(word.lemma).font(.system(.title2, design: .rounded, weight: .medium))
                                         Text(word.meaning).font(.subheadline).foregroundStyle(MuralColor.secondary)
                                     }
                                     Spacer(minLength: 10)
+                                    PronunciationButton(wordID: word.id, text: word.lemma, languageID: coordinator.language.id, size: 36)
                                     VStack(alignment: .trailing, spacing: 8) { RecallBars(count: word.bars); Text(word.label).font(.caption2).foregroundStyle(MuralColor.secondary) }
                                 }.padding(.vertical, 20)
                             }.buttonStyle(.plain)
@@ -163,18 +165,23 @@ struct WordDetailView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
-                Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                HStack(alignment: .center) {
+                    Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                    Spacer()
+                    PronunciationButton(wordID: word.id, text: word.lemma, languageID: store.language.id, size: 44)
+                }
                 if store.language.id == "zh" { PinyinHelp(text: word.lemma) }
                 Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary)
                 HStack { RecallBars(count: word.bars); Text(word.label).font(.subheadline) }
                 Text(word.explanation).font(.body)
                 Text("“\(word.example)”").font(.system(.title3, design: .rounded)).padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MuralColor.peach, in: RoundedRectangle(cornerRadius: 22))
                 Text("\(word.independentCount) independent uses · Last seen \(word.lastSeen.formatted(date: .abbreviated, time: .omitted))").font(.footnote).foregroundStyle(MuralColor.secondary)
-                Button("Remove from my words", role: .destructive) { store.hideWord(word.id); dismiss() }.font(.footnote)
+                Button("Remove from my words", role: .destructive) { WordSpeaker.shared.stop(); store.hideWord(word.id); dismiss() }.font(.footnote)
                 Spacer()
             }.padding(28).frame(maxWidth: .infinity, alignment: .leading).background(MuralColor.cream).foregroundStyle(MuralColor.ink)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { WordSpeaker.shared.stop(); dismiss() } } }
         }.presentationDetents([.medium, .large])
+        .onDisappear { WordSpeaker.shared.stop() }
     }
 }
 
@@ -751,11 +758,13 @@ private struct FlashcardsView: View {
                 }
             }.padding(.top, 16).background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .navigationTitle("Your words").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("close-flashcards") } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { WordSpeaker.shared.stop(); dismiss() }.accessibilityIdentifier("close-flashcards") } }
         }.tint(MuralColor.ink).presentationDetents([.large]).presentationDragIndicator(.hidden).interactiveDismissDisabled()
+        .onDisappear { WordSpeaker.shared.stop() }
     }
     private func move(_ direction: Int, width: Double) {
         guard !advancing else { return }
+        WordSpeaker.shared.stop()
         let destination = deck.destination(from: selection, direction: direction)
         guard destination != selection else {
             withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.82)) { dragOffset = 0 }
@@ -793,8 +802,11 @@ private struct FlashcardView: View {
             VStack(spacing: 28) {
                 HStack(spacing: 10) { RecallBars(count: word.bars); Text(word.label).font(.subheadline).foregroundStyle(MuralColor.secondary) }
                     .accessibilityElement(children: .combine).accessibilityIdentifier("flashcard-proficiency")
-                Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
-                    .multilineTextAlignment(.center).textSelection(.enabled).accessibilityIdentifier("flashcard-word")
+                HStack(spacing: 12) {
+                    Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                        .multilineTextAlignment(.center).textSelection(.enabled).accessibilityIdentifier("flashcard-word")
+                    PronunciationButton(wordID: word.id, text: word.lemma, languageID: word.id.components(separatedBy: "|").first ?? "en", size: 40)
+                }
                 if back {
                     Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                         .accessibilityIdentifier("flashcard-meaning")
@@ -824,5 +836,137 @@ private struct FlashcardFaceRotation: AnimatableModifier {
         content.opacity((angle >= 90) == back ? 1 : 0)
             .rotation3DEffect(.degrees(angle - (back ? 180 : 0)), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
             .allowsHitTesting((angle >= 90) == back)
+    }
+}
+
+@MainActor
+final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    static let shared = WordSpeaker()
+
+    enum State: Equatable {
+        case idle
+        case loading(String)
+        case playing(String)
+        case unavailable(String)
+        case error(String)
+    }
+
+    @Published var state: State = .idle
+    private let synthesizer = AVSpeechSynthesizer()
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func speak(wordID: String, text: String, languageID: String) {
+        if case .playing(let current) = state, current == wordID {
+            stop()
+            return
+        }
+        stop()
+
+        guard let voice = resolveVoice(languageID: languageID) else {
+            state = .unavailable(wordID)
+            return
+        }
+
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        state = .playing(wordID)
+        synthesizer.speak(utterance)
+    }
+
+    func stop() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        state = .idle
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.state = .idle
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.state = .idle
+        }
+    }
+
+    func resolveVoice(languageID: String) -> AVSpeechSynthesisVoice? {
+        let tag: String = switch languageID {
+        case "nb": "nb-NO"
+        case "es": "es-ES"
+        case "en": "en-US"
+        case "fr": "fr-FR"
+        case "de": "de-DE"
+        case "it": "it-IT"
+        case "pt": "pt-PT"
+        case "zh": "zh-CN"
+        case "sr": "sr-RS"
+        case "el": "el-GR"
+        case "tl": "fil-PH"
+        case "nl": "nl-NL"
+        case "ru": "ru-RU"
+        default: languageID
+        }
+        return AVSpeechSynthesisVoice(language: tag) ?? AVSpeechSynthesisVoice(language: languageID)
+    }
+}
+
+struct PronunciationButton: View {
+    let wordID: String
+    let text: String
+    let languageID: String
+    @ObservedObject var speaker: WordSpeaker = .shared
+    var size: CGFloat = 40
+
+    private var isPlaying: Bool {
+        if case .playing(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var isLoading: Bool {
+        if case .loading(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var isError: Bool {
+        if case .error(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    var body: some View {
+        Button {
+            if isPlaying {
+                speaker.stop()
+            } else {
+                speaker.speak(wordID: wordID, text: text, languageID: languageID)
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isPlaying ? MuralColor.peach.opacity(0.85) : .white.opacity(0.78))
+                    .frame(width: size, height: size)
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                    .shadow(color: MuralColor.secondary.opacity(0.08), radius: 8, x: 0, y: 4)
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .scaleEffect(0.7)
+                } else {
+                    Image(systemName: isPlaying ? "waveform" : "speaker.wave.2")
+                        .font(.system(size: size * 0.44, weight: .regular))
+                        .foregroundStyle(isPlaying ? MuralColor.orange : (isError ? Color.red : MuralColor.ink))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isPlaying ? "Stop pronunciation" : "Play pronunciation")
+        .accessibilityIdentifier("pronounce-button")
     }
 }

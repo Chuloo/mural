@@ -210,6 +210,7 @@ fun WordsScreen(vm: MuralViewModel) {
     var search by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<WordState?>(null) }
     var flashcards by remember { mutableStateOf<chat.mural.core.FlashcardDeck?>(null) }
+    val speaker = rememberWordSpeaker()
     val words = vm.learner.words.filter { search.isBlank() || it.lemma.contains(search, true) || it.meaning.contains(search, true) }
     LazyColumn(
         Modifier.fillMaxSize().testTag("words-screen").padding(horizontal = 22.dp),
@@ -248,9 +249,19 @@ fun WordsScreen(vm: MuralViewModel) {
                         Text(word.lemma, style = MaterialTheme.typography.titleLarge)
                         Text(word.meaning, color = MuralColors.Secondary)
                     }
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        RecallBars(word.bars)
-                        Text(wordLabel(word.label), style = MaterialTheme.typography.labelSmall, color = MuralColors.Secondary)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PronunciationButton(
+                            wordId = word.id,
+                            lemma = word.lemma,
+                            languageID = word.id.substringBefore('|'),
+                            speaker = speaker,
+                            diameter = 36.dp,
+                            modifier = Modifier.testTag("word-item-pronounce")
+                        )
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            RecallBars(word.bars)
+                            Text(wordLabel(word.label), style = MaterialTheme.typography.labelSmall, color = MuralColors.Secondary)
+                        }
                     }
                 }
             }
@@ -269,16 +280,26 @@ fun WordsScreen(vm: MuralViewModel) {
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
-    flashcards?.let { FlashcardsDialog(it, onDismiss = { flashcards = null }) }
-    selected?.let { word -> WordDialog(word, onRemove = { vm.hideWord(word.id); selected = null }, onDismiss = { selected = null }) }
+    flashcards?.let { FlashcardsDialog(it, speaker = speaker, onDismiss = { speaker.stop(); flashcards = null }) }
+    selected?.let { word -> WordDialog(word, speaker = speaker, onRemove = { speaker.stop(); vm.hideWord(word.id); selected = null }, onDismiss = { speaker.stop(); selected = null }) }
 }
 
 @Composable
-private fun WordDialog(word: WordState, onRemove: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
+internal fun WordDialog(word: WordState, speaker: WordSpeaker = rememberWordSpeaker(), onRemove: () -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = { speaker.stop(); onDismiss() }) {
         Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-                Text(word.lemma, style = MaterialTheme.typography.headlineLarge)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(word.lemma, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f, fill = false))
+                    PronunciationButton(
+                        wordId = word.id,
+                        lemma = word.lemma,
+                        languageID = word.id.substringBefore('|'),
+                        speaker = speaker,
+                        diameter = 42.dp,
+                        modifier = Modifier.testTag("word-dialog-pronounce")
+                    )
+                }
                 if (word.id.startsWith("zh|")) PinyinHelp(word.lemma)
                 Text(word.meaning, style = MaterialTheme.typography.titleLarge, color = MuralColors.Secondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -291,8 +312,8 @@ private fun WordDialog(word: WordState, onRemove: () -> Unit, onDismiss: () -> U
                     style = MaterialTheme.typography.bodySmall,
                     color = MuralColors.Secondary,
                 )
-                MuralTextButton(onClick = onRemove) { Text(stringResource(R.string.words_remove_button), color = MuralColors.Red) }
-                MuralTextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.words_done_button)) }
+                MuralTextButton(onClick = { speaker.stop(); onRemove() }) { Text(stringResource(R.string.words_remove_button), color = MuralColors.Red) }
+                MuralTextButton(onClick = { speaker.stop(); onDismiss() }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.words_done_button)) }
             }
         }
     }
@@ -343,7 +364,7 @@ private fun themeSymbol(id: String) = when (id) {
 
 
 @Composable
-internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: () -> Unit) {
+internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, speaker: WordSpeaker = rememberWordSpeaker(), onDismiss: () -> Unit) {
     val density = LocalDensity.current.density
     var selection by remember { mutableStateOf(0) }
     var advancing by remember { mutableStateOf(false) }
@@ -355,6 +376,7 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
     val position = stringResource(R.string.flashcards_progress, selection + 1, deck.words.size)
     fun move(direction: Int) {
         if (advancing) return
+        speaker.stop()
         scope.launch {
             val destination = deck.destination(selection, direction)
             if (destination == selection) {
@@ -372,13 +394,13 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
             } finally { advancing = false }
         }
     }
-    Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = { speaker.stop(); onDismiss() }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth().padding(16.dp).heightIn(max = 620.dp).testTag("flashcards-modal"),
             shape = RoundedCornerShape(32.dp), color = MuralColors.Cream) {
             Column(Modifier.padding(vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.words_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    SoftRoundButton(MuralSymbol.Close, stringResource(R.string.common_close), onDismiss, modifier = Modifier.testTag("close-flashcards"))
+                    SoftRoundButton(MuralSymbol.Close, stringResource(R.string.common_close), onClick = { speaker.stop(); onDismiss() }, modifier = Modifier.testTag("close-flashcards"))
                 }
                 if (deck.words.isEmpty()) {
                     Text(stringResource(R.string.flashcards_empty), Modifier.padding(24.dp))
@@ -394,13 +416,13 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
                         }) {
                         val destination = deck.destination(selection, if (offset.value > 0) -1 else 1)
                         if (destination != selection) {
-                            Flashcard(deck.words[destination], selected = false, preview = true, showContent = kotlin.math.abs(offset.value) > 6 * density,
+                            Flashcard(deck.words[destination], selected = false, speaker = speaker, preview = true, showContent = kotlin.math.abs(offset.value) > 6 * density,
                                 modifier = Modifier.graphicsLayer {
                                     val scale = .94f + (kotlin.math.abs(offset.value) / cardWidth).coerceIn(0f, 1f) * .06f
                                     scaleX = scale; scaleY = scale; translationY = 12.dp.toPx(); alpha = .7f
                                 }.clearAndSetSemantics {})
                         }
-                        Flashcard(deck.words[selection], selected = true, modifier = Modifier.graphicsLayer {
+                        Flashcard(deck.words[selection], selected = true, speaker = speaker, modifier = Modifier.graphicsLayer {
                             translationX = offset.value
                             rotationZ = if (android.animation.ValueAnimator.areAnimatorsEnabled()) offset.value / cardWidth * 12f else 0f
                         }.pointerInput(selection) {
@@ -433,12 +455,12 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, onDismiss: ()
 }
 
 @Composable
-private fun Flashcard(word: WordState, selected: Boolean, modifier: Modifier = Modifier, preview: Boolean = false, showContent: Boolean = true) {
-    androidx.compose.runtime.key(word.id) { FlashcardFace(word, selected, modifier, preview, showContent) }
+private fun Flashcard(word: WordState, selected: Boolean, speaker: WordSpeaker, modifier: Modifier = Modifier, preview: Boolean = false, showContent: Boolean = true) {
+    androidx.compose.runtime.key(word.id) { FlashcardFace(word, selected, speaker, modifier, preview, showContent) }
 }
 
 @Composable
-private fun FlashcardFace(word: WordState, selected: Boolean, modifier: Modifier, preview: Boolean, showContent: Boolean) {
+private fun FlashcardFace(word: WordState, selected: Boolean, speaker: WordSpeaker, modifier: Modifier, preview: Boolean, showContent: Boolean) {
     var revealed by remember(word.id) { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(selected) { revealed = false }
     val angle by androidx.compose.animation.core.animateFloatAsState(if (revealed) 180f else 0f,
@@ -454,7 +476,22 @@ private fun FlashcardFace(word: WordState, selected: Boolean, modifier: Modifier
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag(if (preview) "flashcard-preview-proficiency" else "flashcard-proficiency")) {
                 RecallBars(word.bars); Text(wordLabel(word.label), color = MuralColors.Secondary, style = MaterialTheme.typography.bodyMedium)
             }
-            Text(word.lemma, style = MaterialTheme.typography.headlineLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag(if (preview) "flashcard-preview-word" else "flashcard-word"))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(word.lemma, style = MaterialTheme.typography.headlineLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag(if (preview) "flashcard-preview-word" else "flashcard-word"))
+                if (!preview) {
+                    PronunciationButton(
+                        wordId = word.id,
+                        lemma = word.lemma,
+                        languageID = word.id.substringBefore('|'),
+                        speaker = speaker,
+                        diameter = 40.dp,
+                        modifier = Modifier.testTag("flashcard-pronounce")
+                    )
+                }
+            }
             if (back) {
                 Text(word.meaning, style = MaterialTheme.typography.titleLarge, color = MuralColors.Secondary,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag("flashcard-meaning"))

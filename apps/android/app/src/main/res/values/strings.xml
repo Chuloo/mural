@@ -236,4 +236,11 @@
     <string name="flashcards_progress">%1$d of %2$d</string>
     <string name="flashcards_empty">Useful words from your conversations will appear here.</string>
     <string name="talk_caption_scrolling_paused">Automatic scrolling paused</string>
+
+    <!-- Word pronunciation -->
+    <string name="pronounce_play">Play pronunciation</string>
+    <string name="pronounce_stop">Stop pronunciation</string>
+    <string name="pronounce_loading">Loading pronunciation…</string>
+    <string name="pronounce_retry">Pronunciation failed. Tap to retry.</string>
+    <string name="pronounce_unavailable">Audio is not available for this language on your device.</string>
 </resources>
