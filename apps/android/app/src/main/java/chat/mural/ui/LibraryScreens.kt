@@ -417,6 +417,7 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, speaker: Word
                     offset.animateTo(if (direction > 0) -cardWidth * 1.2f else cardWidth * 1.2f,
                         androidx.compose.animation.core.tween(200))
                 }
+                speaker.stop()
                 selection = destination
                 offset.snapTo(0f)
             } finally { advancing = false }
@@ -524,10 +525,17 @@ private fun FlashcardFace(word: WordState, selected: Boolean, speaker: WordSpeak
                 RecallBars(word.bars); Text(wordLabel(word.label), color = MuralColors.Secondary, style = MaterialTheme.typography.bodyMedium)
             }
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(word.lemma, style = MaterialTheme.typography.headlineLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.testTag(if (preview) "flashcard-preview-word" else "flashcard-word"))
+                Text(
+                    word.lemma,
+                    style = MaterialTheme.typography.headlineLarge,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .testTag(if (preview) "flashcard-preview-word" else "flashcard-word"),
+                )
                 if (!preview) {
                     PronunciationButton(
                         wordId = word.id,

@@ -1253,6 +1253,7 @@ final class MuralUITests: XCTestCase {
             "Loading pronunciation",
             "Stop pronunciation",
             "Pronunciation unavailable on this device",
+            "Retry pronunciation",
         ])
 
         let rowPronounce = app.buttons["word-item-pronounce"].firstMatch
@@ -1269,7 +1270,7 @@ final class MuralUITests: XCTestCase {
         XCTAssertTrue(allowedLabels.contains(rowPronounce.label))
 
         // Word detail exposes its own pronunciation button and Done stops playback cleanly.
-        app.staticTexts["me apetece"].firstMatch.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "me apetece")).firstMatch.tap()
         let detailPronounce = app.buttons["word-dialog-pronounce"]
         XCTAssertTrue(detailPronounce.waitForExistence(timeout: 5))
         detailPronounce.tap()

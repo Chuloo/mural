@@ -120,7 +120,7 @@ object WordSpeakerLocales {
             "de" -> listOf(Locale.GERMANY, Locale.GERMAN)
             "fr" -> listOf(Locale.FRANCE, Locale.FRENCH)
             "it" -> listOf(Locale.ITALY, Locale.ITALIAN)
-            "pt" -> listOf(Locale.forLanguageTag("pt-BR"), Locale.forLanguageTag("pt"))
+            "pt" -> listOf(Locale.forLanguageTag("pt-BR"))
             "sr" -> listOf(Locale.forLanguageTag("sr-RS"), Locale.forLanguageTag("sr"))
             "el" -> listOf(Locale.forLanguageTag("el-GR"), Locale.forLanguageTag("el"))
             "tl" -> listOf(Locale.forLanguageTag("fil-PH"), Locale.forLanguageTag("tl-PH"), Locale.forLanguageTag("fil"), Locale.forLanguageTag("tl"))
@@ -149,6 +149,14 @@ internal interface TtsProgressCallbacks {
     fun onStop(utteranceId: String?, interrupted: Boolean)
 }
 
+/** Lightweight descriptor of an engine voice used for offline locale matching. */
+internal data class TtsVoiceInfo(
+    val name: String,
+    val locale: Locale,
+    val isNetworkRequired: Boolean,
+    val isInstalled: Boolean = true,
+)
+
 /** Testable speech synthesizer adapter decoupling playback state from Android `TextToSpeech`. */
 internal interface WordTtsEngine {
     /** Applies spoken media audio attributes without engaging microphone capture. */
@@ -160,8 +168,14 @@ internal interface WordTtsEngine {
     /** Checks offline voice availability for [locale] using `TextToSpeech.LANG_*` codes. */
     fun isLanguageAvailable(locale: Locale): Int
 
+    /** Returns available engine voices with offline and install flags, or null if unsupported. */
+    fun availableVoices(): List<TtsVoiceInfo>?
+
     /** Assigns the resolved [locale] before speaking. */
     fun setLanguage(locale: Locale)
+
+    /** Selects the concrete engine voice named [name], returning whether selection succeeded. */
+    fun selectVoice(name: String): Boolean
 
     /** Configures speech rate scaling for clear learner pronunciation. */
     fun setSpeechRate(rate: Float)
@@ -217,9 +231,33 @@ private class AndroidTextToSpeechEngine(
     /** Queries installed TTS voice readiness for [locale]. */
     override fun isLanguageAvailable(locale: Locale): Int = tts.isLanguageAvailable(locale)
 
+    /** Returns engine voices mapped with offline and installation metadata. */
+    override fun availableVoices(): List<TtsVoiceInfo>? = try {
+        tts.voices?.map { voice ->
+            val notInstalled = voice.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) == true
+            TtsVoiceInfo(
+                name = voice.name,
+                locale = voice.locale,
+                isNetworkRequired = voice.isNetworkConnectionRequired,
+                isInstalled = !notInstalled,
+            )
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     /** Sets the active synthesis language on `TextToSpeech`. */
     override fun setLanguage(locale: Locale) {
         tts.language = locale
+    }
+
+    /** Applies the explicit on-device [android.speech.tts.Voice] matching [name]. */
+    override fun selectVoice(name: String): Boolean = try {
+        val voice = tts.voices?.firstOrNull { it.name == name } ?: return false
+        tts.voice = voice
+        true
+    } catch (_: Exception) {
+        false
     }
 
     /** Applies speech playback speed multiplier. */
@@ -403,11 +441,9 @@ class AndroidWordSpeaker internal constructor(
         }
 
         val speechEngine = tts ?: return
-        val supportedLocale = WordSpeakerLocales.candidateLocales(languageID).firstOrNull { candidate ->
-            speechEngine.isLanguageAvailable(candidate) >= TextToSpeech.LANG_AVAILABLE
-        }
+        val resolvedVoice = resolveOfflineVoice(speechEngine, languageID)
 
-        if (supportedLocale == null) {
+        if (resolvedVoice == null) {
             _state.value = WordPlaybackState.Unavailable(wordId, languageID)
             onUnavailableFeedback()
             return
@@ -415,7 +451,12 @@ class AndroidWordSpeaker internal constructor(
 
         val route = WordAudioRouting.defaultRoute
         speechEngine.setAudioAttributes(route.usage, route.contentType)
-        speechEngine.setLanguage(supportedLocale)
+        speechEngine.setLanguage(resolvedVoice.locale)
+        if (!speechEngine.selectVoice(resolvedVoice.name)) {
+            _state.value = WordPlaybackState.Unavailable(wordId, languageID)
+            onUnavailableFeedback()
+            return
+        }
         speechEngine.setSpeechRate(0.92f)
 
         val token = "${++utteranceSequence}:$wordId"
@@ -429,6 +470,25 @@ class AndroidWordSpeaker internal constructor(
             activeWordId = null
             _state.value = WordPlaybackState.Error(wordId)
         }
+    }
+
+    /** Selects the highest-priority installed offline voice for [languageID], rejecting network-only voices. */
+    private fun resolveOfflineVoice(speechEngine: WordTtsEngine, languageID: String): TtsVoiceInfo? {
+        val voices = speechEngine.availableVoices() ?: return null
+        for (candidate in WordSpeakerLocales.candidateLocales(languageID)) {
+            if (speechEngine.isLanguageAvailable(candidate) < TextToSpeech.LANG_AVAILABLE) continue
+            val offlineVoice = voices.firstOrNull { voice ->
+                !voice.isNetworkRequired && voice.isInstalled && matchesLocale(voice.locale, candidate)
+            }
+            if (offlineVoice != null) return offlineVoice
+        }
+        return null
+    }
+
+    /** Checks whether [voiceLocale] satisfies [candidate] without widening region-specific candidates. */
+    private fun matchesLocale(voiceLocale: Locale, candidate: Locale): Boolean {
+        if (!voiceLocale.language.equals(candidate.language, ignoreCase = true)) return false
+        return candidate.country.isEmpty() || voiceLocale.country.equals(candidate.country, ignoreCase = true)
     }
 
     /** Clears an error state and invokes playback recovery for [wordId]. */

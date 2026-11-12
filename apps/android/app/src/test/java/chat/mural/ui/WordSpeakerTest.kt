@@ -17,9 +17,18 @@ class WordSpeakerTest {
         private val onInit: (Int) -> Unit,
     ) : WordTtsEngine {
         val availableLanguages = mutableSetOf("en-US", "es-ES", "pt-BR", "nl-NL", "ru-RU")
+        val voices = mutableListOf(
+            TtsVoiceInfo("en-us-local", Locale.US, isNetworkRequired = false),
+            TtsVoiceInfo("es-es-local", Locale.forLanguageTag("es-ES"), isNetworkRequired = false),
+            TtsVoiceInfo("pt-br-local", Locale.forLanguageTag("pt-BR"), isNetworkRequired = false),
+            TtsVoiceInfo("nl-nl-local", Locale.forLanguageTag("nl-NL"), isNetworkRequired = false),
+            TtsVoiceInfo("ru-ru-local", Locale.forLanguageTag("ru-RU"), isNetworkRequired = false),
+        )
+        var returnNullVoices = false
         val recordedUsages = mutableListOf<Int>()
         val recordedContentTypes = mutableListOf<Int>()
         val assignedLanguages = mutableListOf<Locale>()
+        val assignedVoices = mutableListOf<String>()
         val spokenUtterances = mutableListOf<Pair<String, String>>()
         var nextSpeakResult: Int = TextToSpeech.SUCCESS
         var stopCalls = 0
@@ -50,9 +59,19 @@ class WordSpeakerTest {
             }
         }
 
+        /** Returns configured voices or null when simulating unsupported metadata. */
+        override fun availableVoices(): List<TtsVoiceInfo>? = if (returnNullVoices) null else voices.toList()
+
         /** Records selected synthesis locale. */
         override fun setLanguage(locale: Locale) {
             assignedLanguages += locale
+        }
+
+        /** Binds synthesis to the matching configured voice [name]. */
+        override fun selectVoice(name: String): Boolean {
+            if (voices.none { it.name == name }) return false
+            assignedVoices += name
+            return true
         }
 
         /** Ignores rate updates in fake engine. */
@@ -317,5 +336,48 @@ class WordSpeakerTest {
         assertEquals(WordPlaybackState.Unavailable("en|hello", "en"), failedInitSpeaker.state.value)
         assertEquals(1, failedAlerts.size)
         assertTrue(alerts.isEmpty())
+    }
+
+    /** Verifies network-only, uninstalled, and disallowed-variety voices are rejected while offline voices bind explicitly. */
+    @Test
+    fun networkOnlyAndNotInstalledVoicesAreRejectedAsUnavailable() {
+        val (speaker, engine, alerts) = createHarness()
+
+        // Network-only voice returns LANG_AVAILABLE yet must produce Unavailable without enqueuing speech.
+        engine.voices.removeAll { it.locale.language == "ru" }
+        engine.voices += TtsVoiceInfo("ru-ru-network", Locale.forLanguageTag("ru-RU"), isNetworkRequired = true)
+        engine.voices += TtsVoiceInfo("de-de-not-installed", Locale.GERMANY, isNetworkRequired = false, isInstalled = false)
+        engine.availableLanguages += "de-DE"
+
+        speaker.speak("ru|книга", "книга", "ru")
+        assertEquals(WordPlaybackState.Unavailable("ru|книга", "ru"), speaker.state.value)
+        assertEquals(1, alerts.size)
+        assertTrue(engine.spokenUtterances.isEmpty())
+        assertTrue(engine.assignedVoices.isEmpty())
+
+        speaker.speak("de|buch", "Buch", "de")
+        assertEquals(WordPlaybackState.Unavailable("de|buch", "de"), speaker.state.value)
+        assertEquals(2, alerts.size)
+
+        // Portuguese must never fall back to offline pt-PT when pt-BR only has a network voice.
+        engine.voices.removeAll { it.locale.language == "pt" }
+        engine.voices += TtsVoiceInfo("pt-br-network", Locale.forLanguageTag("pt-BR"), isNetworkRequired = true)
+        engine.voices += TtsVoiceInfo("pt-pt-local", Locale.forLanguageTag("pt-PT"), isNetworkRequired = false)
+        engine.availableLanguages += "pt-PT"
+        speaker.speak("pt|pão", "pão", "pt")
+        assertEquals(WordPlaybackState.Unavailable("pt|pão", "pt"), speaker.state.value)
+        assertEquals(3, alerts.size)
+
+        // When both network and offline Russian voices exist, playback explicitly binds the offline voice.
+        engine.voices += TtsVoiceInfo("ru-ru-local", Locale.forLanguageTag("ru-RU"), isNetworkRequired = false)
+        speaker.speak("ru|книга", "книга", "ru")
+        assertEquals(WordPlaybackState.Loading("ru|книга"), speaker.state.value)
+        assertEquals(listOf("ru-ru-local"), engine.assignedVoices)
+        assertEquals(1, engine.spokenUtterances.size)
+
+        // Null voice metadata fails closed as Unavailable rather than allowing unverified network playback.
+        engine.returnNullVoices = true
+        speaker.speak("en|travel", "travel", "en")
+        assertEquals(WordPlaybackState.Unavailable("en|travel", "en"), speaker.state.value)
     }
 }
