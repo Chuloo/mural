@@ -41,6 +41,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -205,12 +207,16 @@ private fun CurrentTopicDialog(
     }
 }
 
+/** Vocabulary screen listing saved words, search filtering, spoken pronunciation, and flashcards. */
 @Composable
-fun WordsScreen(vm: MuralViewModel) {
+fun WordsScreen(
+    vm: MuralViewModel,
+    speaker: WordSpeaker = rememberWordSpeaker(isConversationActive = { vm.isRunning }),
+) {
     var search by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<WordState?>(null) }
     var flashcards by remember { mutableStateOf<chat.mural.core.FlashcardDeck?>(null) }
-    val speaker = rememberWordSpeaker()
+    LaunchedEffect(vm.isRunning) { if (vm.isRunning) speaker.stop() }
     val words = vm.learner.words.filter { search.isBlank() || it.lemma.contains(search, true) || it.meaning.contains(search, true) }
     LazyColumn(
         Modifier.fillMaxSize().testTag("words-screen").padding(horizontal = 22.dp),
@@ -243,7 +249,22 @@ fun WordsScreen(vm: MuralViewModel) {
                 }
             }
         } else items(words, key = { it.id }) { word ->
-            Surface(Modifier.fillMaxWidth().clickable { selected = word }, shape = RoundedCornerShape(20.dp), color = MuralColors.Surface) {
+            val languageID = word.id.substringBefore('|')
+            val pronounceLabel = pronunciationDescription(word.id, speaker)
+            Surface(
+                Modifier.fillMaxWidth()
+                    .clickable { selected = word }
+                    .semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction(pronounceLabel) {
+                                speaker.performPrimaryAction(word.id, word.lemma, languageID)
+                                true
+                            },
+                        )
+                    },
+                shape = RoundedCornerShape(20.dp),
+                color = MuralColors.Surface,
+            ) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(word.lemma, style = MaterialTheme.typography.titleLarge)
@@ -253,10 +274,10 @@ fun WordsScreen(vm: MuralViewModel) {
                         PronunciationButton(
                             wordId = word.id,
                             lemma = word.lemma,
-                            languageID = word.id.substringBefore('|'),
+                            languageID = languageID,
                             speaker = speaker,
                             diameter = 36.dp,
-                            modifier = Modifier.testTag("word-item-pronounce")
+                            testTag = "word-item-pronounce",
                         )
                         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             RecallBars(word.bars)
@@ -289,6 +310,7 @@ fun WordsScreen(vm: MuralViewModel) {
  */
 @Composable
 internal fun WordDialog(word: WordState, speaker: WordSpeaker = rememberWordSpeaker(), onRemove: () -> Unit, onDismiss: () -> Unit) {
+    DisposableEffect(speaker) { onDispose { speaker.stop() } }
     Dialog(onDismissRequest = { speaker.stop(); onDismiss() }) {
         Surface(shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
@@ -300,7 +322,7 @@ internal fun WordDialog(word: WordState, speaker: WordSpeaker = rememberWordSpea
                         languageID = word.id.substringBefore('|'),
                         speaker = speaker,
                         diameter = 42.dp,
-                        modifier = Modifier.testTag("word-dialog-pronounce")
+                        testTag = "word-dialog-pronounce",
                     )
                 }
                 if (word.id.startsWith("zh|")) PinyinHelp(word.lemma)
@@ -366,8 +388,10 @@ private fun themeSymbol(id: String) = when (id) {
 }
 
 
+/** Swipeable flashcard modal for practicing vocabulary recall and spoken pronunciation. */
 @Composable
 internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, speaker: WordSpeaker = rememberWordSpeaker(), onDismiss: () -> Unit) {
+    DisposableEffect(speaker) { onDispose { speaker.stop() } }
     val density = LocalDensity.current.density
     var selection by remember { mutableStateOf(0) }
     var advancing by remember { mutableStateOf(false) }
@@ -377,6 +401,7 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, speaker: Word
     val previous = stringResource(R.string.flashcards_previous)
     val next = stringResource(R.string.flashcards_next)
     val position = stringResource(R.string.flashcards_progress, selection + 1, deck.words.size)
+    /** Stops active pronunciation audio and animates to the adjacent flashcard. */
     fun move(direction: Int) {
         if (advancing) return
         speaker.stop()
@@ -457,11 +482,13 @@ internal fun FlashcardsDialog(deck: chat.mural.core.FlashcardDeck, speaker: Word
     }
 }
 
+/** Keyed wrapper ensuring each flashcard preserves isolated flip animation state across swaps. */
 @Composable
 private fun Flashcard(word: WordState, selected: Boolean, speaker: WordSpeaker, modifier: Modifier = Modifier, preview: Boolean = false, showContent: Boolean = true) {
     androidx.compose.runtime.key(word.id) { FlashcardFace(word, selected, speaker, modifier, preview, showContent) }
 }
 
+/** Interactive flashcard face presenting recall bars, target lemma, pronunciation control, and revealed meaning. */
 @Composable
 private fun FlashcardFace(word: WordState, selected: Boolean, speaker: WordSpeaker, modifier: Modifier, preview: Boolean, showContent: Boolean) {
     var revealed by remember(word.id) { mutableStateOf(false) }
@@ -470,12 +497,29 @@ private fun FlashcardFace(word: WordState, selected: Boolean, speaker: WordSpeak
         animationSpec = androidx.compose.animation.core.tween(if (android.animation.ValueAnimator.areAnimatorsEnabled()) 480 else 0), label = "card flip")
     val back = angle >= 90f
     val reveal = stringResource(if (back) R.string.flashcards_hide else R.string.flashcards_reveal)
+    val languageID = word.id.substringBefore('|')
+    val pronounceLabel = pronunciationDescription(word.id, speaker)
+    val cardSemantics = if (preview) Modifier else Modifier.semantics {
+        customActions = listOf(
+            CustomAccessibilityAction(pronounceLabel) {
+                speaker.performPrimaryAction(word.id, word.lemma, languageID)
+                true
+            },
+        )
+    }
     Surface(Modifier.fillMaxSize().then(modifier).padding(horizontal = 20.dp, vertical = 4.dp).graphicsLayer {
         rotationY = if (back) angle - 180f else angle
         cameraDistance = 12 * density
     }, shape = RoundedCornerShape(28.dp), color = MuralColors.Surface) {
-        Column(Modifier.graphicsLayer { alpha = if (showContent) 1f else 0f }.verticalScroll(androidx.compose.foundation.rememberScrollState()).clickable(enabled = !preview, onClickLabel = reveal) { revealed = !revealed }
-            .padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(26.dp, Alignment.CenterVertically)) {
+        Column(
+            Modifier.graphicsLayer { alpha = if (showContent) 1f else 0f }
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                .then(cardSemantics)
+                .clickable(enabled = !preview, onClickLabel = reveal) { revealed = !revealed }
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(26.dp, Alignment.CenterVertically),
+        ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag(if (preview) "flashcard-preview-proficiency" else "flashcard-proficiency")) {
                 RecallBars(word.bars); Text(wordLabel(word.label), color = MuralColors.Secondary, style = MaterialTheme.typography.bodyMedium)
             }
@@ -488,10 +532,10 @@ private fun FlashcardFace(word: WordState, selected: Boolean, speaker: WordSpeak
                     PronunciationButton(
                         wordId = word.id,
                         lemma = word.lemma,
-                        languageID = word.id.substringBefore('|'),
+                        languageID = languageID,
                         speaker = speaker,
                         diameter = 40.dp,
-                        modifier = Modifier.testTag("flashcard-pronounce")
+                        testTag = "flashcard-pronounce",
                     )
                 }
             }
