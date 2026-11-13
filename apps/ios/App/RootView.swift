@@ -71,8 +71,19 @@ struct RootView: View {
             #endif
             onboarding = !coordinator.store.preferences.hasOnboarded && !arguments.contains("--preview") && !AudioVerification.requested
         }
+        .onChange(of: coordinator.isRunning, initial: true) { _, running in
+            WordSpeaker.shared.isConversationActive = running
+            if running { WordSpeaker.shared.stop() }
+        }
+        .onChange(of: tab) { _, newTab in
+            if newTab != 2 { WordSpeaker.shared.stop() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { coordinator.background(); HostedCloseRecovery.shared.pause() }
+            if phase == .background {
+                WordSpeaker.shared.handleAppDidEnterBackground()
+                coordinator.background()
+                HostedCloseRecovery.shared.pause()
+            }
             else if phase == .active { coordinator.resume(); Task { await HostedCloseRecovery.shared.resume(); await AppleMinutePurchases.shared.checkPurchases() } }
         }
         #if DEBUG

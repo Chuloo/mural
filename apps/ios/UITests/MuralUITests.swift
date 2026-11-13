@@ -1242,4 +1242,58 @@ final class MuralUITests: XCTestCase {
         XCTAssertFalse((target.value as? String ?? "").contains("paused"))
     }
 
+    /// Verifies Words, WordDetail, and Flashcard pronunciation controls are independently accessible, support repeat taps, and preserve recall progress.
+    func testWordPronunciationControlsAccessibilityAndPreservedPracticeFlow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--preview", "--screenshot=words"]
+        app.launch()
+
+        let allowedLabels = Set([
+            "Play pronunciation",
+            "Loading pronunciation",
+            "Stop pronunciation",
+            "Pronunciation unavailable on this device",
+            "Retry pronunciation",
+        ])
+
+        let rowPronounce = app.buttons["word-item-pronounce"].firstMatch
+        XCTAssertTrue(rowPronounce.waitForExistence(timeout: 10))
+        XCTAssertEqual(rowPronounce.label, "Play pronunciation")
+
+        // Tapping row pronunciation stays in WordsView without triggering the row's detail sheet.
+        rowPronounce.tap()
+        XCTAssertFalse(app.navigationBars.buttons["Done"].exists)
+        XCTAssertTrue(allowedLabels.contains(rowPronounce.label), "Unexpected label: \(rowPronounce.label)")
+
+        // Repeated tap toggles back or keeps non-blocking unavailable state.
+        rowPronounce.tap()
+        XCTAssertTrue(allowedLabels.contains(rowPronounce.label))
+
+        // Word detail exposes its own pronunciation button and Done stops playback cleanly.
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "me apetece")).firstMatch.tap()
+        let detailPronounce = app.buttons["word-dialog-pronounce"]
+        XCTAssertTrue(detailPronounce.waitForExistence(timeout: 5))
+        detailPronounce.tap()
+        XCTAssertTrue(allowedLabels.contains(detailPronounce.label))
+        app.navigationBars.buttons["Done"].tap()
+        XCTAssertTrue(rowPronounce.waitForExistence(timeout: 5))
+
+        // Flashcards expose an accessible pronunciation button that preserves card reveal and swipe state.
+        app.buttons["open-flashcards"].tap()
+        let flashcardPronounce = app.buttons["flashcard-pronounce"]
+        XCTAssertTrue(flashcardPronounce.waitForExistence(timeout: 5))
+        flashcardPronounce.tap()
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+        flashcardPronounce.tap()
+        XCTAssertFalse(app.staticTexts["flashcard-meaning"].exists)
+
+        let pager = app.descendants(matching: .any)["flashcard-pager"].firstMatch
+        pager.swipeLeft()
+        XCTAssertEqual(pager.value as? String, "2 of 4")
+        XCTAssertTrue(app.buttons["flashcard-pronounce"].exists)
+        app.buttons["close-flashcards"].tap()
+        XCTAssertTrue(app.staticTexts["me apetece"].exists)
+        XCTAssertTrue(app.staticTexts["Steady"].exists)
+    }
+
 }

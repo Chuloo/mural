@@ -26,25 +26,32 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import chat.mural.R
 
+/** Circular glass button displaying a stroked [MuralSymbol] with spring press feedback. */
 @Composable
 fun SoftRoundButton(symbol: MuralSymbol, description: String, onClick: () -> Unit, modifier: Modifier = Modifier,
                     diameter: Dp = 48.dp, tint: Color = Color.White.copy(alpha = .78f),
-                    enabled: Boolean = true, filledIcon: Boolean = false) {
+                    enabled: Boolean = true, filledIcon: Boolean = false,
+                    iconColor: Color = MuralColors.Ink, showIcon: Boolean = true) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) .94f else 1f, spring(stiffness = 600f), label = "button press")
     Box(modifier.size(diameter).graphicsLayer { scaleX = scale; scaleY = scale }
         .shadow(18.dp, CircleShape, ambientColor = MuralColors.Secondary.copy(alpha = .05f), spotColor = MuralColors.Secondary.copy(alpha = .08f))
         .background(tint, CircleShape).border(1.dp, Color.White.copy(alpha = .7f), CircleShape).clip(CircleShape)
-        .clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick),
+        .clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick)
+        .semantics { contentDescription = description },
         contentAlignment = Alignment.Center) {
-        MuralIcon(symbol, Modifier.size(23.dp), color = MuralColors.Ink.copy(alpha = if (enabled) 1f else .4f),
-            description = description, filled = filledIcon)
+        if (showIcon) {
+            MuralIcon(symbol, Modifier.size(23.dp), color = iconColor.copy(alpha = if (enabled) 1f else .4f),
+                description = null, filled = filledIcon)
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 import SwiftUI
+import Combine
 import UniformTypeIdentifiers
 import MuralCore
+import AVFoundation
 
 struct ThemesView: View {
     let coordinator: ConversationCoordinator
@@ -88,14 +90,17 @@ struct CurrentTopicView: View {
     }
 }
 
+/// Vocabulary list and flashcard launcher with accessible on-device pronunciation controls.
 struct WordsView: View {
     let coordinator: ConversationCoordinator
     @State private var search = ""
     @State private var selected: WordState?
     @State private var sessions = false
     @State private var flashcards: FlashcardSession?
+    @ObservedObject private var speaker = WordSpeaker.shared
     private var learner: LearnerState { coordinator.store.learner }
     private var words: [WordState] { learner.words.filter { search.isEmpty || $0.lemma.localizedCaseInsensitiveContains(search) || $0.meaning.localizedCaseInsensitiveContains(search) } }
+    /// Renders the learner's vocabulary list, search field, and card actions.
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -124,16 +129,39 @@ struct WordsView: View {
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(words) { word in
-                            Button { selected = word } label: {
-                                HStack(spacing: 18) {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(word.lemma).font(.system(.title2, design: .rounded, weight: .medium))
-                                        Text(word.meaning).font(.subheadline).foregroundStyle(MuralColor.secondary)
+                            let languageID = word.id.components(separatedBy: "|").first ?? coordinator.language.id
+                            HStack(spacing: 14) {
+                                Button { selected = word } label: {
+                                    HStack(spacing: 14) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(word.lemma).font(.system(.title2, design: .rounded, weight: .medium))
+                                            Text(word.meaning).font(.subheadline).foregroundStyle(MuralColor.secondary)
+                                        }
+                                        Spacer(minLength: 10)
                                     }
-                                    Spacer(minLength: 10)
-                                    VStack(alignment: .trailing, spacing: 8) { RecallBars(count: word.bars); Text(word.label).font(.caption2).foregroundStyle(MuralColor.secondary) }
-                                }.padding(.vertical, 20)
-                            }.buttonStyle(.plain)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityAction(named: WordSpeakerAccessibility.label(for: speaker.state, wordID: word.id)) {
+                                    speaker.performPrimaryAction(wordID: word.id, text: word.lemma, languageID: languageID)
+                                }
+                                PronunciationButton(
+                                    wordID: word.id,
+                                    text: word.lemma,
+                                    languageID: languageID,
+                                    speaker: speaker,
+                                    size: 36,
+                                    identifier: "word-item-pronounce"
+                                )
+                                VStack(alignment: .trailing, spacing: 8) {
+                                    RecallBars(count: word.bars)
+                                    Text(word.label).font(.caption2).foregroundStyle(MuralColor.secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture { selected = word }
+                                .accessibilityElement(children: .combine)
+                            }
+                            .padding(.vertical, 20)
                             Divider().overlay(MuralColor.peach)
                         }
                     }
@@ -150,31 +178,46 @@ struct WordsView: View {
                 Button("Past conversations", systemImage: "clock.arrow.circlepath") { sessions = true }.font(.subheadline).padding(.vertical, 8)
             }.padding(26)
         }.foregroundStyle(MuralColor.ink).searchable(text: $search, prompt: "Find a word")
+            .onDisappear { speaker.handleViewDisappeared() }
             .sheet(item: $selected) { word in WordDetailView(word: word, store: coordinator.store) }
             .sheet(isPresented: $sessions) { SessionHistoryView(store: coordinator.store) }
             .sheet(item: $flashcards) { session in FlashcardsView(deck: session.deck) }
     }
 }
 
+/// Vocabulary detail sheet showing pronunciation controls, example usage, and recall strength.
 struct WordDetailView: View {
     let word: WordState
     let store: LearningStore
     @Environment(\.dismiss) private var dismiss
+    /// Renders the detail sheet and stops active pronunciation on dismissal.
     var body: some View {
+        let languageID = word.id.components(separatedBy: "|").first ?? store.language.id
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
-                Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                HStack(alignment: .center) {
+                    Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                    Spacer()
+                    PronunciationButton(
+                        wordID: word.id,
+                        text: word.lemma,
+                        languageID: languageID,
+                        size: 44,
+                        identifier: "word-dialog-pronounce"
+                    )
+                }
                 if store.language.id == "zh" { PinyinHelp(text: word.lemma) }
                 Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary)
                 HStack { RecallBars(count: word.bars); Text(word.label).font(.subheadline) }
                 Text(word.explanation).font(.body)
                 Text("“\(word.example)”").font(.system(.title3, design: .rounded)).padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MuralColor.peach, in: RoundedRectangle(cornerRadius: 22))
                 Text("\(word.independentCount) independent uses · Last seen \(word.lastSeen.formatted(date: .abbreviated, time: .omitted))").font(.footnote).foregroundStyle(MuralColor.secondary)
-                Button("Remove from my words", role: .destructive) { store.hideWord(word.id); dismiss() }.font(.footnote)
+                Button("Remove from my words", role: .destructive) { WordSpeaker.shared.stop(); store.hideWord(word.id); dismiss() }.font(.footnote)
                 Spacer()
             }.padding(28).frame(maxWidth: .infinity, alignment: .leading).background(MuralColor.cream).foregroundStyle(MuralColor.ink)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { WordSpeaker.shared.stop(); dismiss() } } }
         }.presentationDetents([.medium, .large])
+        .onDisappear { WordSpeaker.shared.handleViewDisappeared() }
     }
 }
 
@@ -689,6 +732,7 @@ private struct FlashcardSession: Identifiable {
     let deck: FlashcardDeck
 }
 
+/// Swipeable flashcard modal for practicing vocabulary recall and pronunciation.
 private struct FlashcardsView: View {
     let deck: FlashcardDeck
     @Environment(\.dismiss) private var dismiss
@@ -698,6 +742,7 @@ private struct FlashcardsView: View {
     @State private var dragAxis = 0
     @State private var advancing = false
     @State private var revealAllowedAfter = Date.distantPast
+    /// Renders the flashcard pager and stops spoken audio when closing.
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
@@ -751,11 +796,14 @@ private struct FlashcardsView: View {
                 }
             }.padding(.top, 16).background(MuralColor.cream).foregroundStyle(MuralColor.ink)
                 .navigationTitle("Your words").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("close-flashcards") } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { WordSpeaker.shared.stop(); dismiss() }.accessibilityIdentifier("close-flashcards") } }
         }.tint(MuralColor.ink).presentationDetents([.large]).presentationDragIndicator(.hidden).interactiveDismissDisabled()
+        .onDisappear { WordSpeaker.shared.handleViewDisappeared() }
     }
+    /// Advances to the next or previous flashcard while halting any active pronunciation.
     private func move(_ direction: Int, width: Double) {
         guard !advancing else { return }
+        WordSpeaker.shared.stop()
         let destination = deck.destination(from: selection, direction: direction)
         guard destination != selection else {
             withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.82)) { dragOffset = 0 }
@@ -773,6 +821,7 @@ private struct FlashcardsView: View {
     }
 }
 
+/// Double-sided flashcard presenting vocabulary recall, reveal toggle, and pronunciation controls.
 private struct FlashcardView: View {
     let word: WordState
     let selected: Bool
@@ -780,6 +829,8 @@ private struct FlashcardView: View {
     var showContent = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
+    @ObservedObject private var speaker = WordSpeaker.shared
+    /// Renders front and back card faces with reduced-motion fallback.
     var body: some View {
         ZStack {
             face(back: false).modifier(FlashcardFaceRotation(angle: revealed && !reduceMotion ? 180 : 0, back: false))
@@ -788,13 +839,25 @@ private struct FlashcardView: View {
                 .opacity(reduceMotion && !revealed ? 0 : 1).accessibilityHidden(!revealed).allowsHitTesting(revealed)
         }.onChange(of: selected) { _, _ in revealed = false }
     }
+    /// Builds either the prompt or revealed meaning face of the flashcard.
     private func face(back: Bool) -> some View {
-        ScrollView {
+        let languageID = word.id.components(separatedBy: "|").first ?? "en"
+        return ScrollView {
             VStack(spacing: 28) {
                 HStack(spacing: 10) { RecallBars(count: word.bars); Text(word.label).font(.subheadline).foregroundStyle(MuralColor.secondary) }
                     .accessibilityElement(children: .combine).accessibilityIdentifier("flashcard-proficiency")
-                Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
-                    .multilineTextAlignment(.center).textSelection(.enabled).accessibilityIdentifier("flashcard-word")
+                HStack(spacing: 12) {
+                    Text(word.lemma).font(.system(.largeTitle, design: .rounded, weight: .medium))
+                        .multilineTextAlignment(.center).textSelection(.enabled).accessibilityIdentifier("flashcard-word")
+                    PronunciationButton(
+                        wordID: word.id,
+                        text: word.lemma,
+                        languageID: languageID,
+                        speaker: speaker,
+                        size: 40,
+                        identifier: "flashcard-pronounce"
+                    )
+                }
                 if back {
                     Text(word.meaning).font(.title3).foregroundStyle(MuralColor.secondary).multilineTextAlignment(.center)
                         .accessibilityIdentifier("flashcard-meaning")
@@ -807,9 +870,13 @@ private struct FlashcardView: View {
                 .overlay(RoundedRectangle(cornerRadius: 32).strokeBorder(MuralColor.peach.opacity(0.65), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 32)).onTapGesture { reveal() }
                 .accessibilityAction(named: back ? "Hide meaning" : "Reveal meaning") { reveal() }
+                .accessibilityAction(named: WordSpeakerAccessibility.label(for: speaker.state, wordID: word.id)) {
+                    speaker.performPrimaryAction(wordID: word.id, text: word.lemma, languageID: languageID)
+                }
                 .padding(.vertical, 12)
         }.defaultScrollAnchor(.center, for: .alignment).scrollIndicators(.hidden)
     }
+    /// Flips the card between target word and meaning when gesture guards allow.
     private func reveal() {
         guard canReveal() else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.48)) { revealed.toggle() }
@@ -824,5 +891,261 @@ private struct FlashcardFaceRotation: AnimatableModifier {
         content.opacity((angle >= 90) == back ? 1 : 0)
             .rotation3DEffect(.degrees(angle - (back ? 180 : 0)), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
             .allowsHitTesting((angle >= 90) == back)
+    }
+}
+
+/// Configures playback-only `AVAudioSession` routing isolated from conversation microphone capture.
+@MainActor
+private final class AVWordSpeechAudioSession: WordSpeechAudioSession {
+    /// Activates the spoken playback audio route without requesting or enabling the microphone.
+    func activatePlayback(route: WordAudioRoute) throws {
+        let session = AVAudioSession.sharedInstance()
+        let options: AVAudioSession.CategoryOptions = route.ducksOthers ? [.duckOthers] : []
+        let category: AVAudioSession.Category = route.usesMicrophone ? .playAndRecord : .playback
+        try session.setCategory(category, mode: .spokenAudio, options: options)
+        try session.setActive(true)
+    }
+
+    /// Deactivates playback audio routing and lets ducked audio resume smoothly.
+    func deactivatePlayback() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+}
+
+/// Bridges `WordSpeechSynthesizing` to Apple's on-device `AVSpeechSynthesizer`.
+@MainActor
+private final class AVWordSpeechSynthesizer: WordSpeechSynthesizing {
+    private let synthesizer: AVSpeechSynthesizer
+
+    /// Creates a speech synthesizer adapter around `synthesizer`.
+    init(synthesizer: AVSpeechSynthesizer) {
+        self.synthesizer = synthesizer
+    }
+
+    /// Resolves an installed `AVSpeechSynthesisVoice` identifier for `languageID`.
+    func resolveVoiceIdentifier(for languageID: String) -> String? {
+        resolveVoice(languageID: languageID)?.identifier
+    }
+
+    /// Returns the preferred `AVSpeechSynthesisVoice` matching Mural's language variety rules.
+    func resolveVoice(languageID: String) -> AVSpeechSynthesisVoice? {
+        for tag in WordSpeakerLocales.candidateLanguageTags(for: languageID) {
+            if let voice = AVSpeechSynthesisVoice(language: tag) {
+                return voice
+            }
+        }
+        return nil
+    }
+
+    /// Creates an `AVSpeechUtterance` bound to the resolved voice and playback rate.
+    func makeUtterance(text: String, voiceIdentifier: String, rateScale: Float) -> AnyObject {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) ?? AVSpeechSynthesisVoice(language: voiceIdentifier)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * rateScale
+        return utterance
+    }
+
+    /// Enqueues an `AVSpeechUtterance` for immediate playback on `AVSpeechSynthesizer`.
+    func speak(_ utterance: AnyObject) -> Bool {
+        guard let speechUtterance = utterance as? AVSpeechUtterance else { return false }
+        synthesizer.speak(speechUtterance)
+        return true
+    }
+
+    /// Halts any currently speaking utterance immediately.
+    func stopSpeaking() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+    }
+}
+
+/// Manages on-device speech synthesis, playback audio routing, and failure recovery for vocabulary words.
+@MainActor
+final class WordSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    typealias State = WordPlaybackState
+    static let shared = WordSpeaker()
+
+    /// Current playback state observed by UI controls.
+    @Published var state: WordPlaybackState = .idle
+    /// Tracks whether a live voice conversation currently owns the microphone.
+    var isConversationActive = false
+
+    private let synthesizer = AVSpeechSynthesizer()
+    private let engine: AVWordSpeechSynthesizer
+    private lazy var controller: WordSpeakerController = WordSpeakerController(
+        synthesizer: engine,
+        audioSession: AVWordSpeechAudioSession(),
+        isConversationMicActive: { [weak self] in self?.isConversationActive ?? false },
+        onAnnouncement: { message in
+            UIAccessibility.post(notification: .announcement, argument: message)
+        }
+    )
+
+    private var observers: [NSObjectProtocol] = []
+
+    /// Initializes speech synthesis delegation and lifecycle interruption observers.
+    override init() {
+        self.engine = AVWordSpeechSynthesizer(synthesizer: synthesizer)
+        super.init()
+        synthesizer.delegate = self
+        controller.$state.assign(to: &$state)
+        observers.append(NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleAppDidEnterBackground() }
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  raw == AVAudioSession.InterruptionType.began.rawValue else { return }
+            Task { @MainActor in self?.controller.handlePlaybackFailure() }
+        })
+    }
+
+    /// Removes notification center observers on deallocation.
+    deinit {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// Speaks the given text in the appropriate voice for the language identifier.
+    func speak(wordID: String, text: String, languageID: String) {
+        controller.speak(wordID: wordID, text: text, languageID: languageID)
+    }
+
+    /// Clears any prior failure state and retries word pronunciation.
+    func retry(wordID: String, text: String, languageID: String) {
+        controller.retry(wordID: wordID, text: text, languageID: languageID)
+    }
+
+    /// Dispatches the state-appropriate play, stop, or retry action for a control tap.
+    func performPrimaryAction(wordID: String, text: String, languageID: String) {
+        WordSpeakerAccessibility.performPrimaryAction(
+            speaker: controller,
+            wordID: wordID,
+            text: text,
+            languageID: languageID
+        )
+    }
+
+    /// Stops any active speech and resets state to idle.
+    func stop() {
+        controller.stop()
+    }
+
+    /// Stops playback and releases the audio session when backgrounding.
+    func handleAppDidEnterBackground() {
+        controller.handleAppDidEnterBackground()
+    }
+
+    /// Stops playback and releases the audio session when dismissing vocabulary views.
+    func handleViewDisappeared() {
+        controller.handleViewDisappeared()
+    }
+
+    /// Delegate callback invoked when utterance playback begins.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        nonisolated(unsafe) let started = utterance
+        Task { @MainActor in
+            self.controller.handleDidStart(utterance: started)
+        }
+    }
+
+    /// Delegate callback invoked when utterance playback completes.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        nonisolated(unsafe) let finished = utterance
+        Task { @MainActor in
+            self.controller.handleDidFinish(utterance: finished)
+        }
+    }
+
+    /// Delegate callback invoked when utterance playback is unexpectedly interrupted or canceled.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        nonisolated(unsafe) let cancelled = utterance
+        Task { @MainActor in
+            self.controller.handleDidCancel(utterance: cancelled)
+        }
+    }
+
+    /// Resolves the preferred BCP-47 speech synthesis voice for the given language.
+    func resolveVoice(languageID: String) -> AVSpeechSynthesisVoice? {
+        engine.resolveVoice(languageID: languageID)
+    }
+}
+
+/// Accessible glass play control for spoken word pronunciation.
+struct PronunciationButton: View {
+    let wordID: String
+    let text: String
+    let languageID: String
+    @ObservedObject var speaker: WordSpeaker = .shared
+    var size: CGFloat = 40
+    var identifier: String = "pronounce-button"
+
+    private var isPlaying: Bool {
+        if case .playing(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var isLoading: Bool {
+        if case .loading(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var isError: Bool {
+        if case .error(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var isUnavailable: Bool {
+        if case .unavailable(let id) = speaker.state { return id == wordID }
+        return false
+    }
+
+    private var accessibilityDescription: String {
+        WordSpeakerAccessibility.label(for: speaker.state, wordID: wordID)
+    }
+
+    private var accessibilityHintText: String {
+        WordSpeakerAccessibility.hint(for: speaker.state, wordID: wordID) ?? ""
+    }
+
+    /// Renders the glass pronunciation button across idle, loading, playing, error, and unavailable states.
+    var body: some View {
+        Button {
+            speaker.performPrimaryAction(wordID: wordID, text: text, languageID: languageID)
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isPlaying ? MuralColor.peach.opacity(0.85) : (isLoading ? MuralColor.butter.opacity(0.85) : .white.opacity(0.78)))
+                    .frame(width: size, height: size)
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                    .shadow(color: MuralColor.secondary.opacity(0.08), radius: 8, x: 0, y: 4)
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .scaleEffect(0.7)
+                } else if isError {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: size * 0.44, weight: .semibold))
+                        .foregroundStyle(Color.red)
+                } else {
+                    Image(systemName: isPlaying ? "waveform" : (isUnavailable ? "speaker.slash" : "speaker.wave.2"))
+                        .font(.system(size: size * 0.44, weight: .regular))
+                        .foregroundStyle(isPlaying ? MuralColor.orange : (isUnavailable ? MuralColor.secondary.opacity(0.5) : MuralColor.ink))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityHint(accessibilityHintText)
+        .accessibilityIdentifier(identifier)
     }
 }

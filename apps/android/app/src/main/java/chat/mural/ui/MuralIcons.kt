@@ -17,7 +17,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-enum class MuralSymbol { Flashcards, Wave, Themes, Words, Settings, Mic, MicOff, Captions, Transcript, End,
+/** Vector-drawn symbol identifiers rendered by [MuralIcon]. */
+enum class MuralSymbol { Flashcards, Wave, SpeakerOff, Retry, Themes, Words, Settings, Mic, MicOff, Captions, Transcript, End,
     Keyboard, Sparkles, ArrowUp, ChevronDown, Back, Search, Close, Check, Leaf, ChevronRight, Coffee, Globe, Sun, Food, Music }
 
 /** Original, consistently weighted artwork; no platform-dependent text glyphs. */
@@ -35,7 +36,15 @@ fun MuralIcon(symbol: MuralSymbol, modifier: Modifier = Modifier, color: Color =
                     drawRoundRect(color, Offset(3f,7f), Size(14f,14f), CornerRadius(2f), style = stroke)
                     line(7f,12f,13f,12f); line(7f,16f,11f,16f)
                 }
-                MuralSymbol.Wave -> listOf(4f to 5f, 8f to 13f, 12f to 20f, 16f to 14f, 20f to 7f).forEach { (x,h) -> line(x,12-h/2,x,12+h/2) }
+                MuralSymbol.Wave, MuralSymbol.SpeakerOff -> {
+                    listOf(4f to 5f, 8f to 13f, 12f to 20f, 16f to 14f, 20f to 7f).forEach { (x, h) -> line(x, 12 - h / 2, x, 12 + h / 2) }
+                    if (symbol == MuralSymbol.SpeakerOff) line(3f, 3f, 21f, 21f)
+                }
+                MuralSymbol.Retry -> {
+                    drawArc(color, startAngle = 35f, sweepAngle = 285f, useCenter = false, topLeft = Offset(5f, 5f), size = Size(14f, 14f), style = stroke)
+                    line(17.4f, 7.5f, 14.2f, 7.2f)
+                    line(17.4f, 7.5f, 17.6f, 4.3f)
+                }
                 MuralSymbol.Themes -> listOf(3f to 3f,14f to 3f,3f to 14f,14f to 14f).forEach { (x,y) ->
                     if (filled) drawRoundRect(color, Offset(x,y), Size(7f,7f), CornerRadius(1.7f))
                     else drawRoundRect(color, Offset(x,y), Size(7f,7f), CornerRadius(1.7f), style = stroke)

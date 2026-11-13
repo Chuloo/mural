@@ -6,6 +6,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import chat.mural.core.*
 import org.junit.*
@@ -127,6 +128,41 @@ class CaptionFlashcardExperienceTest {
         position("1 of 2")
         compose.onNodeWithTag("close-flashcards").performClick()
         compose.onNodeWithTag("words-screen").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(before, ArchiveCodec.encode(vm.archive)) }
+    }
+
+    /** Verifies word list, dialog, and flashcard pronunciation controls keep recall state unchanged and clean up on stop/background. */
+    @Test fun wordPronunciationInWordsDialogAndFlashcardsPreservesRecallAndStopsOnBackground() {
+        seedWords()
+        val before = compose.runOnIdle { ArchiveCodec.encode(vm.archive) }
+
+        val rowPronounce = compose.onAllNodesWithTag("word-item-pronounce").onFirst()
+        rowPronounce.assertIsDisplayed()
+        rowPronounce.performClick()
+        // Tapping row pronunciation never opens WordDialog or alters recall bars/archive.
+        compose.onNodeWithTag("word-dialog-pronounce").assertDoesNotExist()
+        rowPronounce.performClick()
+        compose.runOnIdle { assertEquals(before, ArchiveCodec.encode(vm.archive)) }
+
+        // Opening WordDialog shows its dedicated pronunciation control.
+        compose.onNodeWithText("книга").performClick()
+        compose.onNodeWithTag("word-dialog-pronounce").assertIsDisplayed()
+        compose.onNodeWithTag("word-dialog-pronounce").performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.words_done_button)).performClick()
+
+        // Flashcards expose card pronunciation without revealing meaning or losing swipe navigation.
+        compose.onNodeWithTag("open-flashcards").performClick()
+        compose.onNodeWithTag("flashcard-pronounce").assertIsDisplayed()
+        compose.onNodeWithTag("flashcard-pronounce").performClick()
+        compose.onNodeWithTag("flashcard-meaning", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("flashcard-pager").performTouchInput { swipeLeft() }
+        position("2 of 2")
+        compose.onNodeWithTag("flashcard-pronounce").performClick()
+
+        // Moving the Activity to background triggers lifecycle stop cleanly without leaving dialog crashes.
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNodeWithTag("close-flashcards").performClick()
         compose.runOnIdle { assertEquals(before, ArchiveCodec.encode(vm.archive)) }
     }
     @Test fun emptyWordsKeepPracticeDisabledAndSearchDoesNotShrinkTheDeck() {
