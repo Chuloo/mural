@@ -254,8 +254,7 @@ private class AndroidTextToSpeechEngine(
     /** Applies the explicit on-device [android.speech.tts.Voice] matching [name]. */
     override fun selectVoice(name: String): Boolean = try {
         val voice = tts.voices?.firstOrNull { it.name == name } ?: return false
-        tts.voice = voice
-        true
+        tts.setVoice(voice) == TextToSpeech.SUCCESS
     } catch (_: Exception) {
         false
     }

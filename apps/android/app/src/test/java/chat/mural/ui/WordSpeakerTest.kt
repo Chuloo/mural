@@ -31,6 +31,7 @@ class WordSpeakerTest {
         val assignedVoices = mutableListOf<String>()
         val spokenUtterances = mutableListOf<Pair<String, String>>()
         var nextSpeakResult: Int = TextToSpeech.SUCCESS
+        var nextSelectVoiceSuccess: Boolean = true
         var stopCalls = 0
         var shutdownCalls = 0
         var callbacks: TtsProgressCallbacks? = null
@@ -69,7 +70,7 @@ class WordSpeakerTest {
 
         /** Binds synthesis to the matching configured voice [name]. */
         override fun selectVoice(name: String): Boolean {
-            if (voices.none { it.name == name }) return false
+            if (!nextSelectVoiceSuccess || voices.none { it.name == name }) return false
             assignedVoices += name
             return true
         }
@@ -374,6 +375,14 @@ class WordSpeakerTest {
         assertEquals(WordPlaybackState.Loading("ru|книга"), speaker.state.value)
         assertEquals(listOf("ru-ru-local"), engine.assignedVoices)
         assertEquals(1, engine.spokenUtterances.size)
+
+        // Engine rejection while applying an offline voice fails closed as Unavailable without speaking.
+        engine.nextSelectVoiceSuccess = false
+        speaker.speak("es|café", "café", "es")
+        assertEquals(WordPlaybackState.Unavailable("es|café", "es"), speaker.state.value)
+        assertEquals(4, alerts.size)
+        assertEquals(1, engine.spokenUtterances.size)
+        engine.nextSelectVoiceSuccess = true
 
         // Null voice metadata fails closed as Unavailable rather than allowing unverified network playback.
         engine.returnNullVoices = true
