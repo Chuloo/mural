@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (On-Device Model provider + offline typed conversations)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] Meaning subtitles stream on-device during on-device sessions, using the existing Helper seam
 - [ ] Word lookup works offline; a request needing live web facts receives the language's existing couldn't-check-that reply instead of an invented answer
@@ -18,3 +18,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/05-offline-helpers`, branch `ticket/05-offline-helpers`, base `feature/on-device-model` @ 7fb0398.
+- 2026-11-27: Done. Ticket branch `de5558a`, merged into `feature/on-device-model` as `fc68871`. Cumulative streamed meaning subtitles, offline word lookup & live-fact degradation, two-pass bounded defensive assessment extractor with On-Device Model provenance (`Assessment.context`), widened final-assessment gate, offline current-topic/delegation suppression, and JVM test coverage.

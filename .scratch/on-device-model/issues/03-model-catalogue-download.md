@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (On-Device Model provider + offline typed conversations)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] The curated list shows Gemma 4 E4B (default), Gemma 4 E2B and Qwen2.5-1.5B with sizes and a short description each
 - [ ] Models download in-app with progress, can be cancelled, and interrupted downloads recover or restart cleanly
@@ -18,3 +18,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/03-model-catalogue-download`, branch `ticket/03-model-catalogue-download`, base `feature/on-device-model` @ 7fb0398.
+- 2026-11-27: Done. Ticket branch `d3fa765`, merged into `feature/on-device-model` as `73f29a1`. Curated model catalogue (Gemma 4 E4B default, Gemma 4 E2B, Qwen2.5-1.5B), OkHttp streaming downloader with `.part` + `Range` resume/cancel, model deletion, HTTPS URL import, storage/memory download planner, and Advanced UI + JVM tests.

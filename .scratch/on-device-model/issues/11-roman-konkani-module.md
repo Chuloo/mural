@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] Roman Konkani is selectable as a learning language; all its content and guidance use the Roman script only
 - [ ] The Typed-only Module mechanism lands here: no microphone or spoken-teacher UI is offered for it on any provider, and typed conversation is the complete experience
@@ -16,3 +16,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/11-roman-konkani-module`, branch `ticket/11-roman-konkani-module`, base `feature/on-device-model` @ 7fb0398.
+- 2026-11-27: Done. Ticket branch `c52bbee`, merged into `feature/on-device-model` as `70b8c63`. Android-scoped Roman Konkani (`kok-Latn`) Language Module in Roman script only, reusable Typed-only Module mechanism (`isTypedOnly`), English/Hindi/Marathi code-switching tolerance, mic/voice suppression across providers with immediate voice restoration on language switch, and JVM + compiled androidTest coverage.
