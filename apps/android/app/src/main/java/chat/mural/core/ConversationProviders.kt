@@ -5,7 +5,11 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 
 /** Choice is explicit. An unavailable provider never authorizes use of the other one. */
-enum class ConversationProvider { PERSONAL_KEY, HOSTED_MINUTES }
+enum class ConversationProvider { PERSONAL_KEY, HOSTED_MINUTES, ON_DEVICE }
+
+/** Session Provenance of an On-Device Model session, carried by the existing optional
+ * `SessionRecord.providerID` so JSON backups keep their format. */
+const val ON_DEVICE_PROVIDER_ID = "on-device"
 
 @kotlinx.serialization.Serializable
 data class ConversationContinuationCheckpoint(val sessionID: String, val accountID: String) {
@@ -29,15 +33,30 @@ data class HostedReadiness(val accountID: String? = null, val availableMilliseco
     val ready get() = enabled && accountID != null && MinuteBalanceTime.isEligible(availableMilliseconds) && !checking
 }
 
+/** On-Device Model readiness: an imported model file that the Model Runtime has initialized.
+ * No key and no minute balance take part; [failure] carries the learner-facing reason. */
+data class OnDeviceReadiness(val modelID: String? = null, val initialized: Boolean = false,
+    val preparing: Boolean = false, val failure: String? = null) {
+    val ready get() = modelID != null && initialized && !preparing && failure == null
+}
+
 object ConversationProviderPolicy {
-    fun recoveryTickets(tickets: List<FinalAssessmentTicket>, hostedIDs: Set<String>) =
-        tickets.filterNot { it.sessionID in hostedIDs }
-    fun enqueueRecovery(session: SessionRecord, tickets: List<FinalAssessmentTicket>, hostedIDs: Set<String>): List<FinalAssessmentTicket> =
-        if (session.id in hostedIDs) tickets.filterNot { it.sessionID == session.id }
+    /** Hosted and On-Device Model sessions have no personal key to recover a final assessment with. */
+    fun recoveryTickets(tickets: List<FinalAssessmentTicket>, hostedIDs: Set<String>, onDeviceIDs: Set<String>) =
+        tickets.filterNot { it.sessionID in hostedIDs || it.sessionID in onDeviceIDs }
+    fun enqueueRecovery(session: SessionRecord, tickets: List<FinalAssessmentTicket>, hostedIDs: Set<String>, onDeviceIDs: Set<String>): List<FinalAssessmentTicket> =
+        if (session.id in hostedIDs || session.id in onDeviceIDs) tickets.filterNot { it.sessionID == session.id }
         else if (session.endedAt != null) FinalAssessmentRecovery.enqueue(session, tickets) else tickets
 
-    fun canStart(choice: ConversationProvider, hasKey: Boolean, hosted: HostedReadiness): Boolean =
-        when (choice) { ConversationProvider.PERSONAL_KEY -> hasKey; ConversationProvider.HOSTED_MINUTES -> hosted.ready }
+    /** Only Mural Minutes move a minute balance. An On-Device Model conversation costs nothing. */
+    fun consumesMinutes(choice: ConversationProvider) = choice == ConversationProvider.HOSTED_MINUTES
+
+    fun canStart(choice: ConversationProvider, hasKey: Boolean, hosted: HostedReadiness, onDevice: OnDeviceReadiness): Boolean =
+        when (choice) {
+            ConversationProvider.PERSONAL_KEY -> hasKey
+            ConversationProvider.HOSTED_MINUTES -> hosted.ready
+            ConversationProvider.ON_DEVICE -> onDevice.ready
+        }
 }
 
 /** The same short, valid message history can be passed to either voice provider. */

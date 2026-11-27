@@ -62,6 +62,7 @@ fun MuralApp(
     onOpenAppSettings: (() -> Unit)?,
     onExport: () -> Unit,
     onImport: () -> Unit,
+    onImportModel: () -> Unit = {},
     account: AccountViewModel? = null,
     onGoogleSignIn: () -> Unit = {},
     onSignOut: () -> Unit = {},
@@ -166,7 +167,7 @@ fun MuralApp(
                 ModalBottomSheet(onDismissRequest = { showSettings = false; focusAdvanced = false }, containerColor = MuralColors.Cream,
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
                     Column(Modifier.fillMaxHeight(.94f)) {
-                        SettingsScreen(vm, onExport, onImport, onReviewConsent = {
+                        SettingsScreen(vm, onExport, onImport, onImportModel, onReviewConsent = {
                             vm.pendingCloudAction = null; showConsent = true
                         }, onAccount = {
                             account?.refresh(); showAccount = true

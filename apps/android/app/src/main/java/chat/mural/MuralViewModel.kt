@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import chat.mural.core.*
 import chat.mural.network.*
+import chat.mural.ondevice.*
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -46,6 +47,7 @@ internal fun errorMessageRes(e: Throwable): Int = when (e) {
     is CredentialStore.CredentialException.Invalid -> R.string.error_key_invalid
     is CredentialStore.CredentialException.Save -> R.string.error_key_save
     is CredentialStore.CredentialException.Remove -> R.string.error_key_remove
+    is ModelRuntimeException -> R.string.error_on_device_model_failed
     else -> 0
 }
 
@@ -219,6 +221,18 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             HostedReadiness(owner.accountID, balance?.readinessMilliseconds ?: 0, enabled,
                 verified = balance != null)
         }, changed = { hostedReadiness = it })
+    private val onDeviceModels = OnDeviceModelController(application, viewModelScope, changed = ::onDeviceChanged)
+    var onDeviceReadiness by mutableStateOf(OnDeviceReadiness()); private set
+    var onDeviceModelNames by mutableStateOf(emptyList<String>()); private set
+    private fun onDeviceChanged(next: OnDeviceReadiness) {
+        if (next.failure != null && next.failure != onDeviceReadiness.failure) presentError(next.failure)
+        onDeviceReadiness = next; onDeviceModelNames = onDeviceModels.imported()
+    }
+    /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
+    private val onDeviceTeaching = OnDeviceTeachingClient { onDeviceModels.requireSession() }
+    private var onDeviceSessionIDs = emptySet<String>()
+    /** Switches the active On-Device Model; only an imported model can be selected. */
+    fun selectOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.select(name) }
     var accountChangeBlocked by mutableStateOf(true); private set
 
     private val reports = ReportController(viewModelScope,
@@ -277,13 +291,17 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 archive = loaded.first.archive
                 val providers = providerStore.read(if (loaded.second) ConversationProvider.PERSONAL_KEY else ConversationProvider.HOSTED_MINUTES)
                 hostedSessionIDs = providers.hostedIDs
+                // An imported backup carries On-Device Model provenance, so rebuild it too.
+                onDeviceSessionIDs = providers.onDeviceIDs +
+                    loaded.first.archive.sessions.filter { it.providerID == ON_DEVICE_PROVIDER_ID }.map { it.id }
                 pendingHostedOwnerID = providers.pendingOwnerID
                 accountChangeBlocked = providers.pendingOwnerID != null
                 guests?.recoverAcknowledgedOwnerAtStartup(pendingHostedOwnerID,
                     clear = { owner -> clearAcknowledgedGuestMarker(owner) },
                     onFailure = { presentError(getApplication<Application>().getString(R.string.error_guest_secure_storage_unavailable)) })
                 conversationProvider = providers.selection
-                finalAssessmentTickets = ConversationProviderPolicy.recoveryTickets(loaded.first.finalAssessments, hostedSessionIDs)
+                if (providers.selection == ConversationProvider.ON_DEVICE) onDeviceModels.initialize() else onDeviceModels.refresh()
+                finalAssessmentTickets = ConversationProviderPolicy.recoveryTickets(loaded.first.finalAssessments, hostedSessionIDs, onDeviceSessionIDs)
                 hasKey = loaded.second
                 storageReady = true
                 recoverFinalAssessments()
@@ -387,7 +405,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         completion.await()
     }
     private fun save(s: SessionRecord) {
-        finalAssessmentTickets = ConversationProviderPolicy.enqueueRecovery(s, finalAssessmentTickets, hostedSessionIDs)
+        finalAssessmentTickets = ConversationProviderPolicy.enqueueRecovery(s, finalAssessmentTickets, hostedSessionIDs, onDeviceSessionIDs)
         archive = archive.copy(sessions = (archive.sessions.filterNot { it.id == s.id } + clone(s)).toMutableList())
         persist()
     }
@@ -423,6 +441,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             presentError(getApplication<Application>().getString(R.string.error_accept_ai_consent)); return false
         }
         val currentHosted = session?.id in hostedSessionIDs
+        // An On-Device Model conversation needs its model, never a key or a minute balance.
+        if (!currentHosted && session?.id !in onDeviceSessionIDs &&
+            conversationProvider == ConversationProvider.ON_DEVICE && !onDeviceReadiness.ready) {
+            presentError(getApplication<Application>().getString(R.string.error_on_device_model_needed)); return false
+        }
         if (!currentHosted && conversationProvider == ConversationProvider.PERSONAL_KEY && !hasKey) {
             presentError(getApplication<Application>().getString(R.string.error_missing_key), needsKeySetup = true); return false
         }
@@ -438,6 +461,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
         }
         if (provider == ConversationProvider.HOSTED_MINUTES) refreshHostedReadiness()
+        if (provider == ConversationProvider.ON_DEVICE) onDeviceModels.initialize()
     }
     /** A source preview never creates a hosted lease or changes who pays. */
     suspend fun checkHostedBalanceForSwitch(): Long? {
@@ -493,7 +517,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun dismissMinuteAccess() { showMinuteAccess = false }
     fun needsMinuteAccess(): Boolean {
-        if (conversationProvider != ConversationProvider.HOSTED_MINUTES || isRunning) return false
+        if (!ConversationProviderPolicy.consumesMinutes(conversationProvider) || isRunning) return false
         if (hostedReadiness.ready && !selectedAccount.busy) return false
         showMinuteAccess = true; refreshHostedReadiness(); return true
     }
@@ -564,6 +588,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         if (archive.preferences.aiConsentVersion != 1) throw HostedFailure.Unavailable
         if (localID != null && localID in hostedSessionIDs) {
             return hostedBindings.respond(localID, purpose, logicalID, instructions, input, schema, search, onText)
+        }
+        // The creating On-Device Model session answers every Helper on the phone.
+        if ((localID != null && localID in onDeviceSessionIDs) ||
+            (localID == null && conversationProvider == ConversationProvider.ON_DEVICE)) {
+            return if (onText != null && purpose == HelperPurpose.MEANING) onDeviceTeaching.streamMeaning(instructions, input, onText)
+            else onDeviceTeaching.respond(instructions, input, schema, search, purpose)
         }
         if (localID == null && conversationProvider == ConversationProvider.HOSTED_MINUTES) throw HostedFailure.Unavailable
         return if (onText != null && purpose == HelperPurpose.MEANING) api.streamMeaning(instructions, input, onText)
@@ -751,6 +781,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         voiceSession = voice
         val record = SessionRecord(id = id, languageID = language.id, themeID = selectedTheme?.id, title = selectedTheme?.title ?: language.defaultTitle)
         topicResult?.takeIf { it.languageID == language.id && selectedTheme?.id == "current" }?.let { record.topics += it }
+        if (conversationProvider == ConversationProvider.ON_DEVICE) {
+            // Session Provenance, recorded once and never rewritten. No remote usage can arrive
+            // for an offline session, so its local counts are final.
+            record.providerID = ON_DEVICE_PROVIDER_ID
+            record.usageFinal = true
+            onDeviceSessionIDs = onDeviceSessionIDs + id
+            // shortcut: best-effort store write; providerID in the archive rebuilds this set at startup.
+            viewModelScope.launch { runCatching { providerStore.markOnDevice(id) } }
+        }
         session = record; save(record)
     }
     fun start() {
@@ -759,11 +798,17 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val continuing = continuationSession
         val continuingOwner = continuationOwnerID
         val choice = conversationProvider
+        // Voice Talk on the phone arrives with the local audio pipeline. Until then be honest:
+        // never open a cloud session, and never point this learner at a key or minutes.
+        if (choice == ConversationProvider.ON_DEVICE) {
+            notice = getApplication<Application>().getString(R.string.notice_on_device_voice_pending)
+            return
+        }
         if (choice == ConversationProvider.HOSTED_MINUTES && accountChangeBlocked) {
             presentError(getApplication<Application>().getString(R.string.hosted_checking_previous))
             reconcileHostedSessions(); return
         }
-        if (!ConversationProviderPolicy.canStart(choice, hasKey, hostedReadiness)) {
+        if (!ConversationProviderPolicy.canStart(choice, hasKey, hostedReadiness, onDeviceReadiness)) {
             if (choice == ConversationProvider.HOSTED_MINUTES) {
                 showMinuteAccess = true; refreshHostedReadiness()
             } else presentError(getApplication<Application>().getString(R.string.error_missing_key), true)
@@ -853,7 +898,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()
         transport.disconnect(); inputLevel = 0.0; outputLevel = 0.0; working = false; isMuted = false
         VoiceConversationService.stop(getApplication(), session?.id)
-        updateSession { it.endedAt = nowSeconds(); it.usageFinal = final }
+        updateSession { it.endedAt = nowSeconds(); it.usageFinal = final || it.id in onDeviceSessionIDs }
         state = "ended"
         notice = when (session?.endReason) {
             "Inactivity" -> getApplication<Application>().getString(R.string.notice_ended_inactivity)
@@ -1218,6 +1263,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         archive = archive.copy(sessions = mutableListOf(), preferences = archive.preferences.copy(hiddenWords = emptyList())); persist()
     }
     fun exportData(): String = ArchiveCodec.encode(archive)
+    /** Imports a learner-chosen `.litertlm` file as the active On-Device Model. */
+    fun importOnDeviceModel(uri: android.net.Uri) { onDeviceModels.importModel(uri) }
     fun importData(data: String): Boolean {
         if (isRunning || !storageReady) return false
         return try { archive = ArchiveCodec.merge(archive, prepareImportedArchive(data)); persist(); notice = getApplication<Application>().getString(R.string.notice_backup_imported); true }
@@ -1226,6 +1273,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         if (isRunning) finish(false)
         VoiceConversationService.stop(getApplication(), session?.id)
+        onDeviceModels.close()
         hostedBindings.disableHelpers(); transport.disconnect(); super.onCleared()
     }
 }

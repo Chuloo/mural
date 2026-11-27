@@ -74,8 +74,8 @@ import chat.mural.core.ProviderFailureKind
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Unit, onReviewConsent: () -> Unit,
-                   onAccount: (() -> Unit)? = null, accountSummary: String? = null,
+fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Unit, onImportModel: () -> Unit,
+                   onReviewConsent: () -> Unit, onAccount: (() -> Unit)? = null, accountSummary: String? = null,
                    focusAdvanced: Boolean = false, onDismiss: () -> Unit = {}) {
     var page by rememberSaveable { mutableStateOf("main") }
     var keyDialog by rememberSaveable { mutableStateOf(false) }
@@ -194,12 +194,36 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     item {
                         SettingsGroup(stringResource(R.string.settings_advanced)) {
                             SettingsChoiceRow(stringResource(R.string.settings_conversation_access),
-                                stringResource(if (vm.conversationProvider == chat.mural.core.ConversationProvider.HOSTED_MINUTES)
-                                    R.string.account_mural_minutes else R.string.settings_my_openai_key),
+                                stringResource(when (vm.conversationProvider) {
+                                    chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.account_mural_minutes
+                                    chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_on_device_model
+                                    chat.mural.core.ConversationProvider.PERSONAL_KEY -> R.string.settings_my_openai_key
+                                }),
                                 vm.conversationProvider.name,
                                 listOf(chat.mural.core.ConversationProvider.HOSTED_MINUTES.name to stringResource(R.string.account_mural_minutes),
-                                    chat.mural.core.ConversationProvider.PERSONAL_KEY.name to stringResource(R.string.settings_my_openai_key)),
+                                    chat.mural.core.ConversationProvider.PERSONAL_KEY.name to stringResource(R.string.settings_my_openai_key),
+                                    chat.mural.core.ConversationProvider.ON_DEVICE.name to stringResource(R.string.settings_on_device_model)),
                                 "settings-conversation-access", !vm.isRunning, ::chooseSource)
+                            if (vm.conversationProvider == chat.mural.core.ConversationProvider.ON_DEVICE) {
+                                Text(stringResource(R.string.settings_on_device_note), style = MaterialTheme.typography.bodySmall,
+                                    color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                                val readiness = vm.onDeviceReadiness
+                                SettingsDivider()
+                                SettingsChoiceRow(stringResource(R.string.settings_on_device_active_model),
+                                    when {
+                                        readiness.failure != null -> readiness.failure
+                                        readiness.preparing -> stringResource(R.string.settings_on_device_preparing)
+                                        readiness.modelID != null -> readiness.modelID
+                                        else -> stringResource(R.string.settings_on_device_none)
+                                    },
+                                    readiness.modelID.orEmpty(), vm.onDeviceModelNames.map { it to it },
+                                    "settings-on-device-model", !vm.isRunning && vm.onDeviceModelNames.isNotEmpty(),
+                                    vm::selectOnDeviceModel)
+                                SettingsDivider()
+                                SettingsRow(stringResource(R.string.settings_on_device_import), enabled = !vm.isRunning,
+                                    symbol = SettingsSymbol.IMPORT, modifier = Modifier.testTag("advanced-on-device-import"),
+                                    onClick = onImportModel)
+                            }
                             if (vm.conversationProvider == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
                                 Text(stringResource(R.string.settings_personal_key_note), style = MaterialTheme.typography.bodySmall,
                                     color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
@@ -324,11 +348,17 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
         }
     }
     if (sourceDialog) AlertDialog(onDismissRequest = { switchTicket++; sourceDialog = false },
-        title = { Text(stringResource(if (pendingSource == chat.mural.core.ConversationProvider.HOSTED_MINUTES)
-            R.string.settings_switch_hosted_title else R.string.settings_switch_key_title)) },
+        title = { Text(stringResource(when (pendingSource) {
+            chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.settings_switch_hosted_title
+            chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_switch_on_device_title
+            else -> R.string.settings_switch_key_title
+        })) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(if (pendingSource == chat.mural.core.ConversationProvider.HOSTED_MINUTES)
-                R.string.settings_switch_hosted_note else R.string.settings_switch_key_note))
+            Text(stringResource(when (pendingSource) {
+                chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.settings_switch_hosted_note
+                chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_switch_on_device_note
+                else -> R.string.settings_switch_key_note
+            }))
             if (pendingSource == chat.mural.core.ConversationProvider.HOSTED_MINUTES) {
                 Text(when {
                     checkingSwitch -> stringResource(R.string.settings_checking_minutes)
@@ -352,8 +382,10 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
         } },
         confirmButton = { MuralTextButton(onClick = {
-            if (pendingSource == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
-                vm.selectConversationProvider(chat.mural.core.ConversationProvider.PERSONAL_KEY); sourceDialog = false
+            val choice = pendingSource
+            if (choice != chat.mural.core.ConversationProvider.HOSTED_MINUTES) {
+                // Personal Key and On-Device Model need no balance check: the explicit choice is enough.
+                choice?.let(vm::selectConversationProvider); sourceDialog = false
             } else {
                 val ticket = switchTicket
                 scope.launch {
@@ -372,8 +404,11 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
         }, modifier = Modifier.testTag("settings-source-confirm"), enabled = !vm.isRunning && (pendingSource != chat.mural.core.ConversationProvider.HOSTED_MINUTES ||
             (!checkingSwitch && switchBalance != null && switchBalance!! > 0))) {
-            Text(stringResource(if (pendingSource == chat.mural.core.ConversationProvider.HOSTED_MINUTES)
-                R.string.account_mural_minutes else R.string.settings_my_openai_key))
+            Text(stringResource(when (pendingSource) {
+                chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.account_mural_minutes
+                chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_on_device_model
+                else -> R.string.settings_my_openai_key
+            }))
         } }, dismissButton = { MuralTextButton(onClick = { switchTicket++; sourceDialog = false }) { Text(stringResource(R.string.common_cancel)) } })
     if (keyDialog) KeyDialog(vm, keyDialogUseAfterSave, onDismiss = { keyDialog = false })
     if (notices) NoticesDialog(onDismiss = { notices = false })
