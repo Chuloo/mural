@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -226,7 +227,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                         readiness.download != null -> downloadStatus(readiness.download)
                                         readiness.failure != null -> readiness.failure
                                         readiness.preparing -> stringResource(R.string.settings_on_device_preparing)
-                                        readiness.modelID != null -> readiness.modelID
+                                        // A catalogued model shows its own name; an imported file shows its file name.
+                                        readiness.modelID != null -> OnDeviceModelCatalogue.byID(readiness.modelID)
+                                            ?.let { stringResource(it.title) } ?: readiness.modelID
                                         else -> stringResource(R.string.settings_on_device_none)
                                     },
                                     enabled = !vm.isRunning, chevron = true,
@@ -298,14 +301,31 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     val readiness = vm.onDeviceReadiness
                     val download = readiness.download
                     val catalogue = OnDeviceModelCatalogue.conversation
+                    val system = OnDeviceModelCatalogue.GEMINI_NANO_AICORE
                     val stored = vm.onDeviceStoredModels
                     // A pasted link's download is only on the phone once it lands, so it gets a row of its own.
                     val inFlight = download?.takeIf { progress ->
                         catalogue.none { it.fileName == progress.fileName } && stored.none { it.name == progress.fileName }
                     }?.let { OnDeviceModel(it.fileName, it.totalBytes) }
                     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                        // Probed each time the picker opens: a phone below AICore's API 33 floor, or one
+                        // AICore does not serve, never sees the zero-download row at all.
+                        LaunchedEffect(Unit) { vm.probeOnDeviceSystemModel() }
                         SettingsGroup(stringResource(R.string.settings_on_device_models),
                             stringResource(R.string.settings_on_device_models_footer)) {
+                            if (vm.onDeviceSystemModelAvailable) {
+                                val active = readiness.modelID == system.id
+                                OnDeviceModelRow(title = stringResource(system.title), detail = stringResource(system.description),
+                                    status = if (active) stringResource(R.string.settings_on_device_active_badge)
+                                        else stringResource(R.string.settings_on_device_no_download),
+                                    download = null, enabled = !vm.isRunning && download == null,
+                                    action = if (active) null else R.string.settings_on_device_use,
+                                    onAction = { vm.selectOnDeviceModel(system.id) },
+                                    // System-managed: no transfer to cancel and no file to delete.
+                                    onCancel = {}, onDelete = null,
+                                    tag = "on-device-model-${system.id}")
+                                SettingsDivider()
+                            }
                             catalogue.forEachIndexed { index, model ->
                                 if (index > 0) SettingsDivider()
                                 val name = model.fileName.orEmpty()

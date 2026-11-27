@@ -20,6 +20,18 @@ class OnDeviceModelStore(initial: String? = null, private val save: (String) -> 
     val models get() = stored.models
     fun active() = stored.models.firstOrNull { it.name == stored.active }
 
+    /** The active model's identity: an imported file name, or the system model's catalogue id. */
+    fun activeID(): String? = stored.active
+
+    /**
+     * The zero-download system model has no file to import, so its catalogue id alone becomes the
+     * active model. Choosing it is as explicit as choosing a downloaded one.
+     */
+    fun selectSystem(id: String) {
+        stored = stored.copy(active = id)
+        persist()
+    }
+
     /** A newly imported model becomes the active one; re-importing a name replaces its metadata. */
     fun import(displayName: String?, sizeBytes: Long): OnDeviceModel {
         val model = OnDeviceModel(fileName(displayName), sizeBytes)

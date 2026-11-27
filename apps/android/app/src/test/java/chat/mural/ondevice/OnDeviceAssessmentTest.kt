@@ -21,7 +21,7 @@ class OnDeviceAssessmentTest {
     }
     private val word = """{"lemma":"la casa","meaning":"house","form":"casa","quote":"la casa","language":"es","kind":"independent","confidence":0.95,"sourceIDs":["target"]}"""
     private val valid = """{"outcome":"success","suggestedLevel":2,"nextGoal":"Practica en tu casa.","capability":"Talks about home","words":[$word]}"""
-    private fun helpers(runtime: ScriptedModelRuntime) =
+    private fun helpers(runtime: ModelRuntime) =
         OnDeviceTeachingClient({ runtime.load(model) }) { "No he podido comprobarlo ahora mismo." }
 
     @Test fun aSchemaValidReplyBecomesACleanProposal() {
@@ -124,6 +124,20 @@ class OnDeviceAssessmentTest {
         assertEquals(valid, result.text)
         assertEquals(2, runtime.requests.size)
         assertNull(runtime.requests[1].request.jsonSchema)
+    }
+
+    @Test fun aicoreRefusesTheSchemaAttemptAndStillAssessesOnTheUnconstrainedRetry() = runTest {
+        val client = FakeAICoreClient()
+        client.reply(valid)
+        val result = helpers(AICoreModelRuntime(sdkInt = 35) { client })
+            .respond(instructions, "TARGET LANGUAGE: es", schema, purpose = HelperPurpose.ASSESSMENT)
+        assertEquals(valid, result.text)
+        // The refused constrained attempt never reaches the system service; only the retry does.
+        val request = client.requests.single()
+        assertEquals("user: TARGET LANGUAGE: es\nmodel: ", request.prompt)
+        assertEquals(1_024, request.maxOutputTokens)
+        assertTrue(request.systemPrompt!!, request.systemPrompt!!.startsWith("$instructions\n"))
+        assertTrue(request.systemPrompt!!, request.systemPrompt!!.contains(schema.toString()))
     }
 
     @Test fun twoUnusableAttemptsStopWithoutAThirdRequest() = runTest {

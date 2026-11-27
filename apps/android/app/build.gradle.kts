@@ -111,13 +111,18 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    // 1.11.0 is what genai-common pulls in transitively; declaring it keeps coroutines-test aligned.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
+    // The AICore Model Runtime: the ML Kit GenAI Prompt API serves the system Gemini Nano.
+    // Both AARs declare minSdkVersion 26, so the app's compatibility floor stays unchanged.
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    implementation("com.google.mlkit:genai-common:1.0.0-beta5")
     implementation("io.github.webrtc-sdk:android:150.7871.01")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.04.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

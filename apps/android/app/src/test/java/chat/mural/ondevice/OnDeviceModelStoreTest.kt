@@ -31,6 +31,28 @@ class OnDeviceModelStoreTest {
         assertEquals(4, saved.size)
     }
 
+    @Test fun theZeroDownloadSystemModelBecomesActiveWithoutAFileOnDisk() {
+        val saved = mutableListOf<String>()
+        val store = OnDeviceModelStore(save = { saved += it })
+        store.selectSystem("aicore-gemini-nano")
+        // The AICore model has no .litertlm file, so its catalogue id alone is the active model.
+        assertEquals("aicore-gemini-nano", store.activeID())
+        assertNull(store.active())
+        assertTrue(store.models.isEmpty())
+        val restored = OnDeviceModelStore(saved.single(), save = { saved += it })
+        assertEquals("aicore-gemini-nano", restored.activeID())
+        // A downloaded model replaces it, and switching back keeps the downloaded one's metadata.
+        val e4b = restored.import("gemma-4-E4B-it.litertlm", 3_659_530_240L)
+        assertEquals(e4b.name, restored.activeID())
+        assertEquals(e4b, restored.active())
+        restored.selectSystem("aicore-gemini-nano")
+        assertEquals("aicore-gemini-nano", restored.activeID())
+        assertEquals(listOf(e4b), restored.models)
+        // The system model is not a stored file, so there is nothing to delete and nothing reclaimed.
+        assertFalse(restored.delete("aicore-gemini-nano"))
+        assertEquals("aicore-gemini-nano", restored.activeID())
+    }
+
     @Test fun deletingAModelReclaimsItsPlaceAndDeletingTheActiveOneLeavesNoActiveModel() {
         val saved = mutableListOf<String>()
         val store = OnDeviceModelStore(save = { saved += it })

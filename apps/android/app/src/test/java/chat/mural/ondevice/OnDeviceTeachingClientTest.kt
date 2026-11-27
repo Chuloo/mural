@@ -11,8 +11,11 @@ import org.junit.Test
 class OnDeviceTeachingClientTest {
     private val spanish = AndroidLanguages.get("es")!!
     private val model = "models/gemma-4-e4b.litertlm"
-    private fun helpers(runtime: ScriptedModelRuntime) =
+    private fun helpers(runtime: ModelRuntime) =
         OnDeviceTeachingClient({ runtime.load(model) }) { spanish.lookupUnavailableReply }
+
+    /** The zero-download AICore Model Runtime, over one fake backend. */
+    private fun aicore(client: FakeAICoreClient) = AICoreModelRuntime(sdkInt = 35) { client }
 
     @Test fun onDeviceHelpersAnswerThroughTheModelRuntimeWithoutWebSourcesOrInventedUsage() = runTest {
         val runtime = ScriptedModelRuntime(ScriptedReply("¡Hola", " amigo!"), ScriptedReply("Segundo"))
@@ -80,6 +83,34 @@ class OnDeviceTeachingClientTest {
         assertEquals(spanish.lookupUnavailableReply, delegation.text)
         assertTrue(delegation.sources.isEmpty())
         assertTrue(runtime.requests.isEmpty())
+    }
+
+    @Test fun theSameTypedReplyHelperRunsOverTheZeroDownloadAICoreModelRuntime() = runTest {
+        val client = FakeAICoreClient()
+        client.reply("¡Hola", " amigo!")
+        val result = helpers(aicore(client)).respond("Reply only in Spanish.", "TARGET LANGUAGE: es\nUSER: Hola",
+            purpose = HelperPurpose.TYPED_REPLY)
+        // A Conversation Provider cannot tell the two Model Runtimes apart: same text, no sources, no usage.
+        assertEquals("¡Hola amigo!", result.text)
+        assertTrue(result.sources.isEmpty())
+        assertEquals(APIUsage(), result.usage)
+        val request = client.requests.single()
+        assertEquals("user: TARGET LANGUAGE: es\nUSER: Hola\nmodel: ", request.prompt)
+        assertTrue(request.systemPrompt!!.startsWith("Reply only in Spanish.\n"))
+        assertTrue(request.systemPrompt!!.contains(spanish.lookupUnavailableReply))
+    }
+
+    @Test fun meaningSubtitlesStreamOverAICoreExactlyAsOverADownloadedModel() = runTest {
+        val client = FakeAICoreClient()
+        client.reply(" ", "Ho", "la")
+        val partials = mutableListOf<String>()
+        val meaning = helpers(aicore(client))
+            .streamMeaning("Translate the supplied Spanish transcript faithfully into English.", "Hola") { partials += it }
+        assertEquals(listOf(" Ho", " Hola"), partials)
+        assertEquals("Hola", meaning.text)
+        assertTrue(meaning.sources.isEmpty())
+        assertEquals("Translate the supplied Spanish transcript faithfully into English.",
+            client.requests.single().systemPrompt)
     }
 
     @Test fun aFailedModelReplySurfacesAsAModelRuntimeFailure() = runTest {
