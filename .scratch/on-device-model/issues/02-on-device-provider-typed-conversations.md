@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (Model Runtime seam + LiteRT-LM adapter + scripted fake)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] On-Device Model appears as an explicit third Conversation Provider choice in Settings > Advanced, persists across restarts, and is never silently switched to or from
 - [ ] A local `.litertlm` model file can be imported and selected; provider readiness requires an imported, initialized model
@@ -19,3 +19,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/02-on-device-provider-typed-conversations`, branch `ticket/02-on-device-provider-typed-conversations`, base `feature/on-device-model` @ 29dc492.
+- 2026-11-27: Done. Ticket branch `4c9cab7`, merged into `feature/on-device-model` as `80f9419`. ON_DEVICE Conversation Provider, SAF `.litertlm` model import/selection, OnDeviceTeachingClient, Session Provenance, minute exclusion, Advanced settings UI, and JVM + compiled androidTest coverage. Offline checks green; airplane-mode hardware demo owed to ticket 13.
