@@ -4,10 +4,14 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Portuguese (Portugal) is selectable as a learning language alongside the unchanged Portuguese (Brazil)
 - [ ] Its speech, writing and lemma guidance describe the European variety; teaching focus and themes are localized, with greetings and unavailable-reply in the module's voice
 - [ ] Voice conversations work immediately on the existing cloud providers
 - [ ] The shared cross-platform fixtures cover the new module's text cases, and registry validation passes on both platforms
 - [ ] Theme overrides reflect European situations rather than translating Brazilian ones
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/06-portuguese-portugal-module`, branch `ticket/06-portuguese-portugal-module`, base `feature/on-device-model` @ 29dc492.

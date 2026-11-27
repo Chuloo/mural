@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (Model Runtime seam + LiteRT-LM adapter + scripted fake)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] On-Device Model appears as an explicit third Conversation Provider choice in Settings > Advanced, persists across restarts, and is never silently switched to or from
 - [ ] A local `.litertlm` model file can be imported and selected; provider readiness requires an imported, initialized model
@@ -15,3 +15,7 @@
 - [ ] Talk's home screen, orb and sheets are unchanged; all new UI lives in Settings > Advanced using existing components
 - [ ] On-device sessions appear unchanged in the existing JSON backup format
 - [ ] Provider-policy unit tests cover selection persistence, readiness, provenance, and minute exclusion
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/02-on-device-provider-typed-conversations`, branch `ticket/02-on-device-provider-typed-conversations`, base `feature/on-device-model` @ 29dc492.
