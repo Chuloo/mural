@@ -59,8 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import chat.mural.R
+import chat.mural.core.AndroidLanguages
 import chat.mural.core.LanguageModule
-import chat.mural.core.LanguageRegistry
 import chat.mural.core.MeaningLanguages
 
 const val AI_CONSENT_VERSION = 1
@@ -74,10 +74,10 @@ fun OnboardingScreen(
     var step by rememberSaveable { mutableIntStateOf(0) }
     var languageId by rememberSaveable(initialLanguageId) { mutableStateOf(initialLanguageId) }
     var meaningLanguage by rememberSaveable(initialMeaningLanguage) { mutableStateOf(initialMeaningLanguage) }
-    val language = LanguageRegistry.get(languageId) ?: LanguageRegistry.all.first()
+    val language = AndroidLanguages.get(languageId) ?: AndroidLanguages.all.first()
     val phase = muralPhase()
-    val greetingIndex = ((phase / 2.736f).toInt()) % LanguageRegistry.all.size
-    val greeting = if (phase == 0f) language.greeting else LanguageRegistry.all[greetingIndex].greeting
+    val greetingIndex = ((phase / 2.736f).toInt()) % AndroidLanguages.all.size
+    val greeting = if (phase == 0f) language.greeting else AndroidLanguages.all[greetingIndex].greeting
     Box(Modifier.fillMaxSize()) {
         SoftAnimatedBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -146,13 +146,13 @@ fun OnboardingScreen(
 
 @Composable
 private fun LanguageStep(selected: String, compact: Boolean, onSelect: (String) -> Unit) {
-    val language = LanguageRegistry.get(selected) ?: LanguageRegistry.all.first()
+    val language = AndroidLanguages.get(selected) ?: AndroidLanguages.all.first()
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(if (compact) 16.dp else 24.dp)) {
         Text(stringResource(R.string.onboarding_language_title), style = MaterialTheme.typography.headlineSmall,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.semantics { heading() }.testTag("onboarding-language-title"))
         LanguageDropdown(language.nativeName, language.settingsTitle, "onboarding-language-picker") { close ->
-            LanguageRegistry.all.forEach { option ->
+            AndroidLanguages.all.forEach { option ->
                 androidx.compose.material3.DropdownMenuItem(text = {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(option.nativeName, style = MaterialTheme.typography.titleMedium)

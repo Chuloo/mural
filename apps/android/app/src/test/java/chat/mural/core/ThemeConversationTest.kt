@@ -5,7 +5,7 @@ import org.junit.Test
 
 class ThemeConversationTest {
     @Test fun everyCatalogThemeControlsTheSessionAndFirstQuestion() {
-        for (language in LanguageRegistry.all) {
+        for (language in AndroidLanguages.all) {
             val learner = LearningEngine.project(emptyList(), languageID = language.id)
             val openings = mutableSetOf<String>()
             for (theme in language.themes) {

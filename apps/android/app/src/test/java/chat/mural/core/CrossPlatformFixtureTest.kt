@@ -44,7 +44,7 @@ class CrossPlatformFixtureTest {
         val cases = Json.parseToJsonElement(File(dir, "redirect-cases.json").readText()).jsonObject.getValue("cases").jsonArray
         assertTrue(cases.isNotEmpty())
         for (item in cases.map { it.jsonObject }) {
-            val language = LanguageRegistry.get(item.getValue("language").jsonPrimitive.content)!!
+            val language = AndroidLanguages.get(item.getValue("language").jsonPrimitive.content)!!
             val detected = item.getValue("detected").jsonPrimitive.content
             val confidence = item.getValue("confidence").jsonPrimitive.double
             assertEquals("${language.id} / $detected / $confidence", item.getValue("redirect").jsonPrimitive.boolean,
