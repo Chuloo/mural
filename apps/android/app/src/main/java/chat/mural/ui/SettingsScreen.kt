@@ -1,5 +1,6 @@
 package chat.mural.ui
 
+import android.text.format.Formatter
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -32,6 +33,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,6 +67,7 @@ import androidx.compose.ui.window.DialogWindowProvider
 import chat.mural.MuralViewModel
 import chat.mural.R
 import chat.mural.core.AndroidLanguages
+import chat.mural.core.DownloadProgress
 import chat.mural.core.MeaningLanguages
 import chat.mural.core.MinuteBalanceTime
 import chat.mural.core.Passage
@@ -71,6 +75,9 @@ import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.UsageSummary
 import chat.mural.core.ProviderFailureKind
+import chat.mural.ondevice.CataloguedModel
+import chat.mural.ondevice.OnDeviceModel
+import chat.mural.ondevice.OnDeviceModelCatalogue
 import kotlinx.coroutines.launch
 
 @Composable
@@ -90,6 +97,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
     var deleteSession by remember { mutableStateOf<SessionRecord?>(null) }
     var sourceDialog by rememberSaveable { mutableStateOf(false) }
     var pendingSource by rememberSaveable { mutableStateOf<chat.mural.core.ConversationProvider?>(null) }
+    var pendingDownload by remember { mutableStateOf<CataloguedModel?>(null) }
+    var modelLink by rememberSaveable { mutableStateOf(false) }
+    var deleteModel by remember { mutableStateOf<OnDeviceModel?>(null) }
     var switchBalance by remember { mutableStateOf<Long?>(null) }
     var checkingSwitch by remember { mutableStateOf(false) }
     var switchTicket by remember { mutableIntStateOf(0) }
@@ -127,6 +137,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
         val title = when (page) {
             "interests" -> stringResource(R.string.settings_interests_label)
             "data" -> stringResource(R.string.settings_learning_data)
+            "models" -> stringResource(R.string.settings_on_device_models)
             "key" -> stringResource(R.string.settings_openai_key)
             "about" -> stringResource(R.string.settings_about)
             else -> stringResource(R.string.settings_navigation_title)
@@ -209,20 +220,17 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                                 val readiness = vm.onDeviceReadiness
                                 SettingsDivider()
-                                SettingsChoiceRow(stringResource(R.string.settings_on_device_active_model),
+                                // One tap into the catalogue: download, switch, paste a link, import or delete.
+                                SettingsRow(stringResource(R.string.settings_on_device_active_model),
                                     when {
+                                        readiness.download != null -> downloadStatus(readiness.download)
                                         readiness.failure != null -> readiness.failure
                                         readiness.preparing -> stringResource(R.string.settings_on_device_preparing)
                                         readiness.modelID != null -> readiness.modelID
                                         else -> stringResource(R.string.settings_on_device_none)
                                     },
-                                    readiness.modelID.orEmpty(), vm.onDeviceModelNames.map { it to it },
-                                    "settings-on-device-model", !vm.isRunning && vm.onDeviceModelNames.isNotEmpty(),
-                                    vm::selectOnDeviceModel)
-                                SettingsDivider()
-                                SettingsRow(stringResource(R.string.settings_on_device_import), enabled = !vm.isRunning,
-                                    symbol = SettingsSymbol.IMPORT, modifier = Modifier.testTag("advanced-on-device-import"),
-                                    onClick = onImportModel)
+                                    enabled = !vm.isRunning, chevron = true,
+                                    modifier = Modifier.testTag("advanced-on-device-models"), onClick = { page = "models" })
                             }
                             if (vm.conversationProvider == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
                                 Text(stringResource(R.string.settings_personal_key_note), style = MaterialTheme.typography.bodySmall,
@@ -284,6 +292,72 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         SettingsDivider()
                         SettingsRow(stringResource(R.string.settings_delete_all_data), enabled = !vm.isRunning,
                             tint = MuralColors.Red, onClick = { deleteAll = true })
+                    }
+                }
+                "models" -> item {
+                    val readiness = vm.onDeviceReadiness
+                    val download = readiness.download
+                    val catalogue = OnDeviceModelCatalogue.conversation
+                    val stored = vm.onDeviceStoredModels
+                    // A pasted link's download is only on the phone once it lands, so it gets a row of its own.
+                    val inFlight = download?.takeIf { progress ->
+                        catalogue.none { it.fileName == progress.fileName } && stored.none { it.name == progress.fileName }
+                    }?.let { OnDeviceModel(it.fileName, it.totalBytes) }
+                    Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                        SettingsGroup(stringResource(R.string.settings_on_device_models),
+                            stringResource(R.string.settings_on_device_models_footer)) {
+                            catalogue.forEachIndexed { index, model ->
+                                if (index > 0) SettingsDivider()
+                                val name = model.fileName.orEmpty()
+                                val onPhone = stored.firstOrNull { it.name == name }
+                                val active = readiness.modelID == name
+                                OnDeviceModelRow(title = stringResource(model.title), detail = stringResource(model.description),
+                                    status = when {
+                                        active -> stringResource(R.string.settings_on_device_active_badge)
+                                        onPhone != null -> stringResource(R.string.settings_on_device_downloaded_badge)
+                                        else -> Formatter.formatFileSize(context, model.sizeBytes)
+                                    },
+                                    download = download?.takeIf { it.fileName == name },
+                                    enabled = !vm.isRunning && download == null,
+                                    action = when {
+                                        active -> null
+                                        onPhone != null -> R.string.settings_on_device_use
+                                        else -> R.string.settings_on_device_download
+                                    },
+                                    // Switching the one global active model is a single tap.
+                                    onAction = { if (onPhone != null) vm.selectOnDeviceModel(name) else pendingDownload = model },
+                                    onCancel = vm::cancelOnDeviceDownload,
+                                    onDelete = onPhone?.let { file -> { deleteModel = file } },
+                                    tag = "on-device-model-${model.id}")
+                            }
+                        }
+                        val own = stored.filterNot { file -> catalogue.any { it.fileName == file.name } } + listOfNotNull(inFlight)
+                        if (own.isNotEmpty()) SettingsGroup(stringResource(R.string.settings_on_device_stored_group)) {
+                            own.forEachIndexed { index, file ->
+                                if (index > 0) SettingsDivider()
+                                val active = readiness.modelID == file.name
+                                val removable = stored.any { it.name == file.name }
+                                OnDeviceModelRow(title = file.name,
+                                    detail = if (file.sizeBytes > 0) Formatter.formatFileSize(context, file.sizeBytes) else "",
+                                    status = if (active) stringResource(R.string.settings_on_device_active_badge) else "",
+                                    download = download?.takeIf { it.fileName == file.name },
+                                    enabled = !vm.isRunning && download == null,
+                                    action = if (active) null else R.string.settings_on_device_use,
+                                    onAction = { vm.selectOnDeviceModel(file.name) },
+                                    onCancel = vm::cancelOnDeviceDownload,
+                                    onDelete = if (removable) { { deleteModel = file } } else null,
+                                    tag = "on-device-stored-model-$index")
+                            }
+                        }
+                        SettingsGroup {
+                            SettingsRow(stringResource(R.string.settings_on_device_link), chevron = true,
+                                enabled = !vm.isRunning && download == null, modifier = Modifier.testTag("on-device-link"),
+                                onClick = { modelLink = true })
+                            SettingsDivider()
+                            SettingsRow(stringResource(R.string.settings_on_device_import), enabled = !vm.isRunning,
+                                symbol = SettingsSymbol.IMPORT, modifier = Modifier.testTag("advanced-on-device-import"),
+                                onClick = onImportModel)
+                        }
                     }
                 }
                 "key" -> item {
@@ -411,6 +485,19 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }))
         } }, dismissButton = { MuralTextButton(onClick = { switchTicket++; sourceDialog = false }) { Text(stringResource(R.string.common_cancel)) } })
     if (keyDialog) KeyDialog(vm, keyDialogUseAfterSave, onDismiss = { keyDialog = false })
+    pendingDownload?.let { model -> DownloadConfirmDialog(vm, model, onDismiss = { pendingDownload = null }) }
+    if (modelLink) OnDeviceLinkDialog(enabled = !vm.isRunning && vm.onDeviceReadiness.download == null,
+        onDismiss = { modelLink = false }, onDownload = { modelLink = false; vm.downloadOnDeviceModelURL(it) })
+    deleteModel?.let { file ->
+        val curated = OnDeviceModelCatalogue.conversation.firstOrNull { it.fileName == file.name }
+        ConfirmDialog(
+            stringResource(R.string.settings_on_device_delete_confirm_title,
+                curated?.let { stringResource(it.title) } ?: file.name),
+            stringResource(R.string.settings_on_device_delete_confirm_message,
+                Formatter.formatFileSize(context, file.sizeBytes)),
+            stringResource(R.string.common_delete),
+            { vm.deleteOnDeviceModel(file.name); deleteModel = null }, { deleteModel = null })
+    }
     if (notices) NoticesDialog(onDismiss = { notices = false })
     if (history) SettingsHistorySheet(vm, onDismiss = { history = false }, onSelect = { transcript = it }, onDelete = { deleteSession = it })
     if (permissionDetails) AlertDialog(onDismissRequest = { permissionDetails = false },
@@ -524,6 +611,88 @@ private fun ConfirmDialog(title: String, message: String, confirm: String, onCon
         confirmButton = { MuralTextButton(onClick = onConfirm) { Text(confirm, color = MuralColors.Red) } },
         dismissButton = { MuralTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
+}
+
+/** The learner-facing progress of one in-flight model download. */
+@Composable
+private fun downloadStatus(download: DownloadProgress): String =
+    if (download.fraction >= 0f) stringResource(R.string.settings_on_device_downloading_percent, (download.fraction * 100).toInt())
+    else stringResource(R.string.settings_on_device_downloading_size,
+        Formatter.formatFileSize(LocalContext.current, download.receivedBytes))
+
+/** One catalogue row: what the model is, what it costs in storage, and the one action it takes. */
+@Composable
+private fun OnDeviceModelRow(title: String, detail: String, status: String, download: DownloadProgress?,
+    enabled: Boolean, action: Int?, onAction: () -> Unit, onCancel: () -> Unit, onDelete: (() -> Unit)?, tag: String) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
+        }
+        if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
+        if (download != null) {
+            val bar = Modifier.fillMaxWidth().height(4.dp).testTag("$tag-progress")
+            // A pasted link can arrive in chunks, so its total stays unknown until it lands.
+            if (download.fraction >= 0f) LinearProgressIndicator({ download.fraction }, bar,
+                color = MuralColors.Orange, trackColor = MuralColors.Peach)
+            else LinearProgressIndicator(bar, color = MuralColors.Orange, trackColor = MuralColors.Peach)
+            Text(downloadStatus(download), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (download != null) MuralTextButton(onClick = onCancel, modifier = Modifier.testTag("$tag-cancel")) {
+                Text(stringResource(R.string.settings_on_device_cancel_download), color = MuralColors.Secondary)
+            } else if (action != null) Button(onClick = onAction, enabled = enabled, modifier = Modifier.testTag("$tag-action"),
+                colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
+                Text(stringResource(action))
+            }
+            if (onDelete != null) MuralTextButton(onClick = onDelete, enabled = enabled, modifier = Modifier.testTag("$tag-delete")) {
+                Text(stringResource(R.string.settings_on_device_delete_model), color = MuralColors.Red)
+            }
+        }
+    }
+}
+
+/** The warnings a multi-gigabyte download earns before one byte is fetched. */
+@Composable
+private fun DownloadConfirmDialog(vm: MuralViewModel, model: CataloguedModel, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    // Planned once: free storage and memory are the phone's, not the composition's.
+    val plan = remember(model) { vm.onDeviceDownloadPlan(model) }
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_on_device_download_confirm_title, stringResource(model.title))) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(stringResource(R.string.settings_on_device_download_size_note, Formatter.formatFileSize(context, model.sizeBytes)))
+            if (plan.largeDownload) Text(stringResource(R.string.settings_on_device_download_large_warning), color = MuralColors.Secondary)
+            if (plan.lowMemory) Text(stringResource(R.string.settings_on_device_download_memory_warning, model.minDeviceMemoryGb),
+                color = MuralColors.Secondary)
+            if (plan.refused) Text(stringResource(R.string.settings_on_device_download_storage_warning,
+                Formatter.formatFileSize(context, plan.shortfallBytes)), color = MuralColors.Red)
+        } },
+        confirmButton = { Button(onClick = { vm.downloadOnDeviceModel(model); onDismiss() },
+            enabled = !plan.refused && !vm.isRunning, modifier = Modifier.testTag("on-device-download-confirm"),
+            colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
+            Text(stringResource(R.string.settings_on_device_download)) } },
+        dismissButton = { MuralTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } })
+}
+
+@Composable
+private fun OnDeviceLinkDialog(enabled: Boolean, onDismiss: () -> Unit, onDownload: (String) -> Unit) {
+    var link by rememberSaveable { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_on_device_link)) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            MuralTextField(link, { link = it.take(500) }, Modifier.fillMaxWidth().testTag("on-device-link-input"),
+                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
+                label = { Text(stringResource(R.string.settings_on_device_link_hint)) })
+            Text(stringResource(R.string.settings_on_device_link_note), style = MaterialTheme.typography.bodySmall,
+                color = MuralColors.Secondary)
+        } },
+        confirmButton = { Button(onClick = { onDownload(link.trim()) }, enabled = enabled && link.isNotBlank(),
+            modifier = Modifier.testTag("on-device-link-download"),
+            colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {
+            Text(stringResource(R.string.settings_on_device_download)) } },
+        dismissButton = { MuralTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } })
 }
 
 @Composable

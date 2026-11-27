@@ -31,6 +31,30 @@ class OnDeviceModelStoreTest {
         assertEquals(4, saved.size)
     }
 
+    @Test fun deletingAModelReclaimsItsPlaceAndDeletingTheActiveOneLeavesNoActiveModel() {
+        val saved = mutableListOf<String>()
+        val store = OnDeviceModelStore(save = { saved += it })
+        assertFalse(store.delete("a-model-that-was-never-imported.litertlm"))
+        assertTrue(saved.isEmpty())
+        val e4b = store.import("gemma-4-E4B-it.litertlm", 3_659_530_240L)
+        val qwen = store.import("Qwen2.5-1.5B-Instruct.litertlm", 1_597_922_856L)
+        assertEquals(qwen, store.active())
+        // Deleting a model that is not active keeps the active one, and the choice stays explicit:
+        // deleting the active model leaves no active model instead of silently picking another.
+        assertTrue(store.delete(e4b.name))
+        assertEquals(listOf(qwen), store.models)
+        assertEquals(qwen, store.active())
+        assertFalse(store.delete(e4b.name))
+        assertTrue(store.delete(qwen.name))
+        assertTrue(store.models.isEmpty())
+        assertNull(store.active())
+        assertFalse(store.select(qwen.name))
+        val restored = OnDeviceModelStore(saved.last(), save = { saved += it })
+        assertTrue(restored.models.isEmpty())
+        assertNull(restored.active())
+        assertEquals(4, saved.size)
+    }
+
     @Test fun onlyASafeLitertlmFileNameIsAcceptedFromTheDocumentPicker() {
         assertEquals("gemma-4-e4b.litertlm", OnDeviceModelStore.fileName("Downloads/gemma-4-e4b.litertlm"))
         assertEquals("gemma-4-e4b.litertlm", OnDeviceModelStore.fileName("..\\..\\gemma-4-e4b.litertlm"))

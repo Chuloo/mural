@@ -281,7 +281,12 @@ fun TalkScreen(
         val onDeviceBlocked = vm.conversationProvider == ConversationProvider.ON_DEVICE && !vm.onDeviceReadiness.ready
         if (!vm.isRunning && ((vm.conversationProvider == ConversationProvider.PERSONAL_KEY && vm.providerIssue != null) || onDeviceBlocked)) {
             MuralTextButton(onClick = onOpenAdvanced, modifier = Modifier.testTag("talk-open-advanced")) {
-                Text(stringResource(if (onDeviceBlocked) R.string.talk_review_on_device_issue else R.string.talk_review_openai_issue))
+                // A learner mid-download is told that, rather than pointed at a missing model.
+                Text(stringResource(when {
+                    onDeviceBlocked && vm.onDeviceReadiness.download != null -> R.string.talk_on_device_downloading
+                    onDeviceBlocked -> R.string.talk_review_on_device_issue
+                    else -> R.string.talk_review_openai_issue
+                }))
             }
         }
         // An On-Device Model conversation is typed until local voice arrives: reachable from idle.

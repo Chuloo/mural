@@ -36,6 +36,18 @@ class OnDeviceModelStore(initial: String? = null, private val save: (String) -> 
         return true
     }
 
+    /**
+     * Drops a model's metadata to reclaim its storage. Deleting the active model leaves no active
+     * model: the learner picks the next one explicitly, as every provider choice is explicit.
+     */
+    fun delete(name: String): Boolean {
+        if (stored.models.none { it.name == name }) return false
+        stored = stored.copy(models = stored.models.filterNot { it.name == name },
+            active = stored.active?.takeIf { it != name })
+        persist()
+        return true
+    }
+
     private fun persist() = save(json.encodeToString(Stored.serializer(), stored))
 
     companion object {

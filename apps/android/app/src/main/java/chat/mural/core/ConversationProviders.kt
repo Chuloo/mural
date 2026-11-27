@@ -33,10 +33,17 @@ data class HostedReadiness(val accountID: String? = null, val availableMilliseco
     val ready get() = enabled && accountID != null && MinuteBalanceTime.isEligible(availableMilliseconds) && !checking
 }
 
-/** On-Device Model readiness: an imported model file that the Model Runtime has initialized.
- * No key and no minute balance take part; [failure] carries the learner-facing reason. */
+/** One in-flight On-Device Model download: the learner-facing progress of a multi-gigabyte transfer. */
+data class DownloadProgress(val fileName: String, val receivedBytes: Long, val totalBytes: Long) {
+    /** 0f..1f, or -1f while the host has announced no size (a pasted link served in chunks). */
+    val fraction: Float get() = if (totalBytes > 0) (receivedBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else -1f
+}
+
+/** On-Device Model readiness: a model file on this phone that the Model Runtime has initialized.
+ * No key and no minute balance take part; [failure] carries the learner-facing reason and
+ * [download] the in-flight transfer, so a learner mid-download is told why Talk cannot start. */
 data class OnDeviceReadiness(val modelID: String? = null, val initialized: Boolean = false,
-    val preparing: Boolean = false, val failure: String? = null) {
+    val preparing: Boolean = false, val failure: String? = null, val download: DownloadProgress? = null) {
     val ready get() = modelID != null && initialized && !preparing && failure == null
 }
 
