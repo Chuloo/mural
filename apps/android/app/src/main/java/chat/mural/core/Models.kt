@@ -119,7 +119,7 @@ data class TopicBrief(
 data class SessionRecord(
     val id: String = UUID.randomUUID().toString(), val languageID: String = LanguageRegistry.defaultID,
     var providerID: String? = null, var startedAt: Double = nowSeconds(), var endedAt: Double? = null,
-    var themeID: String? = null, var title: String = LanguageRegistry.get(languageID)?.defaultTitle ?: "A conversation",
+    var themeID: String? = null, var title: String = AndroidLanguages.get(languageID)?.defaultTitle ?: "A conversation",
     var fragments: MutableList<Fragment> = mutableListOf(), var assessments: MutableList<Assessment> = mutableListOf(),
     var translations: MutableMap<String,String> = mutableMapOf(), var topics: MutableList<TopicBrief> = mutableListOf(),
     var voiceSeconds: Double = 0.0, var usageFinal: Boolean = false, var inputTokens: Int = 0,
@@ -237,10 +237,10 @@ object ArchiveCodec {
         }
     }
     private fun validate(a: Archive) {
-        if (LanguageRegistry.get(a.preferences.learningLanguageID) == null) throw ArchiveError.UNSUPPORTED_LANGUAGE
+        if (AndroidLanguages.get(a.preferences.learningLanguageID) == null) throw ArchiveError.UNSUPPORTED_LANGUAGE
         if (a.schemaVersion != 2 || a.sessions.size > MAXIMUM_SESSIONS || a.preferences.sessionMinutes !in 1..60 || a.sessions.map { it.id.lowercase() }.toSet().size != a.sessions.size) throw ArchiveError.INVALID
         a.sessions.forEach { s ->
-            if (LanguageRegistry.get(s.languageID) == null) throw ArchiveError.UNSUPPORTED_LANGUAGE
+            if (AndroidLanguages.get(s.languageID) == null) throw ArchiveError.UNSUPPORTED_LANGUAGE
             if (!validUUID(s.id) || !s.voiceSeconds.isFinite() || s.voiceSeconds !in 0.0..31536000.0 || listOf(s.inputTokens,s.outputTokens,s.searchCalls).any { it !in 0..1_000_000_000 } || !validDate(s.startedAt) || s.endedAt?.let { !validDate(it) } == true) throw ArchiveError.INVALID
             if (s.fragments.map { it.id }.toSet().size != s.fragments.size || s.fragments.any { it.startMS < 0 || it.endMS < it.startMS || it.text.length > 50000 || it.revision !in 0..1_000_000 || !validDate(it.receivedAt) }) throw ArchiveError.INVALID
             if (s.assessments.any { !validDate(it.createdAt) } || s.topics.any { !validUUID(it.id) || it.languageID != s.languageID || !validDate(it.retrievedAt) }) throw ArchiveError.INVALID

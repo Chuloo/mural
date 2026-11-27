@@ -138,7 +138,7 @@ class CaptionParityTest {
         }
         // Wait for this fixture's captions, not just an idle frame of the previous language.
         // The Mandarin reading is produced off the Compose test clock.
-        val displayedCaption = text.ifBlank { LanguageRegistry.get(language)!!.greeting }
+        val displayedCaption = text.ifBlank { AndroidLanguages.get(language)!!.greeting }
         compose.waitUntil(10_000) {
             compose.onAllNodes(hasTestTag("target-caption") and hasText(displayedCaption)).fetchSemanticsNodes().size == 1 &&
                 compose.onAllNodes(hasTestTag("meaning-caption") and hasText(meaning)).fetchSemanticsNodes().size == 1
@@ -276,8 +276,9 @@ class CaptionParityTest {
             Triple("pt", "Quero um café.", "café"), Triple("zh", "我想去银行。", "银行"),
             Triple("sr", "Hoću jednu kafu.", "kafu"), Triple("el", "Θα ήθελα έναν καφέ.", "καφέ"),
             Triple("tl", "Gusto ko ng kape.", "kape"),
-            Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"))
-        assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
+            Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"),
+            Triple("pt-PT", "Quero uma bica e um pastel de nata.", "bica"))
+        assertEquals(AndroidLanguages.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
             if (language != "zh") compose.onNodeWithTag("pinyin-toggle").assertDoesNotExist()
@@ -301,8 +302,9 @@ class CaptionParityTest {
             "el" to listOf("Πώς εί", "σαι; Μα", "ΐου."),
             "tl" to listOf("Mag-", "aaral ako araw-", "araw."),
             "nl" to listOf("Ik fiets ", "elke dag naar ", "huis."),
-            "ru" to listOf("Я чита", "ю интересную ", "книгу."))
-        assertEquals(LanguageRegistry.all.map { it.id }.toSet(), samples.keys)
+            "ru" to listOf("Я чита", "ю интересную ", "книгу."),
+            "pt-PT" to listOf("Estou a fa", "zer um passe", "io de elétrico."))
+        assertEquals(AndroidLanguages.all.map { it.id }.toSet(), samples.keys)
         for ((language, parts) in samples) {
             show(language, "", "")
             val gate = CountDownLatch(1); streamGate = gate; response = "Meaning for $language"

@@ -1,6 +1,7 @@
 package chat.mural.network
 
 import chat.mural.core.AccountSession
+import chat.mural.core.AndroidLanguages
 import chat.mural.core.LanguageRegistry
 import chat.mural.core.LearningEngine
 import chat.mural.core.TeachingPolicy
@@ -122,6 +123,15 @@ class HostedAPIClientTest {
             assertEquals(sessionID, result.lease?.sessionID)
             assertFalse(result.toString().contains("v=0")); assertFalse(result.lease.toString().contains(account.accessToken))
         }
+    }
+
+    @Test fun createSendsTheEuropeanPortugueseLocaleOfTheAndroidRegistry() = runBlocking {
+        // The client admits every Android registry locale; hosted admission still needs pt-PT in
+        // `services/api/src/live-provider.ts`, which rejects locales the server does not list.
+        server.enqueue(MockResponse().setBody(created()))
+        api.createLiveSession(create.copy(language = AndroidLanguages.get("pt-PT")!!.locale))
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals(JsonPrimitive("pt-PT"), body["language"])
     }
 
     @Test fun rejectsOversizedInstructionsAndMalformedOrOversizedHistoryBeforeCallingServer() = runBlocking {

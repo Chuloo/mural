@@ -16,7 +16,7 @@ data class LearnerState(val challenge:Int,val observationCount:Int,val nextGoal:
 
 object LearningEngine {
     fun validate(proposal:Assessment, session:SessionRecord):Assessment? {
-        if (LanguageRegistry.get(session.languageID)==null) return null
+        if (AndroidLanguages.get(session.languageID)==null) return null
         val passage=session.passages.firstOrNull { it.id==proposal.passageID && it.speaker==Speaker.user } ?: return null
         if (passage.revisionKey != proposal.revisionKey || proposal.suggestedLevel !in 0..5 || proposal.words.size>12) return null
         val allowed=passage.fragments.map { it.id }.toSet()

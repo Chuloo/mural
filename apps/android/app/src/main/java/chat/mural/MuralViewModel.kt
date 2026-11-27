@@ -170,7 +170,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private var lookupJob: Job? = null
     var topicResult by mutableStateOf<TopicBrief?>(null); private set
     var hasKey by mutableStateOf(false); private set
-    val language get() = LanguageRegistry.get(archive.preferences.learningLanguageID)!!
+    val language get() = AndroidLanguages.get(archive.preferences.learningLanguageID)!!
     val learner get() = LearningEngine.project(archive.sessions, language.id, archive.preferences.hiddenWords)
     val isRunning get() = state in listOf("connecting", "active", "closing")
     val isVoiceSession get() = voiceSession
@@ -249,7 +249,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         retryDelay = HostedHelperRetry::automaticDelay, stream = { request, onText -> translateMeaning(request, onText) }) { request -> translateMeaning(request) }
     private suspend fun translateMeaning(request: MeaningRequest, onText: ((String) -> Unit)? = null): MeaningResult {
         if (archive.preferences.aiConsentVersion != 1) throw IllegalStateException("AI processing consent is required.")
-        val module = LanguageRegistry.get(request.learningLanguageID) ?: throw IllegalStateException("Unsupported language.")
+        val module = AndroidLanguages.get(request.learningLanguageID) ?: throw IllegalStateException("Unsupported language.")
         if (request.sessionID in hostedSessionIDs && request.translationInput.toByteArray(Charsets.UTF_8).size > 24_576) throw MeaningInputLimitException()
         val result = teaching(request.sessionID, HelperPurpose.MEANING, request.cacheKey,
             TeachingPolicy.translation(module, request.meaningLanguage), request.translationInput, onText = onText)
@@ -687,7 +687,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun updatePreferences(preferences: Preferences) {
         if (isRunning || !storageReady) return
-        if (LanguageRegistry.get(preferences.learningLanguageID) == null || preferences.meaningLanguage !in MeaningLanguages.all || preferences.sessionMinutes !in 1..60) return
+        if (AndroidLanguages.get(preferences.learningLanguageID) == null || preferences.meaningLanguage !in MeaningLanguages.all || preferences.sessionMinutes !in 1..60) return
         val languageChanged = preferences.learningLanguageID != language.id
         actionJob?.cancel(); clearLookup(); working = false
         if (preferences.aiConsentVersion != 1) {
@@ -700,7 +700,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         persist(); scheduleTranslation(); recoverFinalAssessments(); refreshHostedReadiness()
     }
     fun selectLanguage(id: String) {
-        if (!isRunning && LanguageRegistry.get(id) != null) updatePreferences(archive.preferences.copy(learningLanguageID = id))
+        if (!isRunning && AndroidLanguages.get(id) != null) updatePreferences(archive.preferences.copy(learningLanguageID = id))
     }
     private var startingWithHistory = false
     fun chooseTheme(theme: ConversationTheme?) {
@@ -1018,7 +1018,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private suspend fun requestAssessment(snapshot: SessionRecord, passage: Passage): FinalAssessmentResult {
         if (archive.preferences.aiConsentVersion != 1) throw IllegalStateException("AI processing consent is required.")
-        val module = LanguageRegistry.get(snapshot.languageID) ?: throw IllegalStateException("Unsupported language.")
+        val module = AndroidLanguages.get(snapshot.languageID) ?: throw IllegalStateException("Unsupported language.")
         val result = teaching(snapshot.id, HelperPurpose.ASSESSMENT, passage.revisionKey,
             TeachingPolicy.assessment(module), helperContext(snapshot, passage), assessmentSchema(module.id))
         val decoded = json.decodeFromString<AssessmentResponse>(result.text)

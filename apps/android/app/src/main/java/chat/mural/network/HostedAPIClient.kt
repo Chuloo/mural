@@ -3,8 +3,8 @@ package chat.mural.network
 import android.content.Context
 import chat.mural.BuildConfig
 import chat.mural.core.AccountSession
+import chat.mural.core.AndroidLanguages
 import chat.mural.core.SourceLink
-import chat.mural.core.LanguageRegistry
 import java.io.IOException
 import java.time.Instant
 import java.util.UUID
@@ -327,7 +327,7 @@ class HostedAPIClient internal constructor(
 
     private fun validateCreate(value: LiveSessionRequest) {
         if ((value.requestedMilliseconds != null && value.requestedMilliseconds !in 60_000L..3_600_000L) ||
-            !UUID_PATTERN.matches(value.requestID) || LanguageRegistry.all.none { it.locale == value.language } ||
+            !UUID_PATTERN.matches(value.requestID) || AndroidLanguages.all.none { it.locale == value.language } ||
             !value.sdp.startsWith("v=0") || value.sdp.utf8Size() > 65_536 || !validText(value.instructions, 12_000) ||
             value.history.size > 40 || value.history.toString().utf8Size() > 6_000) throw HostedFailure.InvalidRequest
         for (entry in value.history) {

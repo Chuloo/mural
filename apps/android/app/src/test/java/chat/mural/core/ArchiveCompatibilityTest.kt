@@ -77,7 +77,7 @@ class ArchiveCompatibilityTest {
     }
     @Test fun culturalOverridesArePreservedForAllLanguages() {
         assertEquals("Un café", LanguageRegistry.get("es")!!.themes.first { it.id == "coffee" }.title)
-        assertTrue(LanguageRegistry.all.all { it.themes.size == 24 && it.themeOverrides.isNotEmpty() && it.teachingFocus.size == 6 })
+        assertTrue(AndroidLanguages.all.all { it.themes.size == 24 && it.themeOverrides.isNotEmpty() && it.teachingFocus.size == 6 })
         assertTrue(LanguageRegistry.get("es")!!.speechGuidance.contains("vosotros"))
     }
 }

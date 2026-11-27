@@ -63,7 +63,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogWindowProvider
 import chat.mural.MuralViewModel
 import chat.mural.R
-import chat.mural.core.LanguageRegistry
+import chat.mural.core.AndroidLanguages
 import chat.mural.core.MeaningLanguages
 import chat.mural.core.MinuteBalanceTime
 import chat.mural.core.Passage
@@ -160,7 +160,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         SettingsGroup(stringResource(R.string.settings_your_learning),
                             stringResource(if (vm.isRunning) R.string.settings_language_running_footer else R.string.settings_language_footer)) {
                             SettingsChoiceRow(stringResource(R.string.settings_learning_language), vm.language.settingsTitle, vm.language.id,
-                                LanguageRegistry.all.map { it.id to it.settingsTitle }, "settings-learning-language", !vm.isRunning, vm::selectLanguage)
+                                AndroidLanguages.all.map { it.id to it.settingsTitle }, "settings-learning-language", !vm.isRunning, vm::selectLanguage)
                             SettingsDivider()
                             SettingsMeaningSwitch(prefs.meaningVisible, vm::toggleMeaning)
                             SettingsDivider()
@@ -434,7 +434,7 @@ private fun SettingsHistorySheet(vm: MuralViewModel, onDismiss: () -> Unit, onSe
                     SettingsGroup {
                         Column(Modifier.fillMaxWidth().clickable { onSelect(session) }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(session.title, style = MaterialTheme.typography.titleMedium)
-                            Text("${LanguageRegistry.get(session.languageID)?.name ?: session.languageID} · ${formatDate(session.startedAt)}",
+                            Text("${AndroidLanguages.get(session.languageID)?.name ?: session.languageID} · ${formatDate(session.startedAt)}",
                                 color = MuralColors.Secondary, style = MaterialTheme.typography.bodySmall)
                         }
                         SettingsDivider()
