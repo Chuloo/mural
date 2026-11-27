@@ -165,6 +165,23 @@ class AICoreModelRuntimeTest {
         assertEquals(1_024, client.requests.single().maxOutputTokens)
     }
 
+    @Test fun aVoiceTurnIsRefusedBecauseAICoreHasNoNativeAudioInput() = runTest {
+        val client = FakeAICoreClient()
+        client.reply("¡Hola!")
+        val runtime = runtime(client)
+        // The runtime reports no audio input, so OnDeviceReadiness refuses voice Talk honestly.
+        assertFalse(runtime.supportsAudioInput(systemModel))
+        val session = runtime.load(systemModel)
+        try {
+            session.respond(GenerationRequest("Hola", audioWavBytes = ByteArray(4)))
+            fail("AICore accepted the learner's speech as audio")
+        } catch (_: ModelRuntimeException) { }
+        // Refused before the system service is asked at all; a typed turn still works.
+        assertTrue(client.requests.isEmpty())
+        assertEquals("¡Hola!", session.respond(GenerationRequest("Hola")))
+        assertEquals(1, client.requests.size)
+    }
+
     @Test fun closingTheSessionReleasesTheSystemModelClient() = runTest {
         val client = FakeAICoreClient()
         val session = runtime(client).load(systemModel)

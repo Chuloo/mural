@@ -12,10 +12,11 @@ class ScriptedReply(vararg tokenParts: String, val failure: String? = null, val 
 
 /**
  * A Model Runtime fake for JVM tests: it pops one [ScriptedReply] per respond() call,
- * in order, and records every request together with the session's system prompt so
- * provider tests can assert exactly what a Helper sent.
+ * in order, and records every request — the system prompt, the prompt, the JSON Schema and the
+ * learner's audio clip alike — so provider tests can assert exactly what a Helper or a voice
+ * conversation sent.
  */
-class ScriptedModelRuntime(vararg replies: ScriptedReply) : ModelRuntime {
+class ScriptedModelRuntime(vararg replies: ScriptedReply, val audioInput: Boolean = true) : ModelRuntime {
     private val remaining = ArrayDeque(replies.toList())
     val requests = mutableListOf<RecordedRequest>()
     var closed = false
@@ -24,6 +25,8 @@ class ScriptedModelRuntime(vararg replies: ScriptedReply) : ModelRuntime {
 
     override suspend fun load(modelPath: String, options: RuntimeOptions): RuntimeSession =
         ScriptedSession(modelPath, options)
+
+    override suspend fun supportsAudioInput(modelPath: String): Boolean = audioInput
 
     inner class ScriptedSession(val modelPath: String, val options: RuntimeOptions) : RuntimeSession {
         var systemPrompt: String? = null

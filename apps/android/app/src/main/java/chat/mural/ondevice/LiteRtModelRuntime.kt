@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.ResponseFormat
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,10 @@ class LiteRtModelRuntime : ModelRuntime {
                     EngineConfig(
                         modelPath = modelPath,
                         backend = Backend.GPU(),
+                        // Without an audio backend the engine never initializes its audio executor,
+                        // so a clip handed to it would fail. Audio runs on the CPU, as in the
+                        // reference app; a model that cannot hear audio pays nothing for it.
+                        audioBackend = if (options.enableAudioInput || hearsAudio(modelPath)) Backend.CPU() else null,
                         maxNumTokens = options.maxTokens,
                         cacheDir = options.cacheDir,
                     )
@@ -47,6 +52,14 @@ class LiteRtModelRuntime : ModelRuntime {
                 throw ModelRuntimeException("LiteRT-LM could not load the model: ${e.message}", e)
             }
         }
+
+    /** The model file is the authority on its own input modalities; a probe that fails says no. */
+    override suspend fun supportsAudioInput(modelPath: String): Boolean =
+        withContext(Dispatchers.IO) { hearsAudio(modelPath) }
+
+    private fun hearsAudio(modelPath: String): Boolean = runCatching {
+        ModelInfo.from(modelPath).use { it.inputModalities().audio }
+    }.getOrDefault(false)
 }
 
 private class LiteRtSession(private val engine: Engine, private val options: RuntimeOptions) :
@@ -78,31 +91,42 @@ private class LiteRtSession(private val engine: Engine, private val options: Run
             val reply = StringBuilder()
             // Cancel native generation when the caller's coroutine is cancelled.
             continuation.invokeOnCancellation { runCatching { conversation.cancelProcess() } }
+            val callback = object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    val text = message.toString()
+                    if (text.isNotEmpty()) {
+                        reply.append(text)
+                        onPartial(text)
+                    }
+                }
+
+                override fun onDone() {
+                    continuation.resume(reply.toString())
+                }
+
+                override fun onError(throwable: Throwable) {
+                    continuation.resumeWithException(
+                        ModelRuntimeException("Generation failed: ${throwable.message}", throwable)
+                    )
+                }
+            }
             try {
-                conversation.sendMessageAsync(
-                    request.prompt,
-                    object : MessageCallback {
-                        override fun onMessage(message: Message) {
-                            val text = message.toString()
-                            if (text.isNotEmpty()) {
-                                reply.append(text)
-                                onPartial(text)
-                            }
-                        }
-
-                        override fun onDone() {
-                            continuation.resume(reply.toString())
-                        }
-
-                        override fun onError(throwable: Throwable) {
-                            continuation.resumeWithException(
-                                ModelRuntimeException("Generation failed: ${throwable.message}", throwable)
-                            )
-                        }
-                    },
-                    maxOutputToken = request.maxOutputTokens,
-                    responseFormat = request.jsonSchema?.let { ResponseFormat.json(it) },
-                )
+                val audio = request.audioWavBytes
+                val maxOutputToken = request.maxOutputTokens
+                val responseFormat = request.jsonSchema?.let { ResponseFormat.json(it) }
+                if (audio == null) {
+                    conversation.sendMessageAsync(request.prompt, callback, maxOutputToken = maxOutputToken,
+                        responseFormat = responseFormat)
+                } else {
+                    // The clip comes before the text: the engine's autoregressive token sequencing
+                    // expects audio first, as in the reference app.
+                    conversation.sendMessageAsync(
+                        Contents.of(listOfNotNull(
+                            Content.AudioBytes(audio),
+                            request.prompt.takeIf { it.isNotEmpty() }?.let { Content.Text(it) },
+                        )),
+                        callback, maxOutputToken = maxOutputToken, responseFormat = responseFormat)
+                }
             } catch (e: Exception) {
                 continuation.resumeWithException(
                     ModelRuntimeException("LiteRT-LM rejected the request: ${e.message}", e)

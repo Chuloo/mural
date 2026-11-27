@@ -10,9 +10,8 @@ import org.junit.Test
 /** The Helpers of an On-Device Model session, observed through the existing TeachingClient seam. */
 class OnDeviceTeachingClientTest {
     private val spanish = AndroidLanguages.get("es")!!
-    private val model = "models/gemma-4-e4b.litertlm"
     private fun helpers(runtime: ModelRuntime) =
-        OnDeviceTeachingClient({ runtime.load(model) }) { spanish.lookupUnavailableReply }
+        OnDeviceTeachingClient(scriptedTurn(runtime)) { spanish.lookupUnavailableReply }
 
     /** The zero-download AICore Model Runtime, over one fake backend. */
     private fun aicore(client: FakeAICoreClient) = AICoreModelRuntime(sdkInt = 35) { client }

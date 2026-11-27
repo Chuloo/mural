@@ -25,4 +25,12 @@ class ConversationContinuationPolicyTest {
         assertTrue(ConversationContinuationPolicy.reachedFreeBoundary(true, "Time limit", true))
         assertTrue(ConversationContinuationPolicy.reachedFreeBoundary(true, "Reserved conversation time ended", true))
     }
+
+    @Test fun aTimedOnDeviceConversationEndsOnTheSameLimitAndOffersTheSameChoice() {
+        assertTrue(ConversationContinuationPolicy.reachedOnDeviceTimeLimit(true, "Time limit"))
+        listOf("Inactivity", "Ended by you", "App moved to background", "Reserved conversation time ended", null)
+            .forEach { assertFalse(ConversationContinuationPolicy.reachedOnDeviceTimeLimit(true, it)) }
+        // A cloud conversation keeps its own funding-boundary continuation, never this one.
+        assertFalse(ConversationContinuationPolicy.reachedOnDeviceTimeLimit(false, "Time limit"))
+    }
 }

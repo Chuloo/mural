@@ -5,6 +5,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -39,6 +40,17 @@ class ScriptedModelRuntimeTest {
         assertEquals("You are Mural.", runtime.requests[0].systemPrompt)
         assertEquals("one", runtime.requests[0].request.prompt)
         assertEquals("two", runtime.requests[1].request.prompt)
+    }
+
+    @Test
+    fun `records the learner audio clip and reports whether the model hears audio`() = runTest {
+        val hearing = ScriptedModelRuntime(ScriptedReply("¡Hola!"))
+        val clip = WavAudio.wrapPcm16Mono(ByteArray(640))
+        hearing.load("/fake/model.litertlm").respond(GenerationRequest("", audioWavBytes = clip))
+        assertEquals(clip, hearing.requests.single().request.audioWavBytes)
+        assertTrue(hearing.supportsAudioInput("/fake/model.litertlm"))
+        // AICore has no audio input, and a voice conversation must be refused honestly for it.
+        assertFalse(ScriptedModelRuntime(audioInput = false).supportsAudioInput("/fake/model.litertlm"))
     }
 
     @Test

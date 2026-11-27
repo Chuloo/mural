@@ -59,6 +59,8 @@ class OnDeviceModelCatalogueTest {
         assertNull(system.downloadURL)
         assertEquals(0L, system.sizeBytes)
         assertEquals(0, system.minDeviceMemoryGb)
+        // No native audio input: voice Talk is refused on the system model instead of pretending.
+        assertFalse(system.supportsAudioInput)
         assertFalse(system.recommended)
         assertNotEquals(0, system.title)
         assertNotEquals(0, system.description)

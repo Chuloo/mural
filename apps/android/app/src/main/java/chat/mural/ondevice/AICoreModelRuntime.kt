@@ -130,6 +130,9 @@ private class AICoreSession(private val client: AICoreClient) : RuntimeSession {
         // AICore has no constrained decoding: the assessment Helper's unconstrained retry answers.
         if (request.jsonSchema != null)
             throw ModelRuntimeException("AICore cannot constrain a reply to a JSON Schema.")
+        // AICore takes no native audio input: a voice turn is refused, never silently transcribed.
+        if (request.audioWavBytes != null)
+            throw ModelRuntimeException("AICore cannot hear the learner's speech as native audio input.")
         val reply = StringBuilder()
         try {
             client.generateContentStream(prompt(request.prompt), systemPrompt,
