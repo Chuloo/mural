@@ -58,6 +58,11 @@ object ConversationProviderPolicy {
     /** Only Mural Minutes move a minute balance. An On-Device Model conversation costs nothing. */
     fun consumesMinutes(choice: ConversationProvider) = choice == ConversationProvider.HOSTED_MINUTES
 
+    /** Assessment evidence keeps Session Provenance inside the unchanged `Assessment.context`: an
+     * On-Device Model judgment stays distinguishable from a cloud one, in records and in backups. */
+    fun assessmentContext(onDevice: Boolean, themeID: String?) =
+        if (onDevice) "$ON_DEVICE_PROVIDER_ID:${themeID ?: "free"}" else themeID ?: "free"
+
     fun canStart(choice: ConversationProvider, hasKey: Boolean, hosted: HostedReadiness, onDevice: OnDeviceReadiness): Boolean =
         when (choice) {
             ConversationProvider.PERSONAL_KEY -> hasKey

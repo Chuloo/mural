@@ -46,4 +46,5 @@
     <string name="settings_on_device_model_gemma_4_e2b_description">Más ligero y más rápido que Gemma 4 E4B, y escucha tu voz. Necesita un teléfono con 8 GB de memoria.</string>
     <string name="settings_on_device_model_qwen2_5_1_5b">Qwen2.5 1.5B</string>
     <string name="settings_on_device_model_qwen2_5_1_5b_description">El modelo seleccionado más pequeño. Solo conversaciones escritas: no puede escuchar tu voz. Necesita un teléfono con 6 GB de memoria.</string>
+    <string name="error_topic_offline">Encontrar un tema actual con fuentes necesita internet. Tu conversación en el dispositivo sigue sin conexión: elige otro tema o inténtalo de nuevo con conexión.</string>
 </resources>
