@@ -111,7 +111,7 @@ class AccountControllerTest {
         val gift = account.state.value.minutes!!.availableMilliseconds
         assertEquals(521_234, gift) // The member's authoritative balance, never guest time.
         val readiness = HostedReadiness(id, gift, guest.memberMaySpend(id))
-        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, false, readiness))
+        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, false, readiness, OnDeviceReadiness()))
         assertEquals(1, deferredCalls); assertEquals(guestSession, installation.session)
         account.signOut()
         assertNull(store.value); assertEquals(id, guest.expectedMemberID()); assertTrue(installation.serverDeferred)

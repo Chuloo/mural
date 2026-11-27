@@ -1,0 +1,15 @@
+<resources>
+    <string name="settings_on_device_model">Modelo en el dispositivo</string>
+    <string name="settings_on_device_note">Las conversaciones se ejecutan en este teléfono. No se usan minutos de Mural ni se necesita clave de API.</string>
+    <string name="settings_on_device_active_model">Modelo activo</string>
+    <string name="settings_on_device_none">Ningún modelo importado</string>
+    <string name="settings_on_device_preparing">Preparando tu modelo…</string>
+    <string name="settings_on_device_import">Importar un archivo de modelo</string>
+    <string name="settings_switch_on_device_title">¿Usar un modelo en el dispositivo?</string>
+    <string name="settings_switch_on_device_note">Tu clave de API y tus minutos de Mural siguen como están. Importa un archivo de modelo .litertlm para conversar en este teléfono.</string>
+    <string name="talk_review_on_device_issue">Revisa tu modelo en el dispositivo en Avanzado</string>
+    <string name="notice_on_device_voice_pending">Las conversaciones de voz en tu teléfono llegarán pronto. Escribe tu parte por ahora.</string>
+    <string name="error_on_device_model_needed">Importa un modelo en el dispositivo en Ajustes para conversar en este teléfono.</string>
+    <string name="error_on_device_import_failed">No se pudo importar ese archivo de modelo.</string>
+    <string name="error_on_device_model_failed">El modelo en el dispositivo no pudo iniciarse. Inténtalo de nuevo en Ajustes, en Avanzado.</string>
+</resources>

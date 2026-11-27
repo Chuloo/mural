@@ -278,12 +278,15 @@ fun TalkScreen(
                 stringResource(if (vm.isRunning) R.string.talk_end_label else R.string.talk_transcript_label),
                 enabled = vm.session != null, onClick = { if (vm.isRunning) vm.end() else transcript = vm.session })
         }
-        if (vm.conversationProvider == ConversationProvider.PERSONAL_KEY && vm.providerIssue != null && !vm.isRunning) {
+        val onDeviceBlocked = vm.conversationProvider == ConversationProvider.ON_DEVICE && !vm.onDeviceReadiness.ready
+        if (!vm.isRunning && ((vm.conversationProvider == ConversationProvider.PERSONAL_KEY && vm.providerIssue != null) || onDeviceBlocked)) {
             MuralTextButton(onClick = onOpenAdvanced, modifier = Modifier.testTag("talk-open-advanced")) {
-                Text(stringResource(R.string.talk_review_openai_issue))
+                Text(stringResource(if (onDeviceBlocked) R.string.talk_review_on_device_issue else R.string.talk_review_openai_issue))
             }
         }
-        if (vm.state == "active" || microphoneMessage != null) {
+        // An On-Device Model conversation is typed until local voice arrives: reachable from idle.
+        if (vm.state == "active" || microphoneMessage != null ||
+            vm.conversationProvider == ConversationProvider.ON_DEVICE) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 MuralTextButton(onClick = { typing = true }, enabled = !busy && !vm.working) {
                     MuralIcon(MuralSymbol.Keyboard, Modifier.size(15.dp)); Spacer(Modifier.width(6.dp))

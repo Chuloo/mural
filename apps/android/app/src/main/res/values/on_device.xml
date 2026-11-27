@@ -1,0 +1,15 @@
+<resources>
+    <string name="settings_on_device_model">On-device model</string>
+    <string name="settings_on_device_note">Conversations run on this phone. No Mural minutes are used and no API key is needed.</string>
+    <string name="settings_on_device_active_model">Active model</string>
+    <string name="settings_on_device_none">No model imported</string>
+    <string name="settings_on_device_preparing">Preparing your model…</string>
+    <string name="settings_on_device_import">Import a model file</string>
+    <string name="settings_switch_on_device_title">Use an on-device model?</string>
+    <string name="settings_switch_on_device_note">Your API key and your Mural minutes stay as they are. Import a .litertlm model file to converse on this phone.</string>
+    <string name="talk_review_on_device_issue">Review your on-device model in Advanced</string>
+    <string name="notice_on_device_voice_pending">Voice conversations on your phone are coming soon. Type your side for now.</string>
+    <string name="error_on_device_model_needed">Import an on-device model in Settings to converse on this phone.</string>
+    <string name="error_on_device_import_failed">That model file could not be imported.</string>
+    <string name="error_on_device_model_failed">The on-device model could not start. Try again in Settings, under Advanced.</string>
+</resources>

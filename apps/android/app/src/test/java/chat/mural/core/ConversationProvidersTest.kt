@@ -55,12 +55,58 @@ class ConversationProvidersTest {
 
     @Test fun selectionNeverFallsBackBetweenPersonalKeyAndHosted() {
         val ready = HostedReadiness("owner", 1, true)
-        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.PERSONAL_KEY, true, HostedReadiness()))
-        assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.PERSONAL_KEY, false, ready))
-        assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, true, HostedReadiness()))
-        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, false, ready))
+        val onDevice = OnDeviceReadiness("gemma-4-e4b.litertlm", initialized = true)
+        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.PERSONAL_KEY, true, HostedReadiness(), onDevice))
+        assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.PERSONAL_KEY, false, ready, onDevice))
+        assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, true, HostedReadiness(), onDevice))
+        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, false, ready, onDevice))
         for (invalid in listOf(ready.copy(accountID = null), ready.copy(availableMilliseconds = 0), ready.copy(enabled = false), ready.copy(checking = true)))
-            assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, true, invalid))
+            assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, true, invalid, onDevice))
+    }
+
+    @Test fun onDeviceModelStartsOnlyWithAnImportedInitializedModel() {
+        val imported = "gemma-4-e4b.litertlm"
+        val ready = OnDeviceReadiness(imported, initialized = true)
+        val funded = HostedReadiness("owner", 60_000, true)
+        assertTrue(ConversationProviderPolicy.canStart(ConversationProvider.ON_DEVICE, false, HostedReadiness(), ready))
+        // No key and no minute balance can start an On-Device Model conversation, and an
+        // unavailable On-Device Model never authorizes another Conversation Provider.
+        for (unready in listOf(OnDeviceReadiness(), OnDeviceReadiness(imported), ready.copy(preparing = true),
+                OnDeviceReadiness(imported, initialized = true, failure = "The model could not start.")))
+            assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.ON_DEVICE, true, funded, unready))
+        assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.PERSONAL_KEY, false, funded, ready))
+        assertFalse(ConversationProviderPolicy.canStart(ConversationProvider.HOSTED_MINUTES, true, HostedReadiness(), ready))
+    }
+
+    @Test fun onDeviceModelSessionsNeverConsumeOrRequireMuralMinutes() {
+        assertTrue(ConversationProviderPolicy.consumesMinutes(ConversationProvider.HOSTED_MINUTES))
+        assertFalse(ConversationProviderPolicy.consumesMinutes(ConversationProvider.ON_DEVICE))
+        assertFalse(ConversationProviderPolicy.consumesMinutes(ConversationProvider.PERSONAL_KEY))
+    }
+
+    @Test fun onDeviceProvenanceExcludesPersonalKeyAssessmentRecovery() {
+        val record = SessionRecord(languageID = "es", title = "test", providerID = ON_DEVICE_PROVIDER_ID, endedAt = nowSeconds())
+        record.usageFinal = true
+        record.append(Fragment(speaker = Speaker.user, text = "Buenos días", startMS = 0, endMS = 100))
+        val ticket = FinalAssessmentRecovery.enqueue(record, emptyList()).single()
+        val onDevice = setOf(record.id)
+        assertTrue(ConversationProviderPolicy.recoveryTickets(listOf(ticket), emptySet(), onDevice).isEmpty())
+        assertTrue(ConversationProviderPolicy.enqueueRecovery(record, listOf(ticket), emptySet(), onDevice).isEmpty())
+        record.correctFragment(record.fragments.single().id, "Buenas tardes")
+        assertTrue(ConversationProviderPolicy.enqueueRecovery(record, emptyList(), emptySet(), onDevice).isEmpty())
+        assertEquals(1, ConversationProviderPolicy.enqueueRecovery(record, emptyList(), emptySet(), emptySet()).size)
+    }
+
+    @Test fun onDeviceSessionsKeepTheExistingJsonBackupFormat() {
+        val onDevice = SessionRecord(languageID = "es", title = "test", providerID = ON_DEVICE_PROVIDER_ID, endedAt = nowSeconds())
+        onDevice.usageFinal = true
+        fun keys(record: SessionRecord) = Json.parseToJsonElement(
+            ArchiveCodec.encode(Archive(sessions = mutableListOf(record)))).jsonObject["sessions"]!!.jsonArray.single().jsonObject.keys
+        // Session Provenance rides the existing optional providerID: no archive field is added.
+        assertEquals(keys(SessionRecord(languageID = "es", title = "test", providerID = "hosted-session", endedAt = nowSeconds())), keys(onDevice))
+        val restored = ArchiveCodec.decode(ArchiveCodec.encode(Archive(sessions = mutableListOf(onDevice))))
+        assertEquals(ON_DEVICE_PROVIDER_ID, restored.sessions.single().providerID)
+        assertTrue(restored.sessions.single().usageFinal)
     }
 
     @Test fun acknowledgedGuestRecoveryDetachesOnlyThatOwnersLeasesAndCannotReuseThemForMember() = runTest {
@@ -197,11 +243,11 @@ class ConversationProvidersTest {
         record.append(Fragment(speaker = Speaker.user, text = "Buenos días", startMS = 0, endMS = 100))
         val ticket = FinalAssessmentRecovery.enqueue(record, emptyList()).single()
         val hosted = setOf(record.id)
-        assertTrue(ConversationProviderPolicy.recoveryTickets(listOf(ticket), hosted).isEmpty())
-        assertTrue(ConversationProviderPolicy.enqueueRecovery(record, listOf(ticket), hosted).isEmpty())
+        assertTrue(ConversationProviderPolicy.recoveryTickets(listOf(ticket), hosted, emptySet()).isEmpty())
+        assertTrue(ConversationProviderPolicy.enqueueRecovery(record, listOf(ticket), hosted, emptySet()).isEmpty())
         record.correctFragment(record.fragments.single().id, "Buenas tardes")
-        assertTrue(ConversationProviderPolicy.enqueueRecovery(record, emptyList(), hosted).isEmpty())
-        assertEquals(1, ConversationProviderPolicy.enqueueRecovery(record, emptyList(), emptySet()).size)
+        assertTrue(ConversationProviderPolicy.enqueueRecovery(record, emptyList(), hosted, emptySet()).isEmpty())
+        assertEquals(1, ConversationProviderPolicy.enqueueRecovery(record, emptyList(), emptySet(), emptySet()).size)
     }
 
     @Test fun reservedDeadlineEndsLocallyAndDeletingHistoryDiscardsHelperAccess() = runTest {

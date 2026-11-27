@@ -117,6 +117,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // A model file has no registered MIME type; the .litertlm name check refuses anything else.
+            val modelLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) vm.importOnDeviceModel(uri)
+            }
+
             MuralStartup(loading = vm.loadingHistory) {
             MuralApp(
                 vm = vm,
@@ -133,6 +138,7 @@ class MainActivity : ComponentActivity() {
                 onOpenAppSettings = if (microphonePermanentlyDenied) ({ openAppSettings() }) else null,
                 onExport = { exportLauncher.launch("Mural-learning-backup.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
+                onImportModel = { modelLauncher.launch(arrayOf("*/*")) },
                 account = account,
                 onGoogleSignIn = ::signInWithGoogle,
                 onSignOut = { changeAccount(delete = false) },

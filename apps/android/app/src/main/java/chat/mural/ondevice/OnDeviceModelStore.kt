@@ -1,0 +1,56 @@
+package chat.mural.ondevice
+
+import chat.mural.core.nowSeconds
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+/** One imported On-Device Model file, copied into app storage that device backups skip. */
+@Serializable
+data class OnDeviceModel(val name: String, val sizeBytes: Long, val importedAt: Double = nowSeconds())
+
+/**
+ * Imported On-Device Model metadata plus the one active model, persisted as JSON beside the
+ * learning records: a model choice is this phone's state and never exported learning content.
+ */
+class OnDeviceModelStore(initial: String? = null, private val save: (String) -> Unit = {}) {
+    @Serializable private data class Stored(val models: List<OnDeviceModel> = emptyList(), val active: String? = null)
+
+    private var stored = runCatching { json.decodeFromString<Stored>(initial.orEmpty()) }.getOrNull() ?: Stored()
+
+    val models get() = stored.models
+    fun active() = stored.models.firstOrNull { it.name == stored.active }
+
+    /** A newly imported model becomes the active one; re-importing a name replaces its metadata. */
+    fun import(displayName: String?, sizeBytes: Long): OnDeviceModel {
+        val model = OnDeviceModel(fileName(displayName), sizeBytes)
+        stored = stored.copy(models = stored.models.filterNot { it.name == model.name } + model, active = model.name)
+        persist()
+        return model
+    }
+
+    /** Only an already imported model can become active; an unknown name changes nothing. */
+    fun select(name: String): Boolean {
+        if (stored.models.none { it.name == name }) return false
+        stored = stored.copy(active = name)
+        persist()
+        return true
+    }
+
+    private fun persist() = save(json.encodeToString(Stored.serializer(), stored))
+
+    companion object {
+        private const val EXTENSION = ".litertlm"
+        private const val MAXIMUM_NAME_LENGTH = 104
+        private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+        /** A document-picker name is untrusted: one safe file name for the models directory, or a refusal. */
+        fun fileName(displayName: String?): String {
+            val name = displayName.orEmpty().substringAfterLast('/').substringAfterLast('\\')
+                .filter { it >= ' ' && it != '\u007f' }.trim()
+            if (!name.endsWith(EXTENSION, ignoreCase = true) || name.length <= EXTENSION.length)
+                throw ModelRuntimeException("Not a $EXTENSION model file: ${displayName.orEmpty().take(80)}")
+            return if (name.length <= MAXIMUM_NAME_LENGTH) name
+            else name.take(MAXIMUM_NAME_LENGTH - EXTENSION.length) + EXTENSION
+        }
+    }
+}
