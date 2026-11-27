@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] A Model Runtime interface exists covering initialize, streaming generation with partial-token/completion/error callbacks, schema-constrained generation requests, mid-stream cancellation, and cleanup
 - [ ] A scripted fake implements the interface for JVM tests; the LiteRT-LM adapter implements it against the real engine
@@ -16,3 +16,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman (in-session run). Worktree `../mural-worktrees/01-model-runtime-seam`, branch `ticket/01-model-runtime-seam`, base `origin/main` @ 607c3bb.
+- 2026-11-27: Done. Ticket branch `04f077f`, merged into `feature/on-device-model` as `dda0f36`. ModelRuntime interface + LiteRT-LM 0.18.1 adapter + ScriptedModelRuntime fake; Kotlin bumped 2.1.20 → 2.2.21 with the Gallery-proven metadata flag. Offline checks green (testDebugUnitTest, lintDebug, assembleDebug) before and after merge. Device smoke check NOT run — no phone/model file attached; owed to ticket 13's live verification. Checks ran in Docker (mural-android-sdk-amd64, Rosetta) since the host has no JDK/SDK.
