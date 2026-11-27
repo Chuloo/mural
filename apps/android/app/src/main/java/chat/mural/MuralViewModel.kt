@@ -231,8 +231,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
     private val onDeviceTeaching = OnDeviceTeachingClient({ onDeviceModels.requireSession() }) { language.lookupUnavailableReply }
     private var onDeviceSessionIDs = emptySet<String>()
-    /** Switches the active On-Device Model; only an imported model can be selected. */
+    /** Switches the active On-Device Model: an imported file, or the zero-download system model. */
     fun selectOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.select(name) }
+    /** Whether this phone offers the zero-download system model: the AICore device probe. */
+    var onDeviceSystemModelAvailable by mutableStateOf(false); private set
+    /** Probed when the model picker opens, so an unsupported phone never sees the row at all. */
+    fun probeOnDeviceSystemModel() {
+        viewModelScope.launch { onDeviceSystemModelAvailable = onDeviceModels.systemModelAvailable() }
+    }
     /** The warnings for a catalogue download, decided before its multi-gigabyte transfer starts. */
     fun onDeviceDownloadPlan(model: CataloguedModel) = onDeviceModels.plan(model)
     /** Downloads a curated model; a refusal or an interruption arrives as a readiness failure. */

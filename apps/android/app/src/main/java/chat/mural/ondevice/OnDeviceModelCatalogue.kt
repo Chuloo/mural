@@ -48,11 +48,22 @@ object OnDeviceModelCatalogue {
         "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm", 1_597_922_856L,
         supportsAudioInput = false, minDeviceMemoryGb = 6)
 
+    /**
+     * The zero-download system model: Gemini Nano, served by the AICore Model Runtime. It has no
+     * file, no size and no delete button — the system service manages it — and the picker offers it
+     * only on a phone whose device probe reports AICore available (Android 13 / API 33 and up).
+     */
+    val GEMINI_NANO_AICORE = CataloguedModel("aicore-gemini-nano", R.string.settings_on_device_model_gemini_nano,
+        R.string.settings_on_device_model_gemini_nano_description, ModelRuntimeKind.AICORE)
+
     /** The conversation models, best quality first. One of them is the active model globally. */
     val conversation: List<CataloguedModel> = listOf(GEMMA_4_E4B, GEMMA_4_E2B, QWEN2_5_1_5B)
 
+    private val all: List<CataloguedModel> = conversation + GEMINI_NANO_AICORE
+
     fun recommended(): CataloguedModel = conversation.first { it.recommended }
-    fun byID(id: String?): CataloguedModel? = conversation.firstOrNull { it.id == id }
+    /** A catalogue id, whether it downloads a file or is the zero-download system model. */
+    fun byID(id: String?): CataloguedModel? = all.firstOrNull { it.id == id }
 
     private fun litertLM(id: String, @StringRes title: Int, @StringRes description: Int, repositoryID: String,
         commitHash: String, fileName: String, sizeBytes: Long, supportsAudioInput: Boolean,

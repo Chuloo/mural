@@ -50,6 +50,28 @@ class OnDeviceModelCatalogueTest {
             "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm?download=true", qwen.downloadURL)
     }
 
+    @Test fun theZeroDownloadSystemModelIsCataloguedBesideTheDownloadableOnes() {
+        val system = OnDeviceModelCatalogue.GEMINI_NANO_AICORE
+        assertEquals("aicore-gemini-nano", system.id)
+        assertEquals(ModelRuntimeKind.AICORE, system.runtime)
+        // System-managed: no file to fetch, no size to announce, and nothing for Mural to delete.
+        assertNull(system.fileName)
+        assertNull(system.downloadURL)
+        assertEquals(0L, system.sizeBytes)
+        assertEquals(0, system.minDeviceMemoryGb)
+        assertFalse(system.recommended)
+        assertNotEquals(0, system.title)
+        assertNotEquals(0, system.description)
+        // The downloadable list stays the three curated files; the picker shows the system model
+        // from its own entry, and only when the device probe reports AICore.
+        assertEquals(listOf("gemma-4-e4b", "gemma-4-e2b", "qwen2.5-1.5b"),
+            OnDeviceModelCatalogue.conversation.map { it.id })
+        assertEquals(system, OnDeviceModelCatalogue.byID("aicore-gemini-nano"))
+        assertEquals(OnDeviceModelCatalogue.GEMMA_4_E2B, OnDeviceModelCatalogue.byID("gemma-4-e2b"))
+        // A stored file name is not a catalogue id, so it never resolves to the system model.
+        assertNull(OnDeviceModelCatalogue.byID("gemma-4-E2B-it.litertlm"))
+    }
+
     @Test fun aCatalogueFileNameIsTheOneSafeNameTheModelIsStoredUnder() {
         for (model in OnDeviceModelCatalogue.conversation)
             assertEquals(model.fileName, OnDeviceModelStore.fileName(model.fileName))

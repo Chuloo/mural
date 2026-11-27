@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.text.format.Formatter
+import androidx.annotation.StringRes
 import chat.mural.R
 import chat.mural.core.DownloadProgress
 import chat.mural.core.OnDeviceReadiness
@@ -20,8 +21,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * Holds the active On-Device Model: metadata in SharedPreferences, the model file in
- * noBackupFilesDir, and one [RuntimeSession] behind the Model Runtime seam (LiteRT-LM by
- * default, injectable for tests). One model is active for every language and every Helper.
+ * noBackupFilesDir, and one [RuntimeSession] behind the Model Runtime seam. Which runtime runs it
+ * follows the chosen model: a `.litertlm` file runs on LiteRT-LM, the zero-download system model on
+ * AICore (both injectable for tests). One model is active for every language and every Helper.
  * Models arrive from the curated [OnDeviceModelCatalogue], a pasted direct link, or the document
  * picker, and leave through [delete]. Main-confined like HostedReadinessController: every change
  * publishes an [OnDeviceReadiness], so the Conversation Provider never guesses whether it can
@@ -31,6 +33,7 @@ class OnDeviceModelController(
     private val context: Context,
     private val scope: CoroutineScope,
     private val runtime: ModelRuntime = LiteRtModelRuntime(),
+    private val aicore: AICoreModelRuntime = AICoreModelRuntime(),
     private val changed: (OnDeviceReadiness) -> Unit = {},
 ) {
     private val preferences = context.getSharedPreferences("mural_on_device_models", Context.MODE_PRIVATE)
@@ -50,21 +53,34 @@ class OnDeviceModelController(
     /** The models on this phone, curated downloads and imported files alike. */
     fun stored(): List<OnDeviceModel> = store.models
 
+    /** Whether this phone offers the zero-download system model: the AICore device probe. */
+    suspend fun systemModelAvailable(): Boolean = aicore.available()
+
     /** Publishes readiness from the imported metadata without loading a model. */
     fun refresh() { publish(current()) }
 
-    /** Loads the active model, if one is imported and not held yet. */
+    /** Loads the active model, if one is chosen and not held yet. */
     fun initialize() {
         refresh()
-        val model = store.active() ?: return
-        if (session != null && loadedName == model.name) return
+        val id = store.activeID() ?: return
+        if (session != null && loadedName == id) return
         job?.cancel()
-        job = scope.launch { load(model) }
+        job = scope.launch {
+            val system = OnDeviceModelCatalogue.byID(id)?.takeIf { it.runtime == ModelRuntimeKind.AICORE }
+            if (system != null) loadSystem(system) else store.active()?.let { load(it) }
+        }
     }
 
-    /** Switches the active model among the imported ones and loads it. */
+    /** Switches the active model — an imported file, or the zero-download system model — and loads it. */
     fun select(name: String) {
-        if (store.select(name)) initialize()
+        val system = OnDeviceModelCatalogue.byID(name)?.takeIf { it.runtime == ModelRuntimeKind.AICORE }
+        if (system == null) { if (store.select(name)) initialize(); return }
+        job?.cancel()
+        // One tap: the system model has no download to confirm and no storage to plan.
+        job = scope.launch {
+            store.selectSystem(system.id)
+            loadSystem(system)
+        }
     }
 
     /** Copies a learner-chosen `.litertlm` file into app storage and makes it the active model. */
@@ -182,17 +198,27 @@ class OnDeviceModelController(
     private fun storageMessage(shortfallBytes: Long) = context.getString(R.string.error_on_device_storage_short,
         Formatter.formatFileSize(context, shortfallBytes))
 
-    private suspend fun load(model: OnDeviceModel) {
+    private suspend fun load(model: OnDeviceModel) = start(model.name, R.string.error_on_device_model_failed) {
+        runtime.load(File(directory, model.name).absolutePath)
+    }
+
+    /** The zero-download system model: AICore serves it, so there is no file and no download. */
+    private suspend fun loadSystem(model: CataloguedModel) = start(model.id, R.string.error_on_device_aicore_unavailable) {
+        aicore.load(model.id)
+    }
+
+    /** Holds one loaded session, or reports why the learner's phone could not start it. */
+    private suspend fun start(id: String, @StringRes failure: Int, open: suspend () -> RuntimeSession) {
         publish(current(preparing = true))
         try {
-            val loaded = runtime.load(File(directory, model.name).absolutePath)
+            val loaded = open()
             closeSession()
-            session = loaded; loadedName = model.name
+            session = loaded; loadedName = id
             publish(current())
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
             closeSession()
-            publish(current(failure = context.getString(R.string.error_on_device_model_failed)))
+            publish(current(failure = context.getString(failure)))
         }
     }
 
@@ -227,7 +253,7 @@ class OnDeviceModelController(
     }
 
     private fun current(preparing: Boolean = false, failure: String? = null) =
-        OnDeviceReadiness(store.active()?.name, session != null && loadedName == store.active()?.name,
+        OnDeviceReadiness(store.activeID(), session != null && loadedName == store.activeID(),
             preparing, failure, progress.value)
 
     private fun publish(next: OnDeviceReadiness) = changed(next)
