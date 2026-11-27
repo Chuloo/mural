@@ -12,4 +12,5 @@
     <string name="error_on_device_model_needed">Import an on-device model in Settings to converse on this phone.</string>
     <string name="error_on_device_import_failed">That model file could not be imported.</string>
     <string name="error_on_device_model_failed">The on-device model could not start. Try again in Settings, under Advanced.</string>
+    <string name="error_topic_offline">Finding a sourced current topic needs the internet. Your on-device conversation stays offline: pick another topic, or try again with a connection.</string>
 </resources>

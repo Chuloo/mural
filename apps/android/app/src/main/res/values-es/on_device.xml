@@ -12,4 +12,5 @@
     <string name="error_on_device_model_needed">Importa un modelo en el dispositivo en Ajustes para conversar en este teléfono.</string>
     <string name="error_on_device_import_failed">No se pudo importar ese archivo de modelo.</string>
     <string name="error_on_device_model_failed">El modelo en el dispositivo no pudo iniciarse. Inténtalo de nuevo en Ajustes, en Avanzado.</string>
+    <string name="error_topic_offline">Encontrar un tema actual con fuentes necesita internet. Tu conversación en el dispositivo sigue sin conexión: elige otro tema o inténtalo de nuevo con conexión.</string>
 </resources>

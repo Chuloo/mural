@@ -229,7 +229,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         onDeviceReadiness = next; onDeviceModelNames = onDeviceModels.imported()
     }
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
-    private val onDeviceTeaching = OnDeviceTeachingClient { onDeviceModels.requireSession() }
+    private val onDeviceTeaching = OnDeviceTeachingClient({ onDeviceModels.requireSession() }) { language.lookupUnavailableReply }
     private var onDeviceSessionIDs = emptySet<String>()
     /** Switches the active On-Device Model; only an imported model can be selected. */
     fun selectOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.select(name) }
@@ -357,6 +357,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             val current = archive.sessions.firstOrNull { it.id == snapshot.id }
             val ticket = finalAssessmentTickets.firstOrNull { it.matches(snapshot, passage) }
             if (snapshot.id in hostedSessionIDs) false
+            // An On-Device Model session keeps no recovery ledger and needs no key: its model
+            // answers the final assessment now, or the passage stays honestly unassessed.
+            else if (snapshot.id in onDeviceSessionIDs) storageReady && onDeviceReadiness.ready &&
+                archive.preferences.aiConsentVersion == 1 && current != null
             else if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != 1 || current == null ||
                 ticket == null || !FinalAssessmentRecovery.canAttempt(ticket, current, nowSeconds())) false
             else {
@@ -582,6 +586,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private fun binding(lease: HostedAPIClient.HostedLease) = HostedConversationBindings.Lease(
         lease.sessionID, lease.teaching, lease::requestClose, lease::status, lease.deadlineMilliseconds)
 
+    /** The creating session, or the explicit selection when none exists, decides what answers offline. */
+    private fun answersOnDevice(id: String?) = id in onDeviceSessionIDs ||
+        (id == null && conversationProvider == ConversationProvider.ON_DEVICE)
+
     /** The creating session, rather than the currently selected settings option, chooses every helper. */
     private suspend fun teaching(localID: String?, purpose: HelperPurpose, logicalID: String,
         instructions: String, input: String, schema: JsonObject? = null, search: Boolean = false, onText: ((String) -> Unit)? = null): APIResult {
@@ -590,8 +598,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             return hostedBindings.respond(localID, purpose, logicalID, instructions, input, schema, search, onText)
         }
         // The creating On-Device Model session answers every Helper on the phone.
-        if ((localID != null && localID in onDeviceSessionIDs) ||
-            (localID == null && conversationProvider == ConversationProvider.ON_DEVICE)) {
+        if (answersOnDevice(localID)) {
             return if (onText != null && purpose == HelperPurpose.MEANING) onDeviceTeaching.streamMeaning(instructions, input, onText)
             else onDeviceTeaching.respond(instructions, input, schema, search, purpose)
         }
@@ -1064,11 +1071,18 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun requestAssessment(snapshot: SessionRecord, passage: Passage): FinalAssessmentResult {
         if (archive.preferences.aiConsentVersion != 1) throw IllegalStateException("AI processing consent is required.")
         val module = AndroidLanguages.get(snapshot.languageID) ?: throw IllegalStateException("Unsupported language.")
+        val onDevice = answersOnDevice(snapshot.id)
         val result = teaching(snapshot.id, HelperPurpose.ASSESSMENT, passage.revisionKey,
             TeachingPolicy.assessment(module), helperContext(snapshot, passage), assessmentSchema(module.id))
-        val decoded = json.decodeFromString<AssessmentResponse>(result.text)
-        val proposal = Assessment(passage.id, passage.revisionKey, decoded.outcome, decoded.suggestedLevel, decoded.nextGoal, decoded.capability, decoded.words, context = snapshot.themeID ?: "free", textAssemblyVersion = 2)
-        return FinalAssessmentResult(snapshot.id, snapshot.languageID, proposal, result.usage.input, result.usage.output, result.usage.searches)
+        // An On-Device Model reply is parsed defensively; a cloud reply keeps its strict decode.
+        val proposal = if (onDevice) OnDeviceAssessmentExtractor.proposal(result.text)
+            ?: throw ModelRuntimeException("The On-Device Model returned no usable assessment.")
+        else json.decodeFromString<AssessmentResponse>(result.text)
+            .let { AssessmentProposal(it.outcome, it.suggestedLevel, it.nextGoal, it.capability, it.words) }
+        val assessment = Assessment(passage.id, passage.revisionKey, proposal.outcome, proposal.suggestedLevel,
+            proposal.nextGoal, proposal.capability, proposal.words,
+            context = ConversationProviderPolicy.assessmentContext(onDevice, snapshot.themeID), textAssemblyVersion = 2)
+        return FinalAssessmentResult(snapshot.id, snapshot.languageID, assessment, result.usage.input, result.usage.output, result.usage.searches)
     }
     /** Hosted finalization awaits the original helper for its remaining lease window, without entering BYOK recovery. */
     private fun finishHostedAssessment(snapshot: SessionRecord) {
@@ -1121,6 +1135,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private fun delegate(id: String) {
         if (state != "active" || delegations.containsKey(id)) return
         val sessionID = session?.id ?: return
+        // The delegation Helper is a web search, so an On-Device Model session never offers it:
+        // no model and no network call, only the language's existing honest refusal.
+        if (answersOnDevice(sessionID)) { command("commentary", language.lookupUnavailableReply, id); return }
         delegations[id] = viewModelScope.launch {
             try {
                 delay(500)
@@ -1153,7 +1170,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         if (voiceSession) { activity.learnerEngaged(activityNow()); inactivitySeconds = null }; working = true
         actionJob = viewModelScope.launch {
             try {
-                val instructions = if (voiceSession) TeachingPolicy.typedReply(language) else TeachingPolicy.voice(language, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage) + "\n" + TeachingPolicy.typedReply(language)
+                // The current-topic theme must never promise a delegated, source-backed lookup offline.
+                val offlineTopic = if (answersOnDevice(id) && selectedTheme?.id == "current") "\n" + OnDeviceTeachingRules.offlineCurrentTopic else ""
+                val instructions = if (voiceSession) TeachingPolicy.typedReply(language) else TeachingPolicy.voice(language, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage) + "\n" + TeachingPolicy.typedReply(language) + offlineTopic
                 val result = teaching(id, HelperPurpose.TYPED_REPLY, UUID.randomUUID().toString(), instructions, helperContext(draft))
                 if (token != generation || session?.id != id || state != "active") return@launch
                 updateSession { addUsage(it, result.usage) }
@@ -1203,6 +1222,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun currentTopic(query: String) {
         if (query.isBlank() || working || !cloudReady()) return
         archive.sessions.filter { it.languageID == language.id }.flatMap { it.topics }.firstOrNull { it.query.equals(query.trim(), true) && it.isFresh }?.let { topicResult = it; return }
+        // A sourced current topic needs the web: an On-Device Model session makes no network call.
+        if (answersOnDevice(session?.id)) {
+            presentError(getApplication<Application>().getString(R.string.error_topic_offline)); return
+        }
         val token = generation; val module = language; working = true; topicResult = null
         actionJob = viewModelScope.launch {
             try {
