@@ -28,7 +28,7 @@ class RomanKonkaniTest {
     }
 
     @Test fun romanKonkaniIsSelectableAndThePublishedRegistryKeepsItsContract() {
-        assertEquals(LanguageRegistry.all.map { it.id } + listOf("pt-PT", "kok-Latn"),
+        assertEquals(LanguageRegistry.all.map { it.id } + listOf("pt-PT", "kok-Latn", "jam"),
             AndroidLanguages.all.map { it.id })
         // A Typed-only Module ships Android-first: the generated cross-platform registry is untouched.
         assertNull(LanguageRegistry.get("kok-Latn"))
@@ -66,12 +66,12 @@ class RomanKonkaniTest {
             assertTrue(konkani.speechGuidance, konkani.speechGuidance.contains(marker))
     }
 
-    @Test fun theTypedOnlyModuleMechanismNamesKonkaniAndLeavesEveryOtherModuleWithVoice() {
+    @Test fun theTypedOnlyModuleMechanismNamesKonkaniAndLeavesEveryModuleWithVoiceUntypedOnly() {
         assertTrue(konkani.isTypedOnly)
         assertTrue("kok-Latn" in AndroidLanguages.typedOnlyIDs)
         // A Typed-only Module must be a Language Module this platform actually offers.
         assertTrue(AndroidLanguages.all.map { it.id }.containsAll(AndroidLanguages.typedOnlyIDs))
-        for (module in AndroidLanguages.all.filter { it.id != "kok-Latn" })
+        for (module in AndroidLanguages.all.filterNot { it.isTypedOnly })
             assertFalse(module.id, module.isTypedOnly)
     }
 
