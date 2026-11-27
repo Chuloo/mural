@@ -4,10 +4,14 @@
 
 **Blocked by:** 11 (Roman Konkani Typed-only Module — introduces the typed-only mechanism)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Jamaican Patois is selectable as a learning language with its own greeting, teaching focus and themes
 - [ ] Its content respects Patois orthography and character; code-switching with English is never marked as an error
 - [ ] Typed conversation, English meaning subtitles, word lookups, assessments and flashcards work on every provider
 - [ ] No voice input or output is offered, reusing the typed-only mechanism unchanged
 - [ ] The shared cross-platform fixtures cover the module's text cases, and registry validation passes
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/12-jamaican-patois-module`, branch `ticket/12-jamaican-patois-module`, base `feature/on-device-model` @ 9a9cd90.

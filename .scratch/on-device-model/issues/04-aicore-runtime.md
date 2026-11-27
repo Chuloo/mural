@@ -4,10 +4,14 @@
 
 **Blocked by:** 03 (Curated model catalogue + in-app download)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] AICore implements the Model Runtime seam alongside the LiteRT-LM adapter; providers cannot tell the two runtimes apart
 - [ ] The AICore option appears in the picker only when the device reports availability, honoring its API-33 gate; other phones never see it
 - [ ] Fully offline typed conversations run on AICore with zero model download
 - [ ] When AICore reports unavailable mid-session or at selection, the existing provider-issue messaging explains it without switching providers
 - [ ] Typed-reply behavior is unit tested against a fake AICore runtime through the same seam tests
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/04-aicore-runtime`, branch `ticket/04-aicore-runtime`, base `feature/on-device-model` @ 9a9cd90.
