@@ -793,6 +793,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         session = record; save(record)
     }
     fun start() {
+        // A Typed-only Module has no voice on any provider: never ask for the microphone, never open
+        // a voice session. Its conversation starts through sendTyped().
+        if (language.isTypedOnly) return
         if (!inForeground || isRunning || !cloudReady()) return
         if (hasContinuation && !continuationReady) { reconcileHostedSessions(); refreshHostedReadiness(); return }
         val continuing = continuationSession
@@ -1141,7 +1144,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         if (clean.isEmpty() || working || state in listOf("connecting", "closing") || !cloudReady()) return
         if (state != "active") {
             if (conversationProvider == ConversationProvider.HOSTED_MINUTES) {
-                presentError(getApplication<Application>().getString(R.string.hosted_typed_start)); return
+                // Mural minutes carry voice leases only, and a Typed-only Module has no voice at all.
+                // The provider is never switched for the learner: name the two that can type.
+                if (language.isTypedOnly) typedReplyError = getApplication<Application>().getString(R.string.hosted_typed_only_provider)
+                else presentError(getApplication<Application>().getString(R.string.hosted_typed_start))
+                return
             }
             newSession(false); state = "active"; startDurationChecks()
         }

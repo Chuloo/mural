@@ -83,6 +83,7 @@ import chat.mural.R
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
 import chat.mural.core.ConversationProvider
+import chat.mural.core.isTypedOnly
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -253,27 +254,30 @@ fun TalkScreen(
             RoundAction(MuralSymbol.Captions, stringResource(R.string.talk_meaning_label),
                 selected = vm.archive.preferences.meaningVisible, onClick = vm::toggleMeaning)
             Spacer(Modifier.width(when { scrollPage -> 12.dp; compact -> 20.dp; else -> 27.dp }))
-            val micDescription = stringResource(when {
-                vm.state == "active" && !vm.isVoiceSession -> R.string.talk_status_written
-                vm.state != "active" -> R.string.talk_mic_start_desc
-                vm.isMuted -> R.string.talk_mic_unmute_desc
-                else -> R.string.talk_mic_mute_desc
-            })
-            val micEnabled = !busy && (vm.state != "active" || vm.isVoiceSession)
-            Box(Modifier.padding(bottom = if (compact) 15.dp else 19.dp).size(if (compact) 66.dp else 76.dp)
-                .shadow(18.dp, CircleShape, ambientColor = MuralColors.Orange.copy(alpha = .15f), spotColor = MuralColors.Orange.copy(alpha = .25f))
-                .background(Brush.linearGradient(listOf(Color(0xFFFFBA7A), MuralColors.Orange)), CircleShape).clip(CircleShape)
-                .testTag("start-conversation").semantics { contentDescription = micDescription }
-                .clickable(enabled = micEnabled, role = Role.Button) {
-                    if (vm.state == "active" && vm.isVoiceSession) vm.toggleMute()
-                    else if (vm.hasContinuation) conversationChoice = true
-                    else onMicrophone()
-                }, contentAlignment = Alignment.Center) {
-                if (busy) CircularProgressIndicator(Modifier.size(25.dp), color = MuralColors.Ink, strokeWidth = 2.dp)
-                else MuralIcon(if (vm.isMuted && vm.state == "active") MuralSymbol.MicOff else MuralSymbol.Mic,
-                    modifier = Modifier.size(30.dp))
+            // A Typed-only Module has no voice on any provider, so it is offered no microphone.
+            if (!vm.language.isTypedOnly) {
+                val micDescription = stringResource(when {
+                    vm.state == "active" && !vm.isVoiceSession -> R.string.talk_status_written
+                    vm.state != "active" -> R.string.talk_mic_start_desc
+                    vm.isMuted -> R.string.talk_mic_unmute_desc
+                    else -> R.string.talk_mic_mute_desc
+                })
+                val micEnabled = !busy && (vm.state != "active" || vm.isVoiceSession)
+                Box(Modifier.padding(bottom = if (compact) 15.dp else 19.dp).size(if (compact) 66.dp else 76.dp)
+                    .shadow(18.dp, CircleShape, ambientColor = MuralColors.Orange.copy(alpha = .15f), spotColor = MuralColors.Orange.copy(alpha = .25f))
+                    .background(Brush.linearGradient(listOf(Color(0xFFFFBA7A), MuralColors.Orange)), CircleShape).clip(CircleShape)
+                    .testTag("start-conversation").semantics { contentDescription = micDescription }
+                    .clickable(enabled = micEnabled, role = Role.Button) {
+                        if (vm.state == "active" && vm.isVoiceSession) vm.toggleMute()
+                        else if (vm.hasContinuation) conversationChoice = true
+                        else onMicrophone()
+                    }, contentAlignment = Alignment.Center) {
+                    if (busy) CircularProgressIndicator(Modifier.size(25.dp), color = MuralColors.Ink, strokeWidth = 2.dp)
+                    else MuralIcon(if (vm.isMuted && vm.state == "active") MuralSymbol.MicOff else MuralSymbol.Mic,
+                        modifier = Modifier.size(30.dp))
+                }
+                Spacer(Modifier.width(when { scrollPage -> 12.dp; compact -> 20.dp; else -> 27.dp }))
             }
-            Spacer(Modifier.width(when { scrollPage -> 12.dp; compact -> 20.dp; else -> 27.dp }))
             RoundAction(if (vm.isRunning) MuralSymbol.End else MuralSymbol.Transcript,
                 stringResource(if (vm.isRunning) R.string.talk_end_label else R.string.talk_transcript_label),
                 enabled = vm.session != null, onClick = { if (vm.isRunning) vm.end() else transcript = vm.session })
@@ -285,10 +289,12 @@ fun TalkScreen(
             }
         }
         // An On-Device Model conversation is typed until local voice arrives: reachable from idle.
-        if (vm.state == "active" || microphoneMessage != null ||
+        // A Typed-only Module is typed on every provider, so typing is its whole conversation.
+        if (vm.state == "active" || microphoneMessage != null || vm.language.isTypedOnly ||
             vm.conversationProvider == ConversationProvider.ON_DEVICE) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                MuralTextButton(onClick = { typing = true }, enabled = !busy && !vm.working) {
+                MuralTextButton(onClick = { typing = true }, enabled = !busy && !vm.working,
+                    modifier = Modifier.testTag("talk-type-button")) {
                     MuralIcon(MuralSymbol.Keyboard, Modifier.size(15.dp)); Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.talk_type_button), style = MaterialTheme.typography.bodySmall, color = MuralColors.Ink)
                 }

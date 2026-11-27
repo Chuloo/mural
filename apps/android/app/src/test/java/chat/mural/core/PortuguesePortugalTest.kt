@@ -25,7 +25,7 @@ class PortuguesePortugalTest {
     }
 
     @Test fun portuguesePortugalIsSelectableAlongsideTheUnchangedBrazilianModule() {
-        assertEquals(LanguageRegistry.all.map { it.id } + "pt-PT", AndroidLanguages.all.map { it.id })
+        assertEquals(LanguageRegistry.all.map { it.id } + listOf("pt-PT", "kok-Latn"), AndroidLanguages.all.map { it.id })
         assertEquals(LanguageRegistry.all.map { it.id },
             listOf("nb", "es", "en", "fr", "de", "it", "pt", "zh", "sr", "el", "tl", "nl", "ru"))
         // The generated cross-platform registry keeps its published contract.
