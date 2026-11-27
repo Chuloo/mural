@@ -78,7 +78,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        jniLibs { pickFirsts.add("**/liblitertlm_jni.so") }
+    }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 tasks.withType<Test>().configureEach {
@@ -86,6 +89,14 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("crossPlatformFixtures")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
+kotlin {
+    compilerOptions {
+        // litertlm-android 0.18.1 ships Kotlin metadata 2.4.0; read it from Kotlin 2.2
+        // (same flag the Google AI Edge Gallery ships with).
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.10.1")
@@ -103,6 +114,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
     implementation("io.github.webrtc-sdk:android:150.7871.01")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
