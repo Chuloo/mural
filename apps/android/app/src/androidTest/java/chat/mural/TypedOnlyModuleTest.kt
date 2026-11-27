@@ -116,4 +116,30 @@ class TypedOnlyModuleTest {
         compose.onNodeWithTag("start-conversation").assertDoesNotExist()
         compose.onNodeWithTag("talk-type-button").assertIsDisplayed()
     }
+
+    /** Jamaican Patois joins Roman Konkani on the same mechanism: no per-module voice code exists. */
+    @Test fun everyTypedOnlyModuleIsTypedOnEveryProviderWithTheTypeButtonReachableFromIdle() {
+        assertEquals(setOf("kok-Latn", "jam"), AndroidLanguages.typedOnlyIDs)
+        for (module in AndroidLanguages.all.filter { it.isTypedOnly }) {
+            compose.runOnIdle { vm.selectLanguage(module.id) }
+            compose.runOnIdle { assertEquals(module.id, vm.language.id) }
+            for (provider in ConversationProvider.entries) {
+                compose.runOnIdle { state("conversationProvider", provider); vm.start() }
+                compose.onNodeWithTag("start-conversation").assertDoesNotExist()
+                compose.onNodeWithContentDescription(compose.activity.getString(R.string.talk_mic_start_desc)).assertDoesNotExist()
+                compose.onNodeWithTag("talk-orb").assertIsDisplayed()
+                compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_idle))
+                tapType()
+                compose.onNodeWithTag("typed-reply-input").assertIsDisplayed()
+                compose.onNodeWithContentDescription(compose.activity.getString(R.string.common_close)).performClick()
+                compose.runOnIdle {
+                    assertEquals("${module.id}/${provider.name}", provider, vm.conversationProvider)
+                    assertFalse("${module.id}/${provider.name}", vm.isVoiceSession)
+                    assertEquals("${module.id}/${provider.name}", "idle", vm.state)
+                    assertNull("${module.id}/${provider.name}", vm.session)
+                    assertNull("${module.id}/${provider.name}", vm.error)
+                }
+            }
+        }
+    }
 }
