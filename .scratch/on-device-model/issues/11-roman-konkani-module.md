@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Roman Konkani is selectable as a learning language; all its content and guidance use the Roman script only
 - [ ] The Typed-only Module mechanism lands here: no microphone or spoken-teacher UI is offered for it on any provider, and typed conversation is the complete experience
@@ -12,3 +12,7 @@
 - [ ] Meaning subtitles in English, word lookups, assessments and flashcards all work through typed evidence on every provider
 - [ ] The shared cross-platform fixtures cover the module's text cases, and registry validation passes
 - [ ] Selecting another language afterwards restores voice options normally
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/11-roman-konkani-module`, branch `ticket/11-roman-konkani-module`, base `feature/on-device-model` @ 7fb0398.

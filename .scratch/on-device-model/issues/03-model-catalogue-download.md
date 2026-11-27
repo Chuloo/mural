@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (On-Device Model provider + offline typed conversations)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The curated list shows Gemma 4 E4B (default), Gemma 4 E2B and Qwen2.5-1.5B with sizes and a short description each
 - [ ] Models download in-app with progress, can be cancelled, and interrupted downloads recover or restart cleanly
@@ -14,3 +14,7 @@
 - [ ] Provider readiness reflects download state; a learner mid-download is told why the provider cannot start yet
 - [ ] The learner is warned before multi-gigabyte downloads and before downloading with little free storage
 - [ ] Catalogue state and download planning are unit tested at the Model Runtime/policy seams
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/03-model-catalogue-download`, branch `ticket/03-model-catalogue-download`, base `feature/on-device-model` @ 7fb0398.

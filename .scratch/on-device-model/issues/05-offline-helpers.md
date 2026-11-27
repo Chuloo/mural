@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (On-Device Model provider + offline typed conversations)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Meaning subtitles stream on-device during on-device sessions, using the existing Helper seam
 - [ ] Word lookup works offline; a request needing live web facts receives the language's existing couldn't-check-that reply instead of an invented answer
@@ -14,3 +14,7 @@
 - [ ] The current-topic theme never promises a web search offline, and the delegation Helper is not offered in on-device sessions
 - [ ] An airplane-mode session exercises every Helper successfully
 - [ ] Helper behavior is unit tested against the scripted fake runtime for each Helper purpose, including schema-valid, schema-invalid and empty model replies
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/05-offline-helpers`, branch `ticket/05-offline-helpers`, base `feature/on-device-model` @ 7fb0398.
