@@ -223,16 +223,30 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }, changed = { hostedReadiness = it })
     private val onDeviceModels = OnDeviceModelController(application, viewModelScope, changed = ::onDeviceChanged)
     var onDeviceReadiness by mutableStateOf(OnDeviceReadiness()); private set
-    var onDeviceModelNames by mutableStateOf(emptyList<String>()); private set
+    var onDeviceStoredModels by mutableStateOf(emptyList<OnDeviceModel>()); private set
     private fun onDeviceChanged(next: OnDeviceReadiness) {
         if (next.failure != null && next.failure != onDeviceReadiness.failure) presentError(next.failure)
-        onDeviceReadiness = next; onDeviceModelNames = onDeviceModels.imported()
+        onDeviceReadiness = next; onDeviceStoredModels = onDeviceModels.stored()
     }
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
     private val onDeviceTeaching = OnDeviceTeachingClient { onDeviceModels.requireSession() }
     private var onDeviceSessionIDs = emptySet<String>()
     /** Switches the active On-Device Model; only an imported model can be selected. */
     fun selectOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.select(name) }
+    /** The warnings for a catalogue download, decided before its multi-gigabyte transfer starts. */
+    fun onDeviceDownloadPlan(model: CataloguedModel) = onDeviceModels.plan(model)
+    /** Downloads a curated model; a refusal or an interruption arrives as a readiness failure. */
+    fun downloadOnDeviceModel(model: CataloguedModel) { if (!isRunning) onDeviceModels.download(model) }
+    /** Downloads a pasted direct link through the same flow as the curated catalogue. */
+    fun downloadOnDeviceModelURL(pasted: String) {
+        if (isRunning) return
+        try { onDeviceModels.download(pasted) }
+        catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.error_on_device_link_invalid)) }
+    }
+    /** Stops an in-flight download; the partial file stays, so a later attempt resumes it. */
+    fun cancelOnDeviceDownload() { onDeviceModels.cancelDownload() }
+    /** Deletes a model to reclaim its storage; the active model's session closes first. */
+    fun deleteOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.delete(name) }
     var accountChangeBlocked by mutableStateOf(true); private set
 
     private val reports = ReportController(viewModelScope,
@@ -444,7 +458,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         // An On-Device Model conversation needs its model, never a key or a minute balance.
         if (!currentHosted && session?.id !in onDeviceSessionIDs &&
             conversationProvider == ConversationProvider.ON_DEVICE && !onDeviceReadiness.ready) {
-            presentError(getApplication<Application>().getString(R.string.error_on_device_model_needed)); return false
+            // A learner mid-download or mid-load is told which of the two it is, and never pointed
+            // at another Conversation Provider.
+            val onDevice = onDeviceReadiness
+            presentError(getApplication<Application>().getString(when {
+                onDevice.download != null -> R.string.error_on_device_downloading
+                onDevice.preparing -> R.string.error_on_device_preparing
+                else -> R.string.error_on_device_model_needed
+            }))
+            return false
         }
         if (!currentHosted && conversationProvider == ConversationProvider.PERSONAL_KEY && !hasKey) {
             presentError(getApplication<Application>().getString(R.string.error_missing_key), needsKeySetup = true); return false
