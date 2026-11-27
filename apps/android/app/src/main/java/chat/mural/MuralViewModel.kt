@@ -161,6 +161,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var meaningFailed by mutableStateOf(false); private set
     var meaningLimitReached by mutableStateOf(false); private set
     var working by mutableStateOf(false); private set
+    /** The phone is generating a teacher reply: the idle timer waits for it as for a cloud reply. */
+    var answering by mutableStateOf(false); private set
     var isMuted by mutableStateOf(false); private set
     var inputLevel by mutableStateOf(0.0); private set
     var outputLevel by mutableStateOf(0.0); private set
@@ -229,7 +231,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         onDeviceReadiness = next; onDeviceStoredModels = onDeviceModels.stored()
     }
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
-    private val onDeviceTeaching = OnDeviceTeachingClient({ onDeviceModels.requireSession() }) { language.lookupUnavailableReply }
+    private val onDeviceTeaching = OnDeviceTeachingClient(onDeviceModels.turn) { language.lookupUnavailableReply }
     private var onDeviceSessionIDs = emptySet<String>()
     /** Switches the active On-Device Model; only an imported model can be selected. */
     fun selectOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.select(name) }
@@ -268,6 +270,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private val recoveredAssessmentIDs = mutableSetOf<String>()
     private val hostedFinalAssessmentJobs = mutableMapOf<String, Job>()
     private var connectionJob: Job? = null
+    /** The live On-Device Model voice conversation, while a session runs on this phone. */
+    private var onDeviceVoice: OnDeviceLiveSession? = null
     private var durationJob: Job? = null
     private var closeJob: Job? = null
     private var resetJob: Job? = null
@@ -347,19 +351,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        transport.onEvent = { event ->
-            try { handle(event) }
-            catch (_: IllegalArgumentException) { notice = getApplication<Application>().getString(R.string.notice_invalid_voice_update) }
-            catch (_: IllegalStateException) { notice = getApplication<Application>().getString(R.string.notice_invalid_voice_update) }
-        }
+        transport.onEvent = ::deliver
         transport.onFailure = { fail(it) }
-        transport.onLevels = { input, output ->
-            inputLevel = input; outputLevel = output
-            if (state == "active" && voiceSession) {
-                if (input > 0.03) activity.inputActive(activityNow())
-                if (output > 0.03) activity.assistantActive(activityNow())
-            }
-        }
+        transport.onLevels = ::applyLevels
         meanings.onChange = { meaning = meanings.text; translating = meanings.isLoading; meaningFailed = meanings.error != null; meaningLimitReached = meanings.error is MeaningInputLimitException }
         meanings.onResult = { request, result ->
             if (session?.id == request.sessionID) updateSession {
@@ -778,7 +772,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         meanings.reset()
         if (archive.preferences.meaningVisible) scheduleTranslation()
     }
-    fun toggleMute() { if (state == "active" && voiceSession) { isMuted = !isMuted; transport.mute(isMuted) } }
+    fun toggleMute() {
+        if (state != "active" || !voiceSession) return
+        isMuted = !isMuted
+        onDeviceVoice?.mute(isMuted) ?: transport.mute(isMuted)
+    }
     fun help() {
         if (state != "active") return
         if (voiceSession) { activity.learnerEngaged(activityNow()); inactivitySeconds = null; conversationPace.askForHelp(session?.passages?.lastOrNull { it.speaker == Speaker.user }); command("instructions", conversationPace.instruction); command("instructions", TeachingPolicy.help(language)); notice = getApplication<Application>().getString(R.string.notice_help_simpler) }
@@ -830,12 +828,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val continuing = continuationSession
         val continuingOwner = continuationOwnerID
         val choice = conversationProvider
-        // Voice Talk on the phone arrives with the local audio pipeline. Until then be honest:
-        // never open a cloud session, and never point this learner at a key or minutes.
-        if (choice == ConversationProvider.ON_DEVICE) {
-            notice = getApplication<Application>().getString(R.string.notice_on_device_voice_pending)
-            return
-        }
+        // Voice Talk on the phone: the learner's speech goes to the active model and the phone's own
+        // text-to-speech speaks the streamed reply. No network call is made, and no cloud provider,
+        // key or minute balance takes part.
+        if (choice == ConversationProvider.ON_DEVICE) { startOnDeviceVoice(continuing); return }
         if (choice == ConversationProvider.HOSTED_MINUTES && accountChangeBlocked) {
             presentError(getApplication<Application>().getString(R.string.hosted_checking_previous))
             reconcileHostedSessions(); return
@@ -900,6 +896,44 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+    /**
+     * Opens a voice conversation on this phone. The active model has to hear the learner: a model
+     * with no native audio input never opens a voice session and is never substituted by another
+     * provider — typed Talk keeps working with it.
+     */
+    private fun startOnDeviceVoice(continuing: SessionRecord?) {
+        val app = getApplication<Application>()
+        if (!onDeviceReadiness.audioInput) {
+            presentError(app.getString(R.string.error_on_device_no_audio_input)); return
+        }
+        // The same microphone gate the cloud transport applies, so a revoked permission is an
+        // honest refusal instead of a silent session.
+        if (app.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            presentError(app.getString(R.string.error_transport_microphone)); return
+        }
+        newSession(true); state = "connecting"
+        val id = session!!.id
+        try {
+            // The same foreground service holds the microphone and playback as for cloud voice.
+            VoiceConversationService.start(app, id) { end("Ended by you") }
+        } catch (error: Exception) {
+            fail(error, R.string.error_voice_connect_failed); return
+        }
+        val module = language
+        val instructions = TeachingPolicy.voice(module, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage)
+        val history = ConversationHistory.messages(continuing ?: session)
+        startingWithHistory = history.isNotEmpty()
+        val local = OnDeviceLiveSession(viewModelScope, onDeviceModels.turn,
+            NativeAudioSpeechInput(app), PlatformSpeechOutput(app),
+            // The model calls back on the engine's own thread; events land on the main one in order.
+            onEvent = { event -> viewModelScope.launch { deliver(event) } },
+            onLevels = ::applyLevels,
+            onBusy = { answering = it },
+            onFailure = { error -> if (session?.id == id && isRunning) fail(error, R.string.error_voice_connect_failed) })
+        onDeviceVoice = local
+        local.start(instructions, module.locale, nativeAudioInput = true, history = history)
+    }
     fun end(reason: String = "Ended by you") {
         if (state !in listOf("active", "connecting")) return
         val connecting = state == "connecting"
@@ -908,7 +942,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         delegations.values.toList().forEach { it.cancel() }; delegations.clear(); working = false
         updateSession { it.endReason = reason }
         if (!voiceSession || connecting) { finish(false); return }
-        transport.close()
+        // A local conversation closes at once; a cloud one keeps the existing five-second guard.
+        onDeviceVoice?.close() ?: transport.close()
         closeJob = viewModelScope.launch { delay(5000); if (state == "closing") finish(false) }
     }
     fun background() {
@@ -928,7 +963,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         connectionJob?.cancel(); durationJob?.cancel(); closeJob?.cancel(); assessmentJob?.cancel()
         actionJob?.cancel(); clearLookup(); languageCheckJob?.cancel()
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()
+        onDeviceVoice?.close(); onDeviceVoice = null
         transport.disconnect(); inputLevel = 0.0; outputLevel = 0.0; working = false; isMuted = false
+        answering = false
         VoiceConversationService.stop(getApplication(), session?.id)
         updateSession { it.endedAt = nowSeconds(); it.usageFinal = final || it.id in onDeviceSessionIDs }
         state = "ended"
@@ -946,6 +983,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     ConversationContinuationCheckpoint(saved.id, freeBoundaryOwnerID!!))).apply()
             }
             notice = getApplication<Application>().getString(R.string.notice_continue_settling)
+        } else if (ConversationContinuationPolicy.reachedOnDeviceTimeLimit(session?.id in onDeviceSessionIDs, session?.endReason)) {
+            // The identical Continue/New choice, with nothing to settle: an On-Device Model
+            // conversation consumed no minutes, so it is ready to continue at once.
+            continuationSession = session; continuationOwnerID = null
+            hasContinuation = true; continuationReady = true; continuationNeedsMinutes = false
         }
         session?.let {
             if (it.id in hostedSessionIDs) {
@@ -971,10 +1013,30 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun command(kind: String, content: String, delegationID: String? = null): Boolean {
         if (state != "active" || !voiceSession) return false
+        // A local conversation has no data channel: an instruction is a turn of its own model,
+        // and no delegation ever reaches a client offline.
+        onDeviceVoice?.let { local ->
+            return local.command(kind, content)
+                .also { if (!it) notice = getApplication<Application>().getString(R.string.notice_update_send_failed) }
+        }
         return transport.send(buildJsonObject {
             put("type", "session.$kind.append"); put("event_id", UUID.randomUUID().toString())
             put("delegation_id", delegationID?.let(::JsonPrimitive) ?: JsonNull); put("content", content.take(1000))
         }).also { if (!it) notice = getApplication<Application>().getString(R.string.notice_update_send_failed) }
+    }
+    /** One provider event, from the cloud transport or from the local voice conversation alike. */
+    private fun deliver(event: JsonObject) {
+        try { handle(event) }
+        catch (_: IllegalArgumentException) { notice = getApplication<Application>().getString(R.string.notice_invalid_voice_update) }
+        catch (_: IllegalStateException) { notice = getApplication<Application>().getString(R.string.notice_invalid_voice_update) }
+    }
+    /** The orb's two energies, and the activity the idle timer is built from. */
+    private fun applyLevels(input: Double, output: Double) {
+        inputLevel = input; outputLevel = output
+        if (state == "active" && voiceSession) {
+            if (input > 0.03) activity.inputActive(activityNow())
+            if (output > 0.03) activity.assistantActive(activityNow())
+        }
     }
     private fun handle(event: JsonObject) {
         if (session == null || !isRunning) return
@@ -1035,7 +1097,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     notice = getApplication<Application>().getString(R.string.notice_time_limit_reached); end("Time limit"); break
                 }
                 inactivitySeconds = null
-                if (voiceSession) when (val next = activity.tick(activityNow(), isMuted, working || delegations.isNotEmpty())) {
+                if (voiceSession) when (val next = activity.tick(activityNow(), isMuted, working || delegations.isNotEmpty() || answering)) {
                     ConversationActivity.Action.CheckIn -> command("instructions", TeachingPolicy.checkIn(language))
                     is ConversationActivity.Action.Warning -> inactivitySeconds = next.seconds
                     ConversationActivity.Action.End -> { notice = getApplication<Application>().getString(R.string.notice_ended_inactivity); end("Inactivity"); break }

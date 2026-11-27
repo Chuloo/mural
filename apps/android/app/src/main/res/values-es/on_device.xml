@@ -30,8 +30,8 @@
     <string name="settings_on_device_download_memory_warning">Este modelo requiere %1$d GB de memoria. Tu teléfono podría ejecutarlo lentamente o detenerlo. Un modelo más ligero está a un toque.</string>
     <string name="talk_review_on_device_issue">Revisa tu modelo en el dispositivo en Avanzado</string>
     <string name="talk_on_device_downloading">Descargando el modelo — ve el progreso en Avanzado</string>
-    <string name="notice_on_device_voice_pending">Las conversaciones de voz en tu teléfono llegarán pronto. Escribe tu parte por ahora.</string>
     <string name="error_on_device_model_needed">Importa un modelo en el dispositivo en Ajustes para conversar en este teléfono.</string>
+    <string name="error_on_device_no_audio_input">Este modelo no puede escuchar tu voz, así que no puede mantener una conversación de voz. Elige un modelo que escuche tu voz en Ajustes, en Avanzado, o escribe tu parte.</string>
     <string name="error_on_device_import_failed">No se pudo importar ese archivo de modelo.</string>
     <string name="error_on_device_model_failed">El modelo en el dispositivo no pudo iniciarse. Inténtalo de nuevo en Ajustes, en Avanzado.</string>
     <string name="error_on_device_storage_short">No hay suficiente espacio libre para ese modelo. Libera %1$s e inténtalo de nuevo.</string>

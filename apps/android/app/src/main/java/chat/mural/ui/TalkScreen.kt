@@ -242,7 +242,8 @@ fun TalkScreen(
             MuralTextButton(onClick = { transcript = vm.session }) { Text(stringResource(R.string.topics_sources_heading)) }
         }
         }
-        if (vm.working) {
+        // An On-Device Model reply is generated on this phone: the same row says Mural is answering.
+        if (vm.working || vm.answering) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -293,7 +294,7 @@ fun TalkScreen(
                 }))
             }
         }
-        // An On-Device Model conversation is typed until local voice arrives: reachable from idle.
+        // An On-Device Model that cannot hear the learner still converses typed, from idle.
         // A Typed-only Module is typed on every provider, so typing is its whole conversation.
         if (vm.state == "active" || microphoneMessage != null || vm.language.isTypedOnly ||
             vm.conversationProvider == ConversationProvider.ON_DEVICE) {

@@ -18,7 +18,7 @@ import kotlinx.serialization.json.JsonObject
  * offline for a fact that would need the web.
  */
 class OnDeviceTeachingClient(
-    private val session: suspend () -> RuntimeSession,
+    private val turn: ModelTurn,
     private val unavailableReply: () -> String,
 ) : TeachingClient {
     override suspend fun respond(instructions: String, input: String, schema: JsonObject?, search: Boolean,
@@ -28,16 +28,12 @@ class OnDeviceTeachingClient(
         val system = if (purpose in offlineRulePurposes)
             instructions + "\n" + OnDeviceTeachingRules.offline(unavailableReply()) else instructions
         if (schema != null) return assess(system, input, schema)
-        val runtime = session()
-        runtime.restart(system)
-        return offline(runtime.respond(GenerationRequest(input)))
+        return offline(turn.run(system, GenerationRequest(input)) {})
     }
 
     override suspend fun streamMeaning(instructions: String, input: String, onText: (String) -> Unit): APIResult {
-        val runtime = session()
-        runtime.restart(instructions)
         var streamed = ""
-        val text = runtime.respond(GenerationRequest(input)) { delta ->
+        val text = turn.run(instructions, GenerationRequest(input)) { delta ->
             streamed += delta
             // Subtitles take the whole text so far, as the cloud clients send it, and never a blank.
             if (streamed.isNotBlank()) onText(streamed)
@@ -52,14 +48,12 @@ class OnDeviceTeachingClient(
      * object. The same defensive parser judges both attempts and the caller records the result.
      */
     private suspend fun assess(instructions: String, input: String, schema: JsonObject): APIResult {
-        val runtime = session()
         val constrained = attempt {
-            runtime.restart(instructions)
-            runtime.respond(GenerationRequest(input, schema.toString(), MAX_OUTPUT_TOKENS))
+            turn.run(instructions, GenerationRequest(input, schema.toString(), MAX_OUTPUT_TOKENS)) {}
         }
         if (constrained != null && OnDeviceAssessmentExtractor.proposal(constrained) != null) return offline(constrained)
-        runtime.restart(instructions + "\n" + OnDeviceTeachingRules.onlyJsonObject(schema.toString()))
-        return offline(runtime.respond(GenerationRequest(input, null, MAX_OUTPUT_TOKENS)))
+        return offline(turn.run(instructions + "\n" + OnDeviceTeachingRules.onlyJsonObject(schema.toString()),
+            GenerationRequest(input, null, MAX_OUTPUT_TOKENS)) {})
     }
 
     /** Only the constrained attempt is retryable; its failure must never swallow cancellation. */

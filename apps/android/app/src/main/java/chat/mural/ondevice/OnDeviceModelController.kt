@@ -16,6 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -41,6 +43,8 @@ class OnDeviceModelController(
     private val downloader by lazy { OnDeviceModelDownloader(directory) }
     private var session: RuntimeSession? = null
     private var loadedName: String? = null
+    private var hearsAudio = false
+    private val turnLock = Mutex()
     private var job: Job? = null
     private var downloadJob: Job? = null
     /** Written from the transfer thread, read on main; conflation is the progress throttle. */
@@ -122,6 +126,20 @@ class OnDeviceModelController(
     fun requireSession(): RuntimeSession =
         session ?: throw ModelRuntimeException(context.getString(R.string.error_on_device_model_needed))
 
+    /**
+     * One atomic model turn, the only way this controller's model is used. Helpers and a live voice
+     * conversation share the one loaded model and the one conversation it holds, so every caller
+     * restarts and generates under this lock: two turns never reach the engine at once, and a
+     * Helper can never answer under a voice conversation's prompt.
+     */
+    val turn = ModelTurn { systemPrompt, request, onPartial ->
+        turnLock.withLock {
+            val runtime = requireSession()
+            runtime.restart(systemPrompt)
+            runtime.respond(request, onPartial)
+        }
+    }
+
     fun close() {
         job?.cancel()
         downloadJob?.cancel()
@@ -185,9 +203,12 @@ class OnDeviceModelController(
     private suspend fun load(model: OnDeviceModel) {
         publish(current(preparing = true))
         try {
-            val loaded = runtime.load(File(directory, model.name).absolutePath)
+            val path = File(directory, model.name).absolutePath
+            // The model file decides whether voice Talk can hear the learner at all.
+            val audio = runtime.supportsAudioInput(path)
+            val loaded = runtime.load(path, RuntimeOptions(enableAudioInput = audio))
             closeSession()
-            session = loaded; loadedName = model.name
+            session = loaded; loadedName = model.name; hearsAudio = audio
             publish(current())
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
@@ -223,12 +244,12 @@ class OnDeviceModelController(
 
     private fun closeSession() {
         runCatching { session?.close() }
-        session = null; loadedName = null
+        session = null; loadedName = null; hearsAudio = false
     }
 
     private fun current(preparing: Boolean = false, failure: String? = null) =
         OnDeviceReadiness(store.active()?.name, session != null && loadedName == store.active()?.name,
-            preparing, failure, progress.value)
+            preparing, failure, progress.value, hearsAudio && session != null)
 
     private fun publish(next: OnDeviceReadiness) = changed(next)
 

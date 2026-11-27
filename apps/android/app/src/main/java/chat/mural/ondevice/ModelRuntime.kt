@@ -11,6 +11,22 @@ interface ModelRuntime {
      * model cannot be loaded; callers surface that through provider-issue messaging.
      */
     suspend fun load(modelPath: String, options: RuntimeOptions = RuntimeOptions()): RuntimeSession
+
+    /**
+     * Whether the model at [modelPath] can hear the learner's speech as native audio input. A
+     * Model Runtime with no audio input (AICore) keeps the default, so voice Talk is honestly
+     * refused rather than opened with a model that cannot hear.
+     */
+    suspend fun supportsAudioInput(modelPath: String): Boolean = false
+}
+
+/**
+ * One atomic Model Runtime turn. Helpers and a live voice conversation share the one loaded model,
+ * so a caller supplies the system prompt and the request together: two turns never reach the engine
+ * at once, and a Helper can never answer under a voice conversation's prompt.
+ */
+fun interface ModelTurn {
+    suspend fun run(systemPrompt: String?, request: GenerationRequest, onPartial: (String) -> Unit): String
 }
 
 class ModelRuntimeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
@@ -21,6 +37,8 @@ data class RuntimeOptions(
     val topK: Int = 64,
     val topP: Double = 0.95,
     val cacheDir: String? = null,
+    /** Initializes the engine's audio executor, so a request can carry the learner's speech. */
+    val enableAudioInput: Boolean = false,
 )
 
 data class GenerationRequest(
@@ -28,6 +46,8 @@ data class GenerationRequest(
     /** When non-null the whole reply must match this JSON Schema (constrained decoding). */
     val jsonSchema: String? = null,
     val maxOutputTokens: Int? = null,
+    /** The learner's speech as a 16 kHz mono 16-bit WAV clip, for a model with native audio input. */
+    val audioWavBytes: ByteArray? = null,
 )
 
 /**

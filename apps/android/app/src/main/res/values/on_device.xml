@@ -30,8 +30,8 @@
     <string name="settings_on_device_download_memory_warning">This model wants %1$d GB of memory. Your phone may run it slowly or stop it. A lighter model is one tap away.</string>
     <string name="talk_review_on_device_issue">Review your on-device model in Advanced</string>
     <string name="talk_on_device_downloading">Model downloading — see progress in Advanced</string>
-    <string name="notice_on_device_voice_pending">Voice conversations on your phone are coming soon. Type your side for now.</string>
     <string name="error_on_device_model_needed">Import an on-device model in Settings to converse on this phone.</string>
+    <string name="error_on_device_no_audio_input">This model cannot hear your speech, so it cannot hold a voice conversation. Choose a model that hears your voice in Settings, under Advanced, or type your side.</string>
     <string name="error_on_device_import_failed">That model file could not be imported.</string>
     <string name="error_on_device_model_failed">The on-device model could not start. Try again in Settings, under Advanced.</string>
     <string name="error_on_device_storage_short">Not enough free storage for that model. Free up %1$s and try again.</string>

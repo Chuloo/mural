@@ -14,7 +14,6 @@ import org.junit.Test
  * of whatever the local model returned, and at most one unconstrained retry with bounded output.
  */
 class OnDeviceAssessmentTest {
-    private val model = "models/gemma-4-e4b.litertlm"
     private val instructions = "Assess only the marked TARGET user passage."
     private val schema = buildJsonObject {
         put("type", "object"); put("additionalProperties", false); put("required", "outcome")
@@ -22,7 +21,7 @@ class OnDeviceAssessmentTest {
     private val word = """{"lemma":"la casa","meaning":"house","form":"casa","quote":"la casa","language":"es","kind":"independent","confidence":0.95,"sourceIDs":["target"]}"""
     private val valid = """{"outcome":"success","suggestedLevel":2,"nextGoal":"Practica en tu casa.","capability":"Talks about home","words":[$word]}"""
     private fun helpers(runtime: ScriptedModelRuntime) =
-        OnDeviceTeachingClient({ runtime.load(model) }) { "No he podido comprobarlo ahora mismo." }
+        OnDeviceTeachingClient(scriptedTurn(runtime)) { "No he podido comprobarlo ahora mismo." }
 
     @Test fun aSchemaValidReplyBecomesACleanProposal() {
         val proposal = OnDeviceAssessmentExtractor.proposal(valid)!!
