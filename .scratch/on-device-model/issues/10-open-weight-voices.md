@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Kokoro 82M and PocketTTS 100M can be downloaded and deleted through the same Advanced catalogue experience
 - [ ] The learner picks the teacher voice per learning language; platform text-to-speech remains the default until picked
@@ -12,3 +12,7 @@
 - [ ] A missing or failing chosen voice falls back to the platform voice mid-session without error or silence
 - [ ] The picker shows which languages each voice covers (Kokoro: Portuguese, French, Italian, Mandarin, others; PocketTTS: French, Italian, Portuguese, German, Dutch, English)
 - [ ] Voice selection and fallback are unit tested at the existing seams
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/10-open-weight-voices`, branch `ticket/10-open-weight-voices`, base `feature/on-device-model` @ 7b74825.
