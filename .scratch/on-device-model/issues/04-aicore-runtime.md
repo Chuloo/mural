@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 (Curated model catalogue + in-app download)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] AICore implements the Model Runtime seam alongside the LiteRT-LM adapter; providers cannot tell the two runtimes apart
 - [ ] The AICore option appears in the picker only when the device reports availability, honoring its API-33 gate; other phones never see it
@@ -15,3 +15,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/04-aicore-runtime`, branch `ticket/04-aicore-runtime`, base `feature/on-device-model` @ 9a9cd90.
+- 2026-11-27: Done. Ticket branch `3a418a3`, merged into `feature/on-device-model` as `bdcb513`. AICoreModelRuntime over ML Kit GenAI Prompt (`minSdk = 26` preserved, API-33 + FeatureStatus availability gate), stateless turn replay, zero-download Gemini Nano catalogue entry, honest unavailability/no-audio surfacing, and JVM seam tests.

@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 (On-Device Model provider + offline typed conversations), 05 (Offline Helper coverage)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] A voice session runs entirely on-device through the existing live-session seam: creation, streaming, close
 - [ ] Learner speech reaches the model through the active model's native audio input; captions of the learner's speech appear as on cloud providers
@@ -17,3 +17,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/07-local-voice-talk`, branch `ticket/07-local-voice-talk`, base `feature/on-device-model` @ 9a9cd90.
+- 2026-11-27: Done. Ticket branch `14454dd`, merged into `feature/on-device-model` as `cf89331`. Full offline voice Talk via `OnDeviceLiveSession`, 16 kHz mono WAV native audio input (`audioBackend = CPU`), `<heard>` learner captions, streamed sentence-by-sentence platform TTS (`SentenceChunker` + `PlatformSpeechOutput`), turn-based check-ins/idle/mute, timed session Continue/New sheet, and 522 passing JVM tests.

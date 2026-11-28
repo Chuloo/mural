@@ -4,7 +4,7 @@
 
 **Blocked by:** 11 (Roman Konkani Typed-only Module — introduces the typed-only mechanism)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] Jamaican Patois is selectable as a learning language with its own greeting, teaching focus and themes
 - [ ] Its content respects Patois orthography and character; code-switching with English is never marked as an error
@@ -15,3 +15,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/12-jamaican-patois-module`, branch `ticket/12-jamaican-patois-module`, base `feature/on-device-model` @ 9a9cd90.
+- 2026-11-27: Done. Ticket branch `5419cc4`, merged into `feature/on-device-model` as `f054691`. Android-scoped Jamaican Patois (`jam`) Typed-only Module reusing `isTypedOnly`, Patwa orthography & English continuum code-switching tolerance, Jamaican theme overrides, vocabulary isolation from English, and JVM + compiled androidTest coverage.
