@@ -16,7 +16,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,8 +27,10 @@ import kotlinx.coroutines.withContext
  * follows the chosen model: a `.litertlm` file runs on LiteRT-LM, the zero-download system model on
  * AICore (both injectable for tests). One model is active for every language and every Helper.
  * Models arrive from the curated [OnDeviceModelCatalogue], a pasted direct link, or the document
- * picker, and leave through [delete]. A model is loaded into the Model Runtime's RAM only while
- * On-Device Model is the chosen Conversation Provider ([providerIsOnDevice]); [unload] releases that
+ * picker, and leave through [delete]. Several downloads fly at once, each with its own progress and
+ * its own cancel ([OnDeviceDownloadFlights]), and a delete never queues behind them. A model is
+ * loaded into the Model Runtime's RAM only while On-Device Model is the chosen Conversation
+ * Provider ([providerIsOnDevice]); [unload] releases that
  * RAM and keeps the selection, so switching away never strands gigabytes of an unused model.
  * Main-confined like HostedReadinessController: every change publishes an [OnDeviceReadiness], so
  * the Conversation Provider never guesses whether it can start and never substitutes another
@@ -55,10 +56,8 @@ class OnDeviceModelController(
     private var hearsAudio = false
     private val turnLock = Mutex()
     private var job: Job? = null
-    private var downloadJob: Job? = null
-    /** Written from the transfer thread, read on main; conflation is the progress throttle. */
-    private val progress = MutableStateFlow<DownloadProgress?>(null)
-    private var progressWatcher: Job? = null
+    /** Every download in flight at once: one transfer, one progress and one cancel each. */
+    private val flights = OnDeviceDownloadFlights(scope) { publish(current()) }
 
     /** The models on this phone, curated downloads and imported files alike. */
     fun stored(): List<OnDeviceModel> = store.models
@@ -200,14 +199,18 @@ class OnDeviceModelController(
         begin(url, OnDeviceModelURLs.fileName(url), 0L, 0)
     }
 
-    /** Stops an in-flight download at once; the partial file stays so the next attempt resumes. */
-    fun cancelDownload() { downloadJob?.cancel() }
+    /** Stops one in-flight download at once; its partial file stays so the next attempt resumes, and
+     * every other download keeps running. */
+    fun cancelDownload(fileName: String) { flights.cancel(fileName) }
 
-    /** Deletes a model to reclaim its storage, closing its session first when it is the active one. */
+    /** Deletes a model to reclaim its storage, closing its session first when it is the active one.
+     * Only that model's transfer stops, and the delete runs in its own job: it never queues behind a
+     * download or behind another delete. */
     fun delete(name: String) {
-        if (progress.value?.fileName == name) cancelDownload()
+        flights.cancel(name)
+        // An in-flight load or import stops here rather than landing after the delete.
         job?.cancel()
-        job = scope.launch {
+        scope.launch {
             if (loadedName == name) closeSession()
             withContext(Dispatchers.IO) {
                 File(directory, name).delete()
@@ -249,47 +252,42 @@ class OnDeviceModelController(
 
     fun close() {
         job?.cancel()
-        downloadJob?.cancel()
-        progressWatcher?.cancel()
+        flights.close()
         closeSession()
     }
 
     private fun begin(url: String, fileName: String, sizeBytes: Long, minDeviceMemoryGb: Int,
         activates: Boolean = true) {
-        if (downloadJob?.isActive == true) return
+        // The same file twice at once would be two writers into one `.part`; every other model is free.
+        if (flights.inFlight(fileName)) return
         // shortcut: the transfer lives in the ViewModel scope, so leaving the app can stop it; the
         // partial file resumes on the next tap. Upgrade to a foreground service if learners lose
         // multi-gigabyte downloads to process death often.
         val plan = plan(fileName, sizeBytes, minDeviceMemoryGb)
         if (plan.refused) { publish(current(failure = storageMessage(plan.shortfallBytes))); return }
-        watchProgress()
-        downloadJob = scope.launch {
-            progress.value = DownloadProgress(fileName, partialBytes(fileName), sizeBytes)
+        flights.start(fileName, DownloadProgress(fileName, partialBytes(fileName), sizeBytes)) {
             try {
                 val downloaded = downloader.download(url, fileName, sizeBytes) { received, total ->
-                    progress.value = DownloadProgress(fileName, received, total)
+                    flights.report(fileName, received, total)
                 }
-                progress.value = null
+                // Every byte is here: the row stops offering a cancel while the model is imported.
+                flights.finished(fileName)
                 if (activates) {
                     val imported = store.import(fileName, downloaded.length())
                     // A model downloaded for another Conversation Provider is stored, not held in RAM.
                     if (providerIsOnDevice()) load(imported) else publish(current())
                 } else { store.import(fileName, downloaded.length(), makeActive = false); publish(current()) }
-            } catch (cancelled: CancellationException) { progress.value = null; throw cancelled }
-            catch (error: Exception) { progress.value = null; publish(current(failure = downloadMessage(error))) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { publish(current(failure = downloadMessage(error))) }
         }
-    }
-
-    /** Progress arrives from the transfer thread; publishing stays on main through one conflated flow. */
-    private fun watchProgress() {
-        if (progressWatcher?.isActive == true) return
-        progressWatcher = scope.launch { progress.collect { publish(current()) } }
     }
 
     private fun plan(fileName: String?, sizeBytes: Long, minDeviceMemoryGb: Int) = OnDeviceDownloadPlanner.plan(
         // A resumed download plans only the bytes that are still missing.
         (sizeBytes - partialBytes(fileName)).coerceAtLeast(0L),
-        context.noBackupFilesDir.usableSpace, deviceMemoryBytes(), minDeviceMemoryGb)
+        context.noBackupFilesDir.usableSpace, deviceMemoryBytes(), minDeviceMemoryGb,
+        // Every download already in flight writes into the same free space, so they plan together.
+        OnDeviceDownloadPlanner.bytesInFlight(flights.downloads()))
 
     /** The chosen speech recognition alternate's file, whether or not it is on this phone yet. */
     private fun speechModelFile() = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B.fileName.orEmpty()
@@ -349,6 +347,9 @@ class OnDeviceModelController(
         publish(current(preparing = true))
         try {
             val loaded = open()
+            // Another download can make a different model the active one while this one loads, and a
+            // delete can leave none: that session is closed instead of holding gigabytes nobody chose.
+            if (id != store.activeID()) { runCatching { loaded.close() }; publish(current()); return }
             closeSession()
             session = loaded; loadedName = id; hearsAudio = audio
             publish(current())
@@ -390,9 +391,10 @@ class OnDeviceModelController(
         session = null; loadedName = null; hearsAudio = false
     }
 
-    private fun current(preparing: Boolean = false, failure: String? = null) =
+    /** Explicit return type: [flights] is built from this publisher, so inference would recurse. */
+    private fun current(preparing: Boolean = false, failure: String? = null): OnDeviceReadiness =
         OnDeviceReadiness(store.activeID(), session != null && loadedName == store.activeID(),
-            preparing, failure, progress.value, hearsAudio && session != null)
+            preparing, failure, flights.downloads(), hearsAudio && session != null)
 
     private fun publish(next: OnDeviceReadiness) = changed(next)
 

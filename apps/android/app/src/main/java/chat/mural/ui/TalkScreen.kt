@@ -288,7 +288,7 @@ fun TalkScreen(
             MuralTextButton(onClick = onOpenAdvanced, modifier = Modifier.testTag("talk-open-advanced")) {
                 // A learner mid-download is told that, rather than pointed at a missing model.
                 Text(stringResource(when {
-                    onDeviceBlocked && vm.onDeviceReadiness.download != null -> R.string.talk_on_device_downloading
+                    onDeviceBlocked && vm.onDeviceReadiness.downloads.isNotEmpty() -> R.string.talk_on_device_downloading
                     onDeviceBlocked -> R.string.talk_review_on_device_issue
                     else -> R.string.talk_review_openai_issue
                 }))

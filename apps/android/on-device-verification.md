@@ -63,6 +63,13 @@ adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
    - Confirm **Type** appears once a conversation is `active` on every provider.
 8. **Typed / non-voice Continue**:
    - On a Typed-only Module (`kok-Latn`, `jam`) and on a text-only On-Device Model, end a conversation at its time limit and tap **Continue conversation**: confirm it resumes a typed conversation and opens the typed reply sheet, with no `RECORD_AUDIO` prompt and no no-op.
+9. **Parallel model downloads & independent deletes**:
+   - In **Settings → Advanced → On-device models**, start **Gemma 4 E2B** and **Qwen2.5 1.5B** together: both rows advance independently, each with its own **Cancel download**, and neither row's other actions are disabled by the other's transfer.
+   - Cancel one and confirm the other keeps downloading; tap **Download** on the cancelled model again and confirm it resumes from its `.part` file instead of starting over.
+   - While both are in flight, delete a stored model and confirm it goes at once, then delete a second one and confirm neither delete waits for a download or for the other.
+   - Confirm the model that finishes first becomes **Active** and starts a conversation while the other download is still running.
+   - With little free storage, confirm the download sheet refuses a third model with the combined shortfall (both in-flight transfers counted), using the existing out-of-storage message.
+   - Relaunch mid-download (`adb shell am force-stop chat.mural.android`) and confirm each model's next attempt resumes its own `.part` file independently.
 
 ## 3. Standards & Spec Review Fixes (this branch)
 

@@ -221,11 +221,14 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 Text(stringResource(R.string.settings_on_device_note), style = MaterialTheme.typography.bodySmall,
                                     color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                                 val readiness = vm.onDeviceReadiness
+                                // Several transfers can be in flight: this summary names the oldest one,
+                                // and the picker shows every model's own progress.
+                                val downloading = readiness.downloads.firstOrNull()
                                 SettingsDivider()
                                 // One tap into the catalogue: download, switch, paste a link, import or delete.
                                 SettingsRow(stringResource(R.string.settings_on_device_active_model),
                                     when {
-                                        readiness.download != null -> downloadStatus(readiness.download)
+                                        downloading != null -> downloadStatus(downloading)
                                         readiness.failure != null -> readiness.failure
                                         readiness.preparing -> stringResource(R.string.settings_on_device_preparing)
                                         // A catalogued model shows its own name; an imported file shows its file name.
@@ -314,7 +317,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                 }
                 "models" -> item {
                     val readiness = vm.onDeviceReadiness
-                    val download = readiness.download
+                    // Every download in flight; a row reads the progress of its own model file, and
+                    // another model's transfer never disables this row's own action.
+                    val downloads = readiness.downloads
                     val catalogue = OnDeviceModelCatalogue.conversation
                     // Curated models that are never the active conversation model: speech input and voices.
                     val support = OnDeviceModelCatalogue.support
@@ -322,12 +327,12 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     val voices = OnDeviceModelCatalogue.voiceSynthesis
                     val system = OnDeviceModelCatalogue.GEMINI_NANO_AICORE
                     val stored = vm.onDeviceStoredModels
-                    // A pasted link's download is only on the phone once it lands, so it gets a row of its own.
-                    val inFlight = download?.takeIf { progress ->
+                    // A pasted link's download is only on the phone once it lands, so each gets a row of its own.
+                    val inFlight = downloads.filter { progress ->
                         catalogue.none { it.fileName == progress.fileName } &&
                             support.none { it.fileName == progress.fileName } &&
                             stored.none { it.name == progress.fileName }
-                    }?.let { OnDeviceModel(it.fileName, it.totalBytes) }
+                    }.map { OnDeviceModel(it.fileName, it.totalBytes) }
                     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
                         // Probed each time the picker opens: a phone below AICore's API 33 floor, or one
                         // AICore does not serve, never sees the zero-download row at all.
@@ -339,7 +344,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 OnDeviceModelRow(title = stringResource(system.title), detail = stringResource(system.description),
                                     status = if (active) stringResource(R.string.settings_on_device_active_badge)
                                         else stringResource(R.string.settings_on_device_no_download),
-                                    download = null, enabled = !vm.isRunning && download == null,
+                                    download = null, enabled = !vm.isRunning,
                                     action = if (active) null else R.string.settings_on_device_use,
                                     onAction = { vm.selectOnDeviceModel(system.id) },
                                     // System-managed: no transfer to cancel and no file to delete.
@@ -361,8 +366,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                         onPhone != null -> stringResource(R.string.settings_on_device_downloaded_badge)
                                         else -> Formatter.formatFileSize(context, model.sizeBytes)
                                     },
-                                    download = download?.takeIf { it.fileName == name },
-                                    enabled = !vm.isRunning && download == null,
+                                    download = downloads.firstOrNull { it.fileName == name },
+                                    enabled = !vm.isRunning,
                                     action = when {
                                         failed -> R.string.settings_try_again
                                         active -> null
@@ -378,7 +383,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         }
                         val own = stored.filterNot { file ->
                             (catalogue + support).any { it.fileName == file.name }
-                        } + listOfNotNull(inFlight)
+                        } + inFlight
                         if (own.isNotEmpty()) SettingsGroup(stringResource(R.string.settings_on_device_stored_group)) {
                             own.forEachIndexed { index, file ->
                                 if (index > 0) SettingsDivider()
@@ -387,8 +392,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 OnDeviceModelRow(title = file.name,
                                     detail = if (file.sizeBytes > 0) Formatter.formatFileSize(context, file.sizeBytes) else "",
                                     status = if (active) stringResource(R.string.settings_on_device_active_badge) else "",
-                                    download = download?.takeIf { it.fileName == file.name },
-                                    enabled = !vm.isRunning && download == null,
+                                    download = downloads.firstOrNull { it.fileName == file.name },
+                                    enabled = !vm.isRunning,
                                     action = if (active) null else R.string.settings_on_device_use,
                                     onAction = { vm.selectOnDeviceModel(file.name) },
                                     onCancel = vm::cancelOnDeviceDownload,
@@ -416,8 +421,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 status = if (onPhone != null)
                                     stringResource(R.string.settings_on_device_downloaded_badge)
                                 else Formatter.formatFileSize(context, alternate.sizeBytes),
-                                download = download?.takeIf { it.fileName == alternate.fileName },
-                                enabled = !vm.isRunning && download == null,
+                                download = downloads.firstOrNull { it.fileName == alternate.fileName },
+                                enabled = !vm.isRunning,
                                 action = if (onPhone != null) null else R.string.settings_on_device_download,
                                 onAction = { pendingDownload = alternate },
                                 onCancel = vm::cancelOnDeviceDownload,
@@ -466,8 +471,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     status = if (voiceOnPhone != null)
                                         stringResource(R.string.settings_on_device_downloaded_badge)
                                     else Formatter.formatFileSize(context, voice.sizeBytes),
-                                    download = download?.takeIf { it.fileName == voice.fileName },
-                                    enabled = !vm.isRunning && download == null,
+                                    download = downloads.firstOrNull { it.fileName == voice.fileName },
+                                    enabled = !vm.isRunning,
                                     // The choice row above picks the voice: a voice model only downloads here.
                                     action = if (voiceOnPhone != null) null else R.string.settings_on_device_download,
                                     onAction = { pendingDownload = voice },
@@ -478,7 +483,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                         }
                         SettingsGroup {
                             SettingsRow(stringResource(R.string.settings_on_device_link), chevron = true,
-                                enabled = !vm.isRunning && download == null, modifier = Modifier.testTag("on-device-link"),
+                                enabled = !vm.isRunning, modifier = Modifier.testTag("on-device-link"),
                                 onClick = { modelLink = true })
                             SettingsDivider()
                             SettingsRow(stringResource(R.string.settings_on_device_import), enabled = !vm.isRunning,
@@ -609,7 +614,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
         } }, dismissButton = { MuralTextButton(onClick = { switchTicket++; sourceDialog = false }) { Text(stringResource(R.string.common_cancel)) } })
     if (keyDialog) KeyDialog(vm, keyDialogUseAfterSave, onDismiss = { keyDialog = false })
     pendingDownload?.let { model -> DownloadConfirmDialog(vm, model, onDismiss = { pendingDownload = null }) }
-    if (modelLink) OnDeviceLinkDialog(enabled = !vm.isRunning && vm.onDeviceReadiness.download == null,
+    if (modelLink) OnDeviceLinkDialog(enabled = !vm.isRunning,
         onDismiss = { modelLink = false }, onDownload = { modelLink = false; vm.downloadOnDeviceModelURL(it) })
     deleteModel?.let { file ->
         val curated = (OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.support)
@@ -751,10 +756,11 @@ private fun downloadStatus(download: DownloadProgress): String =
     else stringResource(R.string.settings_on_device_downloading_size,
         Formatter.formatFileSize(LocalContext.current, download.receivedBytes))
 
-/** One catalogue row: what the model is, what it costs in storage, and the one action it takes. */
+/** One catalogue row: what the model is, what it costs in storage, and the one action it takes.
+ * [onCancel] stops this row's own download, so one cancel never touches another model's transfer. */
 @Composable
 private fun OnDeviceModelRow(title: String, detail: String, status: String, download: DownloadProgress?,
-    enabled: Boolean, action: Int?, onAction: () -> Unit, onCancel: () -> Unit, onDelete: (() -> Unit)?, tag: String) {
+    enabled: Boolean, action: Int?, onAction: () -> Unit, onCancel: (String) -> Unit, onDelete: (() -> Unit)?, tag: String) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag(tag),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -771,7 +777,7 @@ private fun OnDeviceModelRow(title: String, detail: String, status: String, down
             Text(downloadStatus(download), style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (download != null) MuralTextButton(onClick = onCancel, modifier = Modifier.testTag("$tag-cancel")) {
+            if (download != null) MuralTextButton(onClick = { onCancel(download.fileName) }, modifier = Modifier.testTag("$tag-cancel")) {
                 Text(stringResource(R.string.settings_on_device_cancel_download), color = MuralColors.Secondary)
             } else if (action != null) Button(onClick = onAction, enabled = enabled, modifier = Modifier.testTag("$tag-action"),
                 colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {

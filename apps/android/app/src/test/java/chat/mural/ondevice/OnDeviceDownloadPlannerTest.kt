@@ -1,5 +1,6 @@
 package chat.mural.ondevice
 
+import chat.mural.core.DownloadProgress
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -51,6 +52,35 @@ class OnDeviceDownloadPlannerTest {
         assertTrue(plan(e2b.sizeBytes, 50_000_000_000L, 6_000_000_000L, e2b.minDeviceMemoryGb).lowMemory)
     }
 
-    private fun plan(requiredBytes: Long, usableBytes: Long, deviceMemoryBytes: Long, minDeviceMemoryGb: Int) =
-        OnDeviceDownloadPlanner.plan(requiredBytes, usableBytes, deviceMemoryBytes, minDeviceMemoryGb)
+    @Test fun aNewDownloadIsPlannedTogetherWithEveryDownloadAlreadyInFlight() {
+        val e2b = OnDeviceModelCatalogue.byID("gemma-4-e2b")!!
+        val qwen = OnDeviceModelCatalogue.byID("qwen2.5-1.5b")!!
+        val headroom = OnDeviceDownloadPlanner.STORAGE_HEADROOM_BYTES
+        // Gemma 4 E2B is 400 MB into its transfer; Qwen2.5 has written nothing yet.
+        val inFlight = listOf(DownloadProgress(e2b.fileName!!, 400_000_000L, e2b.sizeBytes),
+            DownloadProgress(qwen.fileName!!, 0L, qwen.sizeBytes))
+        val stillToWrite = OnDeviceDownloadPlanner.bytesInFlight(inFlight)
+        assertEquals(e2b.sizeBytes - 400_000_000L + qwen.sizeBytes, stillToWrite)
+
+        // E4B fits beside both only when the phone has room for all three plus the one headroom.
+        val roomForAll = stillToWrite + e4b.sizeBytes + headroom
+        val together = plan(e4b.sizeBytes, roomForAll, 12_000_000_000L, e4b.minDeviceMemoryGb, stillToWrite)
+        assertEquals(0L, together.shortfallBytes)
+        assertFalse(together.refused)
+        val short = plan(e4b.sizeBytes, roomForAll - 1, 12_000_000_000L, e4b.minDeviceMemoryGb, stillToWrite)
+        assertEquals(1L, short.shortfallBytes)
+        assertTrue(short.refused)
+        // The same phone with nothing else in flight takes E4B, so the combination is what refuses.
+        assertFalse(plan(e4b.sizeBytes, roomForAll - 1, 12_000_000_000L, e4b.minDeviceMemoryGb).refused)
+
+        // A pasted link announces no size, so it plans as nothing until its response says how big it
+        // is; from then on its own remaining bytes count towards the next download's plan.
+        assertEquals(0L, OnDeviceDownloadPlanner.bytesInFlight(listOf(DownloadProgress("pasted.litertlm", 1_000_000L, 0L))))
+        assertEquals(1_500_000L,
+            OnDeviceDownloadPlanner.bytesInFlight(listOf(DownloadProgress("pasted.litertlm", 500_000L, 2_000_000L))))
+    }
+
+    private fun plan(requiredBytes: Long, usableBytes: Long, deviceMemoryBytes: Long, minDeviceMemoryGb: Int,
+        inFlightBytes: Long = 0L) =
+        OnDeviceDownloadPlanner.plan(requiredBytes, usableBytes, deviceMemoryBytes, minDeviceMemoryGb, inFlightBytes)
 }
