@@ -4,8 +4,12 @@ import androidx.annotation.StringRes
 import chat.mural.R
 import java.net.URI
 
-/** The Model Runtime that executes a catalogued model (GLOSSARY.md). AICore needs no download. */
-enum class ModelRuntimeKind { LITERT_LM, AICORE }
+/**
+ * The Model Runtime that executes a catalogued model (GLOSSARY.md). AICore needs no download, and
+ * MediaPipe Tasks Audio runs the speech recognition and voice models that are not conversation
+ * models at all.
+ */
+enum class ModelRuntimeKind { LITERT_LM, AICORE, MEDIAPIPE_AUDIO }
 
 /**
  * One curated On-Device Model in the catalogue. [downloadURL] and [fileName] are null for a
@@ -23,6 +27,8 @@ data class CataloguedModel(
     val supportsAudioInput: Boolean = false,
     val minDeviceMemoryGb: Int = 0,
     val recommended: Boolean = false,
+    /** The BCP-47 coverage of a speech recognition or voice model; empty for a conversation model. */
+    val languages: List<String> = emptyList(),
 )
 
 /**
@@ -59,7 +65,30 @@ object OnDeviceModelCatalogue {
     /** The conversation models, best quality first. One of them is the active model globally. */
     val conversation: List<CataloguedModel> = listOf(GEMMA_4_E4B, GEMMA_4_E2B, QWEN2_5_1_5B)
 
-    private val all: List<CataloguedModel> = conversation + GEMINI_NANO_AICORE
+    private const val PARAKEET_FILE = "parakeet_tdt_0.6b_v3_5s_i8_stateful.litertlm"
+
+    /** Parakeet TDT 0.6B's published coverage: 25 European languages, `pt-PT` and not `pt-BR`. */
+    private val PARAKEET_LANGUAGES = listOf("bg-BG", "hr-HR", "cs-CZ", "da-DK", "nl-NL", "en-US",
+        "et-EE", "fi-FI", "fr-FR", "de-DE", "el-GR", "hu-HU", "it-IT", "lv-LV", "lt-LT", "mt-MT",
+        "pl-PL", "pt-PT", "ro-RO", "ru-RU", "sk-SK", "sl-SI", "es-ES", "sv-SE", "uk-UA")
+
+    /**
+     * The dedicated speech recognition alternate, run by MediaPipe Tasks Audio instead of a
+     * conversation Model Runtime: the escape hatch for a Language Module whose native audio input
+     * disappoints. It covers European Portuguese, which no open-weight voice does on the output
+     * side. Downloaded and deleted through the same catalogue experience, and never the active model.
+     */
+    val PARAKEET_TDT_0_6B = CataloguedModel("parakeet-tdt-0.6b",
+        R.string.settings_on_device_model_parakeet, R.string.settings_on_device_model_parakeet_description,
+        ModelRuntimeKind.MEDIAPIPE_AUDIO, PARAKEET_FILE,
+        OnDeviceModelURLs.repository("litert-community/parakeet-tdt-0.6b-v3",
+            "3ce205aa928f443f423214195cfe83ebe4802826", PARAKEET_FILE),
+        614_588_752L, minDeviceMemoryGb = 4, languages = PARAKEET_LANGUAGES)
+
+    /** The speech recognition alternates. A voice model joins this list the same way. */
+    val speechRecognition: List<CataloguedModel> = listOf(PARAKEET_TDT_0_6B)
+
+    private val all: List<CataloguedModel> = conversation + GEMINI_NANO_AICORE + speechRecognition
 
     fun recommended(): CataloguedModel = conversation.first { it.recommended }
     /** A catalogue id, whether it downloads a file or is the zero-download system model. */

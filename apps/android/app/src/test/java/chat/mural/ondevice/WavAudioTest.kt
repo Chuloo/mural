@@ -47,6 +47,17 @@ class WavAudioTest {
         assertEquals(16_000, int(narrow, 28))
     }
 
+    @Test fun floatSamplesAreTheClipSPcmNormalizedForASpeechRecognitionModel() {
+        val pcm = byteArrayOf(0, 0, 0, 64, 0, -128, -1, 127)
+        val samples = WavAudio.floatSamples(WavAudio.wrapPcm16Mono(pcm))
+
+        // Little-endian 16-bit PCM scaled into [-1.0, 1.0], the float MediaPipe's task takes.
+        assertEquals(4, samples.size)
+        assertEquals(listOf(0f, 0.5f, -1f, 32_767f / 32_768f), samples.toList())
+        assertEquals(0, WavAudio.floatSamples(WavAudio.wrapPcm16Mono(ByteArray(0))).size)
+        assertEquals(0, WavAudio.floatSamples(ByteArray(44)).size)
+    }
+
     @Test fun aThirtySecondClipStaysInsideTheReferenceLimit() {
         // The reference app caps one audio clip at 30 seconds of 16 kHz mono 16-bit PCM.
         val clip = WavAudio.wrapPcm16Mono(ByteArray(30 * 16_000 * 2))

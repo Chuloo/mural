@@ -12,6 +12,10 @@
     <string name="settings_on_device_models">On-device models</string>
     <string name="settings_on_device_stored_group">Your models</string>
     <string name="settings_on_device_models_footer">One model is active for every language and every helper. Download a curated model, paste a direct model link, or import your own .litertlm file.</string>
+    <string name="settings_on_device_speech_input">Speech recognition</string>
+    <string name="settings_on_device_speech_input_footer">Your speech becomes captions either way. Model native audio needs no download; a speech recognition model transcribes your speech on this phone instead.</string>
+    <string name="settings_on_device_speech_input_choice">Learner speech input</string>
+    <string name="settings_on_device_speech_native">Model native audio</string>
     <string name="settings_on_device_download">Download</string>
     <string name="settings_on_device_cancel_download">Cancel download</string>
     <string name="settings_on_device_downloading_percent">Downloading %1$d%%</string>
@@ -33,7 +37,7 @@
     <string name="talk_review_on_device_issue">Review your on-device model in Advanced</string>
     <string name="talk_on_device_downloading">Model downloading — see progress in Advanced</string>
     <string name="error_on_device_model_needed">Import an on-device model in Settings to converse on this phone.</string>
-    <string name="error_on_device_no_audio_input">This model cannot hear your speech, so it cannot hold a voice conversation. Choose a model that hears your voice in Settings, under Advanced, or type your side.</string>
+    <string name="error_on_device_no_audio_input">This model cannot hear your speech, so it cannot hold a voice conversation. Choose a model that hears your voice, or download the speech recognition model, in Settings under Advanced — or type your side.</string>
     <string name="error_on_device_import_failed">That model file could not be imported.</string>
     <string name="error_on_device_model_failed">The on-device model could not start. Try again in Settings, under Advanced.</string>
     <string name="error_on_device_storage_short">Not enough free storage for that model. Free up %1$s and try again.</string>
@@ -50,6 +54,8 @@
     <string name="settings_on_device_model_qwen2_5_1_5b_description">The smallest curated model. Typed conversations only: it cannot hear your voice. Needs a phone with 6 GB of memory.</string>
     <string name="settings_on_device_model_gemini_nano">Gemini Nano (System AICore)</string>
     <string name="settings_on_device_model_gemini_nano_description">Your phone\'s own system model: nothing to download and nothing to delete. Pick it and converse on this phone right away.</string>
+    <string name="settings_on_device_model_parakeet">Parakeet TDT 0.6B</string>
+    <string name="settings_on_device_model_parakeet_description">A dedicated speech recognition model: it hears European Portuguese, French and Italian, plus Spanish, German, Dutch, Greek, Russian and English. Needs a phone with 4 GB of memory.</string>
     <string name="settings_on_device_no_download">No download</string>
     <string name="error_on_device_aicore_unavailable">Gemini Nano is unavailable on this phone right now. Try again later, or pick a downloadable model.</string>
     <string name="error_topic_offline">Finding a sourced current topic needs the internet. Your on-device conversation stays offline: pick another topic, or try again with a connection.</string>

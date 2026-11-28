@@ -77,6 +77,36 @@ class OnDeviceModelStoreTest {
         assertEquals(4, saved.size)
     }
 
+    @Test fun theSpeechInputChoiceSurvivesARestartAndASpeechRecognitionModelNeverBecomesActive() {
+        val saved = mutableListOf<String>()
+        val store = OnDeviceModelStore(save = { saved += it })
+        // Native audio input is the default: the active model's own microphone, nothing to download.
+        assertEquals(SpeechInputEngine.NATIVE_AUDIO, store.speechInput())
+        store.selectSpeechInput(SpeechInputEngine.PARAKEET)
+        assertEquals(SpeechInputEngine.PARAKEET, store.speechInput())
+        val restored = OnDeviceModelStore(saved.last(), save = { saved += it })
+        assertEquals(SpeechInputEngine.PARAKEET, restored.speechInput())
+
+        val conversation = restored.import("gemma-4-E4B-it.litertlm", 3_659_530_240L)
+        // A downloaded speech recognition model lands on the phone beside, never on top of, the
+        // active conversation model.
+        val speech = restored.import("parakeet_tdt_0.6b_v3_5s_i8_stateful.litertlm", 614_588_752L, makeActive = false)
+        assertEquals(conversation, restored.active())
+        assertEquals(conversation.name, restored.activeID())
+        assertEquals(listOf(conversation, speech), restored.models)
+
+        // Switching back to native audio input is one explicit choice, and it persists too.
+        restored.selectSpeechInput(SpeechInputEngine.NATIVE_AUDIO)
+        assertEquals(SpeechInputEngine.NATIVE_AUDIO, OnDeviceModelStore(saved.last()).speechInput())
+    }
+
+    @Test fun aRecordWrittenBeforeTheSpeechInputChoiceExistedKeepsTheNativeDefault() {
+        val legacy = """{"models":[{"name":"gemma-4-E4B-it.litertlm","sizeBytes":3659530240,"importedAt":1.0}],"active":"gemma-4-E4B-it.litertlm"}"""
+        val store = OnDeviceModelStore(legacy)
+        assertEquals(SpeechInputEngine.NATIVE_AUDIO, store.speechInput())
+        assertEquals("gemma-4-E4B-it.litertlm", store.activeID())
+    }
+
     @Test fun onlyASafeLitertlmFileNameIsAcceptedFromTheDocumentPicker() {
         assertEquals("gemma-4-e4b.litertlm", OnDeviceModelStore.fileName("Downloads/gemma-4-e4b.litertlm"))
         assertEquals("gemma-4-e4b.litertlm", OnDeviceModelStore.fileName("..\\..\\gemma-4-e4b.litertlm"))

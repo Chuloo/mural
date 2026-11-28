@@ -120,6 +120,9 @@ dependencies {
     // Both AARs declare minSdkVersion 26, so the app's compatibility floor stays unchanged.
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
     implementation("com.google.mlkit:genai-common:1.0.0-beta5")
+    // The speech recognition alternate: MediaPipe Tasks Audio runs the Parakeet `.litertlm` model.
+    // Its AAR declares minSdkVersion 24, so the app's compatibility floor stays unchanged.
+    implementation("com.google.mediapipe:tasks-audio:1.2.0")
     implementation("io.github.webrtc-sdk:android:150.7871.01")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")

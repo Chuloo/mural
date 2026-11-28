@@ -8,6 +8,7 @@ import chat.mural.core.Speaker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -77,10 +78,18 @@ class OnDeviceLiveSessionTest {
         runtime: ScriptedModelRuntime,
         turns: List<SpeechTurn> = emptyList(),
         hangingTurns: Boolean = false,
+        /** Transcribes every recorded clip, so the alternate drives the session instead of native audio input. */
+        heardByAlternate: String? = null,
         onDeliver: (SpeechTurn) -> Unit = {},
     ): OnDeviceLiveSession {
         input = FakeSpeechInput(turns, onDeliver)
         output = FakeSpeechOutput(log)
+        val microphone: OnDeviceSpeechInput = heardByAlternate?.let { text ->
+            ParakeetSpeechInput(input, open = { object : SpeechTranscriber {
+                override fun transcribe(samples: FloatArray) = text
+                override fun close() {}
+            } }, dispatcher = UnconfinedTestDispatcher(testScheduler))
+        } ?: input
         return OnDeviceLiveSession(
             scope = backgroundScope,
             turn = if (hangingTurns) ModelTurn { _, _, _ ->
@@ -91,7 +100,7 @@ class OnDeviceLiveSessionTest {
                 log += "generation-complete"
                 reply
             },
-            input = input,
+            input = microphone,
             output = output,
             onEvent = { events += it },
             onLevels = { microphone, voice -> levels += microphone to voice },
@@ -197,6 +206,37 @@ class OnDeviceLiveSessionTest {
         assertFalse(recorded.systemPrompt!!.contains("<heard>"))
         assertEquals(listOf("Buenos días"), events.heard)
         assertEquals(listOf("¡Hola!", "Amigo."), output.spoken)
+    }
+
+    @Test fun aSpeechRecognitionAlternateFeedsTheSameSessionAsNativeAudioInput() = runTest {
+        val recorded = clip(700)
+        val runtime = ScriptedModelRuntime(ScriptedReply("¡Hola! ", "Amigo."), ScriptedReply("Mucho gusto."))
+        val session = conversation(runtime, listOf(recorded), heardByAlternate = "Buenos días") {
+            clock += it.durationMS / 1_000.0
+        }
+        session.start("Teach Spanish.", "es-ES", nativeAudioInput = false)
+        settle()
+
+        val first = runtime.requests.first()
+        // The learner's words reach the model as text: no clip, and no <heard> rule overhead.
+        assertEquals("Buenos días", first.request.prompt)
+        assertNull(first.request.audioWavBytes)
+        assertFalse(first.systemPrompt!!.contains("<heard>"))
+        // Captioned on the clip's own window, exactly as a native audio turn captions what the model heard.
+        val heard = events.ofType("session.input_transcript.delta")
+        assertEquals(listOf("Buenos días"), heard.map { it.delta })
+        assertEquals(0, heard.single().startMS)
+        assertEquals(700, heard.single().endMS)
+        assertEquals(listOf("¡Hola!", "Amigo."), output.spoken)
+        assertEquals(listOf("¡Hola!", "Amigo."), events.captions)
+        assertTrue(events.ofType("session.usage.updated").isNotEmpty())
+
+        // The transcript is the session's record: the next turn re-primes the learner's own words,
+        // which is what an assessment reads, so the alternate is indistinguishable downstream.
+        assertTrue(session.command("instructions", "Ask how the learner is."))
+        settle()
+        assertTrue(runtime.requests.last().systemPrompt!!.contains("Learner: Buenos días"))
+        assertEquals(listOf("¡Hola!", "Amigo.", "Mucho gusto."), output.spoken)
     }
 
     @Test fun commandsRunInOrderSoTheLearnerHearsOneTeacherAtATime() = runTest {

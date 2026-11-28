@@ -75,8 +75,37 @@ class OnDeviceModelCatalogueTest {
     }
 
     @Test fun aCatalogueFileNameIsTheOneSafeNameTheModelIsStoredUnder() {
-        for (model in OnDeviceModelCatalogue.conversation)
+        for (model in OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.speechRecognition)
             assertEquals(model.fileName, OnDeviceModelStore.fileName(model.fileName))
+    }
+
+    @Test fun theSpeechRecognitionAlternateIsCuratedBesideTheConversationModelsNotAmongThem() {
+        val parakeet = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B
+        assertEquals(listOf(parakeet), OnDeviceModelCatalogue.speechRecognition)
+        // A speech recognition model is never the active conversation model.
+        assertTrue(OnDeviceModelCatalogue.conversation.none { it.id == parakeet.id })
+        assertEquals(parakeet, OnDeviceModelCatalogue.byID("parakeet-tdt-0.6b"))
+        assertEquals(ModelRuntimeKind.MEDIAPIPE_AUDIO, parakeet.runtime)
+        assertNotEquals(0, parakeet.title)
+        assertNotEquals(0, parakeet.description)
+        assertFalse(parakeet.recommended)
+        assertEquals(4, parakeet.minDeviceMemoryGb)
+    }
+
+    @Test fun parakeetPointsAtItsVerifiedUnGatedHuggingFaceFileAndCoversEuropeanPortuguese() {
+        val parakeet = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B
+        assertEquals("parakeet_tdt_0.6b_v3_5s_i8_stateful.litertlm", parakeet.fileName)
+        assertEquals(614_588_752L, parakeet.sizeBytes)
+        assertEquals("https://huggingface.co/litert-community/parakeet-tdt-0.6b-v3/resolve/" +
+            "3ce205aa928f443f423214195cfe83ebe4802826/" +
+            "parakeet_tdt_0.6b_v3_5s_i8_stateful.litertlm?download=true", parakeet.downloadURL)
+        // The escape hatch the picker promises: European Portuguese, French and Italian, and more.
+        assertTrue(parakeet.languages.containsAll(listOf("pt-PT", "fr-FR", "it-IT", "es-ES", "de-DE", "nl-NL", "el-GR", "ru-RU", "en-US")))
+        assertEquals(25, parakeet.languages.size)
+        assertEquals(parakeet.languages, parakeet.languages.distinct())
+        // No open-weight voice speaks Brazilian Portuguese here, and no conversation model is implied.
+        assertFalse(parakeet.languages.contains("pt-BR"))
+        assertFalse(parakeet.supportsAudioInput)
     }
 
     @Test fun aPastedHuggingFaceBlobLinkBecomesOneDirectDownloadURL() {
