@@ -555,6 +555,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         error = message; errorNeedsKeySetup = needsKeySetup; errorNeedsAccountSignIn = false
     }
     private fun presentError(e: Throwable, @StringRes fallback: Int) {
+        if (e is ModelRuntimeException) android.util.Log.e("MuralOnDevice", "On-device runtime error: ${e.message}", e)
         if (conversationProvider == ConversationProvider.PERSONAL_KEY && e is APIClient.APIException.Http)
             providerIssue = e.kind
         presentError(resolveMessage(e, fallback), errorNeedsKeySetup(e))

@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.text.format.Formatter
+import android.util.Log
 import androidx.annotation.StringRes
 import chat.mural.R
 import chat.mural.core.DownloadProgress
@@ -239,9 +240,10 @@ class OnDeviceModelController(
      */
     val turn = ModelTurn { systemPrompt, request, onPartial ->
         turnLock.withLock {
-            val runtime = requireSession()
-            runtime.restart(systemPrompt)
-            runtime.respond(request, onPartial)
+            if (session == null && providerIsOnDevice()) loadActiveNow()
+            val activeSession = requireSession()
+            activeSession.restart(systemPrompt)
+            activeSession.respond(request, onPartial)
         }
     }
 
@@ -319,12 +321,19 @@ class OnDeviceModelController(
     private fun storageMessage(shortfallBytes: Long) = context.getString(R.string.error_on_device_storage_short,
         Formatter.formatFileSize(context, shortfallBytes))
 
+    private suspend fun loadActiveNow() {
+        val id = store.activeID() ?: return
+        val system = OnDeviceModelCatalogue.byID(id)?.takeIf { it.runtime == ModelRuntimeKind.AICORE }
+        if (system != null) loadSystem(system) else store.active()?.let { load(it) }
+    }
+
     private suspend fun load(model: OnDeviceModel) {
         val path = File(directory, model.name).absolutePath
+        val cache = File(context.cacheDir, LITERT_CACHE_DIRECTORY).apply { mkdirs() }.absolutePath
         // The model file decides whether voice Talk can hear the learner at all.
         val audio = runtime.supportsAudioInput(path)
         start(model.name, R.string.error_on_device_model_failed, audio) {
-            runtime.load(path, RuntimeOptions(enableAudioInput = audio))
+            runtime.load(path, RuntimeOptions(cacheDir = cache, enableAudioInput = audio))
         }
     }
 
@@ -344,7 +353,8 @@ class OnDeviceModelController(
             session = loaded; loadedName = id; hearsAudio = audio
             publish(current())
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) {
+        catch (error: Exception) {
+            Log.e(TAG, "Failed to initialize on-device model $id", error)
             closeSession()
             publish(current(failure = context.getString(failure)))
         }
@@ -387,8 +397,10 @@ class OnDeviceModelController(
     private fun publish(next: OnDeviceReadiness) = changed(next)
 
     companion object {
+        private const val TAG = "MuralOnDevice"
         private const val KEY_MODELS = "models"
         private const val MODELS_DIRECTORY = "models"
+        private const val LITERT_CACHE_DIRECTORY = "mural_litert_cache"
         /** An import in flight, named apart from a download's resumable `.part` file. */
         private const val IMPORTING_SUFFIX = ".importing"
     }

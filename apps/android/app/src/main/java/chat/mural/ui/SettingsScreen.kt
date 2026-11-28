@@ -342,8 +342,11 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 val name = model.fileName.orEmpty()
                                 val onPhone = stored.firstOrNull { it.name == name }
                                 val active = readiness.modelID == name
+                                val failed = active && !readiness.initialized && !readiness.preparing && readiness.failure != null
                                 OnDeviceModelRow(title = stringResource(model.title), detail = stringResource(model.description),
                                     status = when {
+                                        active && readiness.preparing -> stringResource(R.string.settings_on_device_preparing)
+                                        failed -> readiness.failure.orEmpty()
                                         active -> stringResource(R.string.settings_on_device_active_badge)
                                         onPhone != null -> stringResource(R.string.settings_on_device_downloaded_badge)
                                         else -> Formatter.formatFileSize(context, model.sizeBytes)
@@ -351,6 +354,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     download = download?.takeIf { it.fileName == name },
                                     enabled = !vm.isRunning && download == null,
                                     action = when {
+                                        failed -> R.string.settings_try_again
                                         active -> null
                                         onPhone != null -> R.string.settings_on_device_use
                                         else -> R.string.settings_on_device_download

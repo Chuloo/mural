@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Build
+import android.util.Log
 import com.google.mediapipe.tasks.audio.texttospeech.SynthesisOptions
 import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeech
 import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeechOptions
@@ -25,11 +26,16 @@ import kotlinx.coroutines.runBlocking
  * it; only [stop] can arrive from the session's own thread, as an interruption does. Everything
  * native lives here; the [VoiceSynthesizer] seam above it is what Mural tests.
  */
-class MediaPipeVoiceSynthesizer(context: Context, modelFile: File, supportsGpu: Boolean) : VoiceSynthesizer {
-    private val engine = listOfNotNull(Delegate.GPU.takeIf { supportsGpu }, Delegate.CPU)
-        .firstNotNullOfOrNull { delegate ->
-            runCatching { TextToSpeech.create(options(context, modelFile, delegate)) }.getOrNull()
-        } ?: throw ModelRuntimeException("The voice model would not start: ${modelFile.name}")
+class MediaPipeVoiceSynthesizer(
+    private val context: Context,
+    private val modelFile: File,
+    supportsGpu: Boolean,
+) : VoiceSynthesizer {
+    private var usingGpu = supportsGpu
+    private var engine: TextToSpeech = (if (supportsGpu) open(Delegate.GPU) else null) ?: run {
+        usingGpu = false
+        open(Delegate.CPU)
+    } ?: throw ModelRuntimeException("The voice model would not start: ${modelFile.name}")
     private val track = audioTrack()
     /** Frames handed to the track so far; its head position is what a sentence's drain waits for. */
     private var writtenFrames = 0L
@@ -39,6 +45,24 @@ class MediaPipeVoiceSynthesizer(context: Context, modelFile: File, supportsGpu: 
     override val level get() = energy
 
     override fun synthesize(sentence: String, voice: TeacherVoice): Boolean {
+        return try {
+            runSynthesize(sentence, voice)
+        } catch (error: Exception) {
+            if (!usingGpu) throw error
+            Log.w(TAG, "Voice model GPU synthesis failed; retrying on CPU", error)
+            runCatching { engine.close() }
+            usingGpu = false
+            engine = open(Delegate.CPU)
+                ?: throw ModelRuntimeException("The voice model would not start: ${modelFile.name}", error)
+            runSynthesize(sentence, voice)
+        }
+    }
+
+    private fun open(delegate: Delegate): TextToSpeech? = runCatching {
+        TextToSpeech.create(options(context, modelFile, delegate))
+    }.onFailure { Log.w(TAG, "Voice model $delegate init failed: ${it.message}") }.getOrNull()
+
+    private fun runSynthesize(sentence: String, voice: TeacherVoice): Boolean {
         stopped = false
         energy = 0.0
         val spokenBefore = writtenFrames
@@ -131,6 +155,7 @@ class MediaPipeVoiceSynthesizer(context: Context, modelFile: File, supportsGpu: 
     }
 
     private companion object {
+        const val TAG = "MuralOnDevice"
         /** Open-weight voices synthesize 24 kHz mono PCM. */
         const val SAMPLE_RATE = 24_000
         const val BYTES_PER_FRAME = 2

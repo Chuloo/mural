@@ -1,6 +1,7 @@
 package chat.mural.ondevice
 
 import android.content.Context
+import android.util.Log
 import com.google.mediapipe.tasks.audio.audiotranscriber.AudioTranscriber
 import com.google.mediapipe.tasks.audio.audiotranscriber.AudioTranscriberResult
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -13,15 +14,32 @@ import java.io.File
  * a final segment is the learner's words, so interim results never reach a conversation. Everything
  * native lives here; the [SpeechTranscriber] seam above it is what Mural tests.
  */
-class MediaPipeSpeechTranscriber(context: Context, modelFile: File) : SpeechTranscriber {
-    private val transcriber = listOf(Delegate.GPU, Delegate.CPU).firstNotNullOfOrNull { delegate ->
-        runCatching { AudioTranscriber.createFromOptions(context, options(context, modelFile, delegate)) }.getOrNull()
+class MediaPipeSpeechTranscriber(
+    private val context: Context,
+    private val modelFile: File,
+) : SpeechTranscriber {
+    private var usingGpu = true
+    private var transcriber: AudioTranscriber = open(Delegate.GPU) ?: run {
+        usingGpu = false
+        open(Delegate.CPU)
     } ?: throw ModelRuntimeException("The speech recognition model would not start: ${modelFile.name}")
 
     /** The turn's final segments so far, in the order the engine settled them. */
     private val transcript = StringBuilder()
 
-    override fun transcribe(samples: FloatArray): String {
+    override fun transcribe(samples: FloatArray): String = try {
+        runTranscribe(samples)
+    } catch (error: Exception) {
+        if (!usingGpu) throw error
+        Log.w(TAG, "Parakeet GPU transcription failed; retrying on CPU", error)
+        runCatching { transcriber.close() }
+        usingGpu = false
+        transcriber = open(Delegate.CPU)
+            ?: throw ModelRuntimeException("The speech recognition model would not start: ${modelFile.name}", error)
+        runTranscribe(samples)
+    }
+
+    private fun runTranscribe(samples: FloatArray): String {
         transcript.setLength(0)
         var offset = 0
         while (offset < samples.size) {
@@ -32,7 +50,11 @@ class MediaPipeSpeechTranscriber(context: Context, modelFile: File) : SpeechTran
         return collect(transcriber.finishStream())
     }
 
-    override fun close() = transcriber.close()
+    private fun open(delegate: Delegate): AudioTranscriber? = runCatching {
+        AudioTranscriber.createFromOptions(context, options(context, modelFile, delegate))
+    }.onFailure { Log.w(TAG, "Parakeet $delegate init failed: ${it.message}") }.getOrNull()
+
+    override fun close() = runCatching { transcriber.close() }.getOrDefault(Unit)
 
     private fun collect(result: AudioTranscriberResult): String {
         for (segment in result.segments()) {
@@ -55,6 +77,7 @@ class MediaPipeSpeechTranscriber(context: Context, modelFile: File) : SpeechTran
             .build()
 
     private companion object {
+        const val TAG = "MuralOnDevice"
         /** One 100 ms chunk of 16 kHz mono float PCM: the reference app's streaming granularity. */
         const val CHUNK_SAMPLES = 1_600
         const val CACHE_DIRECTORY = "mural_speech_recognition_cache"

@@ -12,6 +12,15 @@
     <application android:label="Mural" android:icon="@mipmap/ic_mural" android:roundIcon="@mipmap/ic_mural" android:theme="@style/Theme.Mural"
         android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false" android:supportsRtl="true">
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+        <uses-native-library android:name="libGLES_mali.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+        <uses-native-library android:name="libedgetpu_litert.so" android:required="false" />
+        <uses-native-library android:name="libedgetpu_util.so" android:required="false" />
+        <uses-native-library android:name="libedgetpu_tachyon.google.so" android:required="false" />
+        <uses-native-library android:name="libedgetpu_client.google.so" android:required="false" />
         <service android:name=".VoiceConversationService" android:exported="false"
             android:foregroundServiceType="microphone|mediaPlayback" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
