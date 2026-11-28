@@ -357,9 +357,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         try { onDeviceModels.download(pasted) }
         catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.error_on_device_link_invalid)) }
     }
-    /** Stops an in-flight download; the partial file stays, so a later attempt resumes it. */
-    fun cancelOnDeviceDownload() { onDeviceModels.cancelDownload() }
-    /** Deletes a model to reclaim its storage; the active model's session closes first. */
+    /** Stops one in-flight download; its partial file stays, so a later attempt resumes it, and
+     * every other download keeps running. */
+    fun cancelOnDeviceDownload(fileName: String) { onDeviceModels.cancelDownload(fileName) }
+    /** Deletes a model to reclaim its storage, at once even while other models are downloading; the
+     * active model's session closes first. */
     fun deleteOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.delete(name) }
     var accountChangeBlocked by mutableStateOf(true); private set
 
@@ -583,7 +585,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             // at another Conversation Provider.
             val onDevice = onDeviceReadiness
             presentError(getApplication<Application>().getString(when {
-                onDevice.download != null -> R.string.error_on_device_downloading
+                onDevice.downloads.isNotEmpty() -> R.string.error_on_device_downloading
                 onDevice.preparing -> R.string.error_on_device_preparing
                 else -> R.string.error_on_device_model_needed
             }))
