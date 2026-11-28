@@ -279,7 +279,8 @@ class CaptionParityTest {
             Triple("nl", "Ik wil graag koffie.", "koffie"), Triple("ru", "Я хочу кофе.", "кофе"),
             Triple("pt-PT", "Quero uma bica e um pastel de nata.", "bica"),
             Triple("kok-Latn", "Mhaka ek kafe zai.", "kafe"),
-            Triple("jam", "Mi a-go buy ackee a di Coronation Market.", "ackee"))
+            Triple("jam", "Mi a-go buy ackee a di Coronation Market.", "ackee"),
+            Triple("ja", "今日は喫茶店でコーヒーを飲みました。", "コーヒー"))
         assertEquals(AndroidLanguages.all.map { it.id }.toSet(), samples.map { it.first }.toSet())
         for ((language, sentence, word) in samples) {
             show(language, sentence, "A short practice sentence.")
@@ -307,7 +308,8 @@ class CaptionParityTest {
             "ru" to listOf("Я чита", "ю интересную ", "книгу."),
             "pt-PT" to listOf("Estou a fa", "zer um passe", "io de elétrico."),
             "kok-Latn" to listOf("Mhaka ek ", "kafe ", "zai."),
-            "jam" to listOf("Mi a-go ", "buy ackee ", "a di market."))
+            "jam" to listOf("Mi a-go ", "buy ackee ", "a di market."),
+            "ja" to listOf("今日は喫", "茶店でコー", "ヒーを飲み", "ました。"))
         assertEquals(AndroidLanguages.all.map { it.id }.toSet(), samples.keys)
         for ((language, parts) in samples) {
             show(language, "", "")

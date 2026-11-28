@@ -8,11 +8,13 @@ package chat.mural.ondevice
  */
 object SentenceChunker {
     /**
-     * A sentence ends at `.`, `!`, `?` or a newline, never inside a common abbreviation, and a
-     * closing quote belongs to the sentence it ends.
+     * A sentence ends at `.`, `!`, `?`, a newline or the CJK `。`, `！`, `？`, never inside a common
+     * abbreviation, and a closing quote belongs to the sentence it ends. Japanese and Mandarin write
+     * no space after a full-width ending, so that branch needs no following-whitespace lookahead.
      */
-    private val BOUNDARY =
-        Regex("(?i)(?:(?<!\\b(?:e\\.g|i\\.e|dr|mr|mrs|ms|prof|vs|etc|fig|al|approx|inc|corp))\\.+|[!?]+)[\"')\\]\u2019\u201d]*(?=\\s|$)|\\n+")
+    private val BOUNDARY = Regex(
+        "(?i)(?:(?<!\\b(?:e\\.g|i\\.e|dr|mr|mrs|ms|prof|vs|etc|fig|al|approx|inc|corp))\\.+|[!?]+)[\"')\\]\u2019\u201d]*(?=\\s|$)" +
+            "|[\u3002\uFF01\uFF1F]+[\"')\\]\u2019\u201d\u300D\u300F\uFF09]*|\\n+")
 
     /**
      * The speakable sentences of [accumulatedText]. Text after the last sentence end is held back

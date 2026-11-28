@@ -42,6 +42,37 @@ class SentenceChunkerTest {
             SentenceChunker.segment("Dijo \"hola.\" Luego se fue.", isComplete = false))
     }
 
+    @Test fun cjkSentenceEndingsReleaseASentenceWithoutTrailingWhitespace() {
+        // Japanese and Mandarin write no space after 。 ！ ？, so the ending alone finishes the sentence.
+        assertEquals(emptyList<String>(), SentenceChunker.segment("今日は喫茶店で", isComplete = false))
+        assertEquals(listOf("こんにちは！"), SentenceChunker.segment("こんにちは！元気", isComplete = false))
+        assertEquals(listOf("こんにちは！", "元気ですか？"),
+            SentenceChunker.segment("こんにちは！元気ですか？", isComplete = false))
+        assertEquals(listOf("今日は喫茶店でコーヒーを飲みました。"),
+            SentenceChunker.segment("今日は喫茶店でコーヒーを飲みました。では", isComplete = false))
+        assertEquals(listOf("我想去银行。", "然后去旅行。"),
+            SentenceChunker.segment("我想去银行。然后去旅行。", isComplete = false))
+    }
+
+    @Test fun aCjkClosingQuoteOrBracketBelongsToTheSentenceItEnds() {
+        assertEquals(listOf("「そうです。」", "と言った。"),
+            SentenceChunker.segment("「そうです。」と言った。", isComplete = false))
+        assertEquals(listOf("『行きましょう！』"), SentenceChunker.segment("『行きましょう！』と言った", isComplete = false))
+        assertEquals(listOf("（そうです！）"), SentenceChunker.segment("（そうです！）と", isComplete = false))
+        assertEquals(listOf("He said “そうです。”"), SentenceChunker.segment("He said “そうです。”Then", isComplete = false))
+    }
+
+    @Test fun everyStreamedJapanesePrefixKeepsTheSentencesItAlreadyReleased() {
+        val reply = "こんにちは！今日は喫茶店でコーヒーを飲みました。元気ですか？"
+        val released = SentenceChunker.segment(reply, isComplete = false)
+        assertEquals(listOf("こんにちは！", "今日は喫茶店でコーヒーを飲みました。", "元気ですか？"), released)
+        for (length in 1..reply.length) {
+            val prefix = reply.substring(0, length)
+            val partial = SentenceChunker.segment(prefix, isComplete = false)
+            assertEquals(prefix, released.take(partial.size), partial)
+        }
+    }
+
     @Test fun everyStreamedPrefixKeepsTheSentencesItAlreadyReleased() {
         val reply = "Buenos días. Hoy vamos a practicar con la radio. ¿Qué hiciste ayer?"
         val released = SentenceChunker.segment(reply, isComplete = false)
