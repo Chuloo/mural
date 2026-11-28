@@ -68,11 +68,12 @@ class OnDeviceModelController(
 
     /**
      * The speech-input engine a voice conversation would use right now: the learner's choice, or the
-     * native audio input an unavailable alternate falls back to. Null means this phone cannot hear
-     * the learner at all, so the caller owes them an honest notice instead of a silent session.
+     * native audio input an unavailable alternate — or one that does not hear [locale]'s language —
+     * falls back to. Null means this phone cannot hear the learner at all, so the caller owes them an
+     * honest notice instead of a silent session.
      */
-    fun resolvedSpeechInput(): SpeechInputEngine? = OnDeviceSpeechInputSelector.resolve(
-        store.speechInput(), speechModelOnPhone(), session != null && hearsAudio)
+    fun resolvedSpeechInput(locale: String): SpeechInputEngine? = OnDeviceSpeechInputSelector.resolve(
+        store.speechInput(), speechModelOnPhone(), session != null && hearsAudio, locale)
 
     /**
      * The learner's microphone for a resolved engine. A speech recognition model that turns out to

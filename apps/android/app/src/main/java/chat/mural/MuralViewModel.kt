@@ -942,7 +942,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun startOnDeviceVoice(continuing: SessionRecord?) {
         val app = getApplication<Application>()
-        val speechEngine = onDeviceModels.resolvedSpeechInput()
+        // Resolved against the active Language Module's locale, so a speech recognition alternate
+        // that does not hear this language (Parakeet for Mandarin or Japanese) falls back honestly.
+        val speechEngine = onDeviceModels.resolvedSpeechInput(language.locale)
         if (speechEngine == null) {
             presentError(app.getString(R.string.error_on_device_no_audio_input)); return
         }
