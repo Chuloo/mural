@@ -8,7 +8,8 @@ package chat.mural.core
  * languages through [all] and [get]; `LanguageRegistry` keeps the published cross-platform contract.
  *
  * shortcut: hosted (Mural Minutes) voice rejects a locale `services/api/src/live-provider.ts` does
- * not list; add pt-PT there and deploy before offering Portugal voice on that provider.
+ * not list; add pt-PT and ja-JP there and deploy before offering Portugal or Japan voice on that
+ * provider.
  *
  * A Typed-only Module has no voice on any provider, so it needs neither: its whole conversation is
  * typed. Add its id to [typedOnlyIDs]; nothing else in the app decides this per module.
@@ -103,7 +104,37 @@ object AndroidLanguages {
             "traditions" to ConversationTheme("traditions", "Jonkonnu an Miss Lou", "Small customs, big stories", "flag", "Local life", "Talk about Jamaican customs: Jonkonnu, sorrel and Christmas cake, Emancipation Day and Independence Day, Labour Day, Kumina, Anansi story and Miss Lou's Patwa poems. Compare individual customs without treating Jamaicans or di diaspora as one same.", 2),
             "opinions" to ConversationTheme("opinions", "Wi a reason", "Room for another view", "quote.bubble", "Connection", "Pick an everyday dilemma — whether di bus fare should rise, whether pikni should answer back, whether yu cook stew chicken with coconut milk — and reason it out. Invite wah mek and gently explore another view.", 1))
     )
-    val extraModules: List<LanguageModule> = listOf(portuguesePortugal, romanKonkani, jamaicanPatois)
+    val japanese = LanguageModule(
+        id = "ja",
+        name = "Japanese",
+        nativeName = "日本語",
+        variety = "Japan",
+        locale = "ja-JP",
+        greeting = "こんにちは！",
+        greetingWord = "こんにちは",
+        speechGuidance = "Use clear, natural standard Japanese pronunciation as spoken in Japan: even mora timing, with each kana given roughly the same length; long vowels such as おかあさん, おおさか and ゆうき; the geminate っ in きっと, がっこう and ちょっと; and pitch accent where it distinguishes meaning, as in はし for chopsticks or bridge, あめ for rain or candy, and 東京 against 京都. Let the natural devoicing of the vowel in です and ます happen without losing its mora. Default to warm, polite everyday です・ます speech, and adapt naturally when the learner answers in casual plain form such as だよ or 行こう: follow their register instead of pulling them back. Accept learner accents and valid regional phrasing and wording, including Kansai forms such as ほんま and おおきに, without treating a regional difference or a non-native accent alone as an error. Never imitate a regional caricature, and never infer a pronunciation or pitch error from a transcript alone.",
+        writingGuidance = "Write natural modern Japanese, mixing Kanji, Hiragana and Katakana the way everyday Japanese does, with no spaces between words: 今日は喫茶店でコーヒーを飲みました。 Use standard Japanese punctuation — 。 to end a sentence, 、 inside one, ？ and ！ where they fit naturally, and 「」 for quoted speech. Keep ordinary Kanji usage, writing ください and ありがとう in kana as Japanese normally does, and Katakana for loanwords such as コーヒー, パン and アルバイト. Accept the learner's kana-only text, half-width characters and casual typed style without calling them errors. Do not append romaji, furigana or an English translation to ordinary replies; give a reading such as 富士山（ふじさん） only when the learner asks for one.",
+        lemmaGuidance = "Give vocabulary lemmas in standard Japanese dictionary plain form: verbs as 食べる, 行く, 飲む and する, い-adjectives as 静か and 高い, な-adjectives as 元気, nouns as 電車, 喫茶店 and 日本語, with no romaji and no English in the lemma. Keep the exact observed conjugated or kana/kanji form in form and quote, so 飲みました keeps its own spelling with 飲む as the lemma, and のみました stays kana. Keep meaningful expressions intact as one entry, such as 気をつける, お願いします, お疲れさま and いただきます. A polite ます form and its plain form share one lemma. Never treat the learner's kana-only spelling or a valid regional word as an error, and never infer spoken recall or pitch accuracy from a transcript alone.",
+        teachingFocus = listOf(
+            "Greetings, self-introductions and useful everyday chunks such as こんにちは, はじめまして, 〜をください and すみません.",
+            "Everyday questions, the particles は, が, を, に, で, と and も, numbers, and the present and past ます forms such as 行きます and 行きました.",
+            "Connected stories, the て form joining events as in 飲んで、それから, past and progressive forms, plans and familiar situations.",
+            "Reasons and opinions, plain forms, 〜と思う, 〜から and 〜ので, polite requests and natural casual speech.",
+            "Nuance, conditionals such as 〜たら and 〜ば, giving and receiving with あげる, もらう and くれる, keigo basics such as いらっしゃいます and 伺う, and idiomatic phrasing.",
+            "Flexible advanced discussion with precise, natural Japanese and appropriate tone and register."),
+        topicPlaceholder = "食べ物、音楽、旅行、日本の暮らし…",
+        lookupUnavailableReply = "今はそれを確認できません。よければ、この話題について一般的に話しましょう。",
+        themeOverrides = mapOf(
+            "coffee" to ConversationTheme("coffee", "喫茶店で一息？", "Something warm, please", "cup.and.saucer", "Everyday", "Meet at a neighbourhood Japanese kissaten, 喫茶店. Order a コーヒー or a ミックスジュース with ください, then chat about the learner's day in warm です・ます Japanese.", 0),
+            "introductions" to ConversationTheme("introductions", "はじめまして", "Start somewhere small", "hand.wave", "Connection", "Meet the learner for the first time in Japanese. Practise a short 自己紹介: their name, where they live and what they like, closing with よろしくお願いします.", 0),
+            "groceries" to ConversationTheme("groceries", "商店街で買い物", "A little of everything", "basket", "Everyday", "Shop in a Japanese shotengai, 商店街, or a supermarket. Practise quantities, prices and polite requests such as いくらですか and ください, with everyday names: 豆腐, ねぎ, しょうゆ, みそ.", 2),
+            "travel" to ConversationTheme("travel", "JRと地下鉄で", "A ticket to somewhere", "tram", "Everyday", "Plan a trip in Japan by JR line, 地下鉄 or 新幹線. Discuss routes, 乗り換え, a 切符 or charging an IC card without inventing current schedules or fares.", 1),
+            "walk" to ConversationTheme("walk", "公園を散歩", "Out into the fresh air", "tree", "Local life", "Take an imagined walk in a Japanese park, under the 桜 during 花見 or past a 神社. Talk about the season, the weather and everyday life.", 2),
+            "cabin" to ConversationTheme("cabin", "週末の小旅行", "A change of scene", "mountain.2", "Local life", "Plan an imagined weekend away in Japan: a 旅館 with an 温泉, 箱根, 京都 or the 瀬戸内 sea. Discuss travel, 料理, walks and relaxing together.", 2),
+            "restaurant" to ConversationTheme("restaurant", "定食か居酒屋で", "Stay for dessert", "wineglass", "Everyday", "Role-play a meal in a Japanese 定食屋 or 居酒屋. Practise ordering with ください and おすすめ, the menu, 取り分け and polite problem-solving.", 0),
+            "traditions" to ConversationTheme("traditions", "季節の行事", "Small customs, big stories", "flag", "Local life", "Talk about Japanese seasonal customs such as お正月, 節分, 花見, 七夕, お盆 and 年末の大掃除, or a family meal. Compare individual customs without treating Japan or Japanese people as uniform.", 2))
+    )
+    val extraModules: List<LanguageModule> = listOf(portuguesePortugal, romanKonkani, jamaicanPatois, japanese)
     /** Language Modules with no voice anywhere: both sides of the conversation are typed. */
     val typedOnlyIDs: Set<String> = setOf("kok-Latn", "jam")
     val all: List<LanguageModule> = LanguageRegistry.all + extraModules

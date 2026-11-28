@@ -28,7 +28,7 @@ class RomanKonkaniTest {
     }
 
     @Test fun romanKonkaniIsSelectableAndThePublishedRegistryKeepsItsContract() {
-        assertEquals(LanguageRegistry.all.map { it.id } + listOf("pt-PT", "kok-Latn", "jam"),
+        assertEquals(LanguageRegistry.all.map { it.id } + listOf("pt-PT", "kok-Latn", "jam", "ja"),
             AndroidLanguages.all.map { it.id })
         // A Typed-only Module ships Android-first: the generated cross-platform registry is untouched.
         assertNull(LanguageRegistry.get("kok-Latn"))

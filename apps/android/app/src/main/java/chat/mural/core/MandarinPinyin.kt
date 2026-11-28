@@ -1,6 +1,8 @@
 package chat.mural.core
 
+import java.text.BreakIterator
 import java.text.Normalizer
+import java.util.Locale
 
 data class MandarinPronunciationToken(val text: String, val pinyin: String?)
 
@@ -79,13 +81,14 @@ object HanWords {
 data class CaptionSegment(val text: String, val lookup: String?)
 
 object CaptionWords {
-    /** Keeps every source character, linking Chinese words instead of whole sentences. */
+    /** Keeps every source character, linking Chinese and Japanese words instead of whole sentences. */
     fun segments(text: String, languageID: String, reader: HanReader? = MandarinPinyin.reader): List<CaptionSegment> {
         if (languageID == "zh") {
             if (text.isEmpty()) return emptyList()
             val words = MandarinPinyin.words(text, reader) ?: return listOf(CaptionSegment(text, null))
             return words.map { CaptionSegment(it, it.takeIf(::containsLetter)) }
         }
+        if (languageID == "ja") return japaneseSegments(text)
         val result = mutableListOf<CaptionSegment>()
         val run = StringBuilder()
         for (character in text) {
@@ -101,6 +104,26 @@ object CaptionWords {
     private fun segment(text: String): CaptionSegment {
         val word = text.trim { it.isWhitespace() || isPunctuation(it) }
         return CaptionSegment(text, word.takeIf(::containsLetter))
+    }
+
+    /**
+     * Japanese writes no spaces between words, so the platform's dictionary word breaks decide the tap
+     * targets. The iterator walks the text from break to break, which keeps every source character —
+     * spaces, newlines, punctuation and emoji included — exactly as supplied.
+     */
+    private fun japaneseSegments(text: String): List<CaptionSegment> {
+        if (text.isEmpty()) return emptyList()
+        val breaks = BreakIterator.getWordInstance(Locale.JAPANESE).apply { setText(text) }
+        val result = mutableListOf<CaptionSegment>()
+        var start = breaks.first()
+        var end = breaks.next()
+        while (end != BreakIterator.DONE) {
+            val piece = text.substring(start, end)
+            result += CaptionSegment(piece, piece.takeIf(::containsLetter))
+            start = end
+            end = breaks.next()
+        }
+        return result
     }
 
     private fun containsLetter(text: String): Boolean = text.codePoints().anyMatch { Character.isLetter(it) }
