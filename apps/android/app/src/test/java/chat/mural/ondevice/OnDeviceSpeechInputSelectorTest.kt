@@ -7,11 +7,14 @@ import org.junit.Test
 /**
  * Which microphone an On-Device Model voice conversation uses: the learner's explicit choice, or
  * the native audio input it falls back to. The rule that an unavailable alternate never blocks a
- * conversation the active model could otherwise hold lives here, at the policy seam.
+ * conversation the active model could otherwise hold lives here, at the policy seam. These cases use
+ * European Portuguese (`pt-PT`), a language Parakeet covers; the language-coverage fallback for an
+ * uncovered module (Mandarin, Japanese) lives in `MandarinOnDeviceTest`.
  */
 class OnDeviceSpeechInputSelectorTest {
-    private fun resolve(chosen: SpeechInputEngine, speechModelOnPhone: Boolean, hearsAudio: Boolean) =
-        OnDeviceSpeechInputSelector.resolve(chosen, speechModelOnPhone, hearsAudio)
+    private fun resolve(chosen: SpeechInputEngine, speechModelOnPhone: Boolean, hearsAudio: Boolean,
+        locale: String = "pt-PT") =
+        OnDeviceSpeechInputSelector.resolve(chosen, speechModelOnPhone, hearsAudio, locale)
 
     @Test fun theChosenSpeechRecognitionAlternateRunsWhenItsModelIsOnThePhone() {
         // Even a text-only conversation model hears the learner once the alternate transcribes.

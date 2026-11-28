@@ -22,6 +22,7 @@
     <string name="settings_on_device_voice_kokoro_option">Kokoro 82M — Portuguese, French, Italian, Mandarin, Japanese, Spanish, English</string>
     <string name="settings_on_device_voice_pocket_option">PocketTTS 100M — French, Italian, Portuguese, German, Dutch, Spanish, English</string>
     <string name="settings_on_device_voice_variety_note">Open-weight Portuguese voices speak with Brazilian pronunciation.</string>
+    <string name="settings_on_device_voice_uncovered_note">%1$s does not speak this language. Your teacher uses the phone\'s built-in voice instead.</string>
     <string name="settings_on_device_download">Download</string>
     <string name="settings_on_device_cancel_download">Cancel download</string>
     <string name="settings_on_device_downloading_percent">Downloading %1$d%%</string>

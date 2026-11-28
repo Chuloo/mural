@@ -22,6 +22,7 @@
     <string name="settings_on_device_voice_kokoro_option">Kokoro 82M — portugués, francés, italiano, chino mandarín, japonés, español, inglés</string>
     <string name="settings_on_device_voice_pocket_option">PocketTTS 100M — francés, italiano, portugués, alemán, neerlandés, español, inglés</string>
     <string name="settings_on_device_voice_variety_note">Las voces de pesos abiertos en portugués hablan con pronunciación brasileña.</string>
+    <string name="settings_on_device_voice_uncovered_note">%1$s no habla este idioma. Tu profesor usa la voz integrada del teléfono en su lugar.</string>
     <string name="settings_on_device_download">Descargar</string>
     <string name="settings_on_device_cancel_download">Cancelar la descarga</string>
     <string name="settings_on_device_downloading_percent">Descargando %1$d%%</string>

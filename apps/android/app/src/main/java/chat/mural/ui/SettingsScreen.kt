@@ -437,6 +437,16 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                         .testTag("on-device-voice-variety-note"))
+                            // A picked open-weight voice that does not speak this language (PocketTTS for
+                            // Mandarin or Japanese) falls back to the phone's own voice: say so, never let a
+                            // learner think it speaks their language.
+                            if (teacherVoice != TeacherVoiceEngine.PLATFORM &&
+                                TeacherVoiceSelector.voice(teacherVoice, module.locale) == null)
+                                Text(stringResource(R.string.settings_on_device_voice_uncovered_note,
+                                    OnDeviceModelCatalogue.voiceModel(teacherVoice)?.let { stringResource(it.title) }.orEmpty()),
+                                    style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                        .testTag("on-device-voice-uncovered-note"))
                             voices.forEach { voice ->
                                 SettingsDivider()
                                 val voiceOnPhone = stored.firstOrNull { it.name == voice.fileName }
