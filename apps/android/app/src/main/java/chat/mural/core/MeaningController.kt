@@ -34,7 +34,11 @@ class MeaningInputLimitException : Exception("This caption is too long to transl
 
 class EmptyMeaningException : Exception("The translation came back empty.")
 
-/** Waits for a sentence or quiet transcript, then keeps one translation in flight. */
+/**
+ * Waits for a sentence or quiet transcript, then keeps one translation in flight. An On-Device Model
+ * voice reply is sentence-aligned instead: [update] takes the spoken sentence chunks, and each one's
+ * meaning starts at once and stays on screen, so the subtitle keeps pace with the teacher's speech.
+ */
 class MeaningController(
     private val scope: CoroutineScope,
     private val delayMillis: Long = 450,
@@ -69,8 +73,16 @@ class MeaningController(
     private var retryWindowStartedAt: Long? = null
     private var retryNotBefore = 0L
     private var pendingFailure: Throwable? = null
+    /** The spoken sentence chunks of an On-Device Model reply accepted for sentence-aligned meaning. */
+    private var alignedSentences: List<String> = emptyList()
+    private var alignedMeanings = 0
+    private var alignedWorker: Job? = null
+    /** A sentence whose meaning failed leaves the whole passage to the paced path, as today. */
+    private var alignedAbandoned = false
 
-    fun update(request: MeaningRequest, cached: String? = null, utteranceComplete: Boolean = false, conversationEnded: Boolean = false) {
+    fun update(request: MeaningRequest, cached: String? = null, utteranceComplete: Boolean = false, conversationEnded: Boolean = false,
+        /** The sentence chunks an On-Device Model reply spoke; empty keeps the paced whole passage. */
+        sentences: List<String> = emptyList()) {
         if (desired?.sharesContext(request) != true) {
             val sameConversation = desired?.let { it.sessionID == request.sessionID &&
                 it.learningLanguageID == request.learningLanguageID && it.meaningLanguage == request.meaningLanguage } == true
@@ -78,6 +90,7 @@ class MeaningController(
                 // A new display passage waits for the current request instead of starting a second helper.
                 rendered = null; displayed = null; text = ""; error = null; finalRequested = false; finalRetryAvailable = false; sessionEnded = false
                 automaticRetries = 0; retryWindowStartedAt = null; retryNotBefore = 0; pendingFailure = null
+                cancelAligned(); alignedSentences = emptyList(); alignedMeanings = 0; alignedAbandoned = false
             } else reset()
         }
         val changed = desired != request
@@ -99,6 +112,18 @@ class MeaningController(
             pendingFailure = null; retryNotBefore = 0
             onChange?.invoke(); return
         }
+        // An On-Device Model reply is spoken sentence by sentence, so each sentence's meaning starts
+        // as soon as it enters speech instead of waiting for the passage to go quiet. Cloud providers
+        // and a typed conversation send no sentences and keep the paced whole-passage meaning below.
+        if (sentences.isNotEmpty() && !alignedAbandoned) {
+            if (sentences.take(alignedSentences.size) != alignedSentences) {
+                // A repaired caption rewrote a sentence whose meaning was already shown.
+                cancelWorker(); alignedSentences = sentences; alignedMeanings = 0; text = ""
+            } else alignedSentences = sentences
+            beginAligned()
+            onChange?.invoke()
+            return
+        }
         if (rendered == request) return
         displayed?.let { if (!request.text.startsWith(it.text)) { text = ""; rendered = null; displayed = null } }
         // A waiting timer follows the latest fragment; an admitted request is never cancelled by speech.
@@ -111,6 +136,7 @@ class MeaningController(
         cancelWorker(); desired = null; rendered = null; displayed = null; text = ""; error = null
         finalRequested = false; finalRetryAvailable = false; sessionEnded = false
         automaticRetries = 0; retryWindowStartedAt = null; retryNotBefore = 0; pendingFailure = null
+        alignedSentences = emptyList(); alignedMeanings = 0; alignedAbandoned = false
         onChange?.invoke()
     }
 
@@ -124,7 +150,53 @@ class MeaningController(
     }
 
     private fun cancelWorker() {
-        generation++; activeTranslation = null; worker?.cancel(); worker = null; isLoading = false; translating = false
+        generation++; activeTranslation = null; worker?.cancel(); worker = null
+        cancelAligned(); isLoading = false; translating = false
+    }
+
+    private fun cancelAligned() { alignedWorker?.cancel(); alignedWorker = null }
+
+    /**
+     * Translates the spoken sentences in speech order, one at a time, and joins their meanings: the
+     * Model Runtime serializes inference, and a short sentence is translated long before it is spoken.
+     * A sentence's meaning is display-only, so the passage's cached meaning stays the whole-passage one.
+     */
+    // shortcut: a reply's generation holds the one engine lock to its last sentence, so on a long
+    // reply the first meanings can trail their speech; upgrade if device measurement shows it.
+    private fun beginAligned() {
+        if (alignedWorker != null || alignedMeanings >= alignedSentences.size) return
+        isLoading = true
+        val token = generation
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                while (true) {
+                    val passage = desired ?: return@launch
+                    val index = alignedMeanings
+                    val sentence = alignedSentences.getOrNull(index) ?: break
+                    val result = translate(passage.copy(text = sentence))
+                    if (token != generation) return@launch
+                    // A sentence's meaning joins one subtitle line, so the model's own line breaks go.
+                    val meaning = result.text.trim()
+                    if (meaning.isEmpty()) throw EmptyMeaningException()
+                    alignedMeanings = index + 1
+                    text = if (text.isEmpty()) meaning else "$text $meaning"
+                    onChange?.invoke()
+                }
+                alignedWorker = null; isLoading = false
+                onChange?.invoke()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (token != generation) return@launch
+                alignedWorker = null; isLoading = false; alignedAbandoned = true
+                alignedSentences = emptyList(); alignedMeanings = 0; text = ""
+                // A sentence that cannot be translated hands the whole passage to the paced path,
+                // which reaches it at the turn boundary and keeps the existing retry affordance.
+                begin()
+                onChange?.invoke()
+            }
+        }
+        alignedWorker = job
+        job.start()
     }
 
     private fun endsSentence(value: String, languageID: String): Boolean {

@@ -418,6 +418,74 @@ class MeaningControllerTest {
         assertEquals(text, prepared)
     }
 
+    /** A spoken On-Device Model reply: the production pacing of a paid cloud Helper, which it ignores. */
+    private fun TestScope.pacedController(translator: Translator) =
+        MeaningController(backgroundScope, now = { testScheduler.currentTime }, translate = translator::translate)
+
+    @Test fun spokenOnDeviceSentencesTranslateAtOnceAndTheirMeaningsAccumulate() = runTest {
+        val translator = Translator(); val controller = pacedController(translator)
+        val sentences = listOf("¡Hola!", "¿Cómo estás hoy?")
+        controller.update(request("¡Hola!"), sentences = listOf("¡Hola!")); runCurrent()
+        // No quiet period and no helper spacing: a sentence's meaning starts as it enters speech.
+        assertEquals(listOf("¡Hola!"), translator.requests.map { it.translationInput })
+        translator.succeed("Hello!"); runCurrent()
+        assertEquals("Hello!", controller.text); assertFalse(controller.isLoading)
+        controller.update(request("¡Hola! ¿Cómo estás hoy?", revision = 1), sentences = sentences); runCurrent()
+        assertEquals(sentences, translator.requests.map { it.translationInput })
+        translator.succeed("How are you today?"); runCurrent()
+        // The earlier sentence's meaning stays visible while the reply continues.
+        assertEquals("Hello! How are you today?", controller.text)
+        assertFalse(controller.isLoading); assertNull(controller.error)
+        // The turn boundary needs no whole-passage Helper: every spoken sentence has its meaning.
+        controller.update(request("¡Hola! ¿Cómo estás hoy?", revision = 1), utteranceComplete = true, sentences = sentences)
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(sentences, translator.requests.map { it.translationInput })
+    }
+
+    @Test fun cancellingATurnCancelsItsPendingSentenceMeanings() = runTest {
+        val translator = Translator(); val controller = pacedController(translator)
+        controller.update(request("¡Hola! ¿Cómo estás hoy?"), sentences = listOf("¡Hola!", "¿Cómo estás hoy?")); runCurrent()
+        assertEquals(1, translator.requests.size)
+        controller.reset()
+        translator.succeed("Hello!"); runCurrent()
+        // A cancelled turn shows no meaning and never starts the sentence still queued.
+        assertEquals("", controller.text); assertFalse(controller.isLoading); assertEquals(1, translator.requests.size)
+    }
+
+    @Test fun aRewrittenSentenceRestartsTheSpokenMeanings() = runTest {
+        val translator = Translator(); val controller = pacedController(translator)
+        controller.update(request("¡Hola!"), sentences = listOf("¡Hola!")); runCurrent()
+        translator.succeed("Hello!"); runCurrent()
+        val repaired = request("¡Adiós! ¿Cómo estás?", revision = 1)
+        controller.update(repaired, sentences = listOf("¡Adiós!", "¿Cómo estás?")); runCurrent()
+        // A meaning of text the learner no longer sees is dropped rather than kept.
+        assertEquals("", controller.text)
+        assertEquals(listOf("¡Adiós!"), translator.requests.drop(1).map { it.translationInput })
+        translator.succeed("Goodbye!"); runCurrent()
+        translator.succeed("How are you?"); runCurrent()
+        assertEquals("Goodbye! How are you?", controller.text)
+        assertEquals(listOf("¡Hola!", "¡Adiós!", "¿Cómo estás?"), translator.requests.map { it.translationInput })
+    }
+
+    @Test fun aFailedSentenceMeaningFallsBackToTheWholePassageAtTheTurnBoundary() = runTest {
+        val translator = Translator(); val controller = pacedController(translator)
+        val sentences = listOf("¡Hola!", "¿Cómo estás hoy?")
+        val passage = request("¡Hola! ¿Cómo estás hoy?", revision = 1)
+        controller.update(request("¡Hola!"), sentences = listOf("¡Hola!")); runCurrent()
+        translator.fail(); runCurrent()
+        // No partial meaning survives, and the failure is not shown while the fallback can still answer.
+        assertEquals("", controller.text); assertNull(controller.error)
+        controller.update(passage, utteranceComplete = true, sentences = sentences); runCurrent()
+        assertEquals(listOf("¡Hola!", passage.text), translator.requests.map { it.translationInput })
+        translator.fail(); runCurrent()
+        // The existing affordance: the learner retries the whole-passage meaning.
+        assertNotNull(controller.error)
+        controller.retry(); advanceTimeBy(2_500); runCurrent()
+        assertEquals(passage.text, translator.requests.last().translationInput)
+        translator.succeed("Hello! How are you today?"); runCurrent()
+        assertEquals("Hello! How are you today?", controller.text); assertNull(controller.error)
+    }
+
     @Test fun longCaptionFailureDoesNotCachePartialMeaningAndRetryKeepsFullInput() = runTest {
         val caption = "UNIQUE_START " + "我喜欢咖啡。 ".repeat(600) + " UNIQUE_END"
         val translator = Translator(); val controller = controller(translator)
