@@ -4,14 +4,16 @@ import kotlinx.serialization.Serializable
 
 const val REPORT_EXCERPT_LIMIT = 2_000
 const val REPORT_CONSENT_VERSION = "ai-report-v1"
+/** Saved reports live in the learning archive; the bound keeps an exported backup honest. */
+const val MAXIMUM_SAVED_REPORTS = 1_000
 
 enum class ReportReason(val wireValue: String) {
     OFFENSIVE("offensive"), INCORRECT("incorrect"), WRONG_LANGUAGE("wrong_language"), OTHER("other")
 }
 
-enum class ReportDelivery { CHECKING, IDLE, SENDING, SENT, FAILED, UNAVAILABLE }
+enum class ReportDelivery { IDLE, SAVING, SAVED, FAILED }
 
-/** Explicit submission only. The owner supplies networking; this sheet cannot send or log data. */
+/** Explicit submission only. The owner supplies on-device storage; nothing here can reach a network. */
 @Serializable
 data class AIReportSubmission(
     val reportID: String,
@@ -21,6 +23,22 @@ data class AIReportSubmission(
     val consentVersion: String,
 ) {
     override fun toString() = "AIReportSubmission([redacted])"
+}
+
+/**
+ * A report as this phone keeps it: saved on the device, exported with the learner's backup, and
+ * never transmitted. [savedAt] is the archive's epoch-seconds clock.
+ */
+@Serializable
+data class ReportRecord(
+    val reportID: String,
+    val languageID: String,
+    val reason: String,
+    val excerpt: String,
+    val consentVersion: String,
+    val savedAt: Double,
+) {
+    override fun toString() = "ReportRecord([redacted])"
 }
 
 internal fun boundedReportExcerpt(text: String): String {

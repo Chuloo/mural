@@ -228,7 +228,7 @@ fun MuralApp(
 
             reportState.selection?.let { selected ->
                 androidx.compose.runtime.key(reportState.generation) {
-                    ReportConversationSheet(selected.excerpt, selected.languageID, reportState.available,
+                    ReportConversationSheet(selected.excerpt, selected.languageID,
                         reportState.delivery, vm::submitReport, vm::dismissReport,
                         java.util.Locale.getDefault().language)
                 }

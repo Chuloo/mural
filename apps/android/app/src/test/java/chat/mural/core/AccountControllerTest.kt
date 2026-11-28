@@ -34,10 +34,26 @@ class AccountControllerTest {
             profileFailure?.let { throw it }; return AccountProfile(id, "me@example.test", listOf("google"), "2026-09-13")
         }
         var minuteValue = MinuteBalance("milliseconds", "connected-conversation-time", 581_234, 60_000, 521_234)
-        override suspend fun minutes(session: AccountSession) = minuteValue
+        var minuteReads = 0
+        override suspend fun minutes(session: AccountSession): MinuteBalance { minuteReads++; return minuteValue }
         override suspend fun signOut(session: AccountSession) { signOuts++; signOutFailure?.let { throw it } }
         override suspend fun delete(session: AccountSession) { deletes++; deletionFailure?.let { throw it } }
     }
+    /** Zero server telemetry: a launch reads the stored session locally; [AccountController.refresh]
+     * is the probe a cloud Conversation Provider allows. */
+    @Test fun restoringAStoredSessionPublishesItAndRequestsNothing() = runTest {
+        val api = Service(); val storage = Store().apply { value = validSession }
+        val controller = AccountController(api, storage) { timestamp }
+        controller.restore()
+        assertEquals(id, controller.state.value.accountID)
+        assertTrue(controller.state.value.signedIn)
+        assertNull(controller.state.value.minutes); assertNull(controller.state.value.email)
+        assertEquals(0, api.minuteReads)
+        controller.refresh()
+        assertEquals(1, api.minuteReads)
+        assertNotNull(controller.state.value.minutes); assertNotNull(controller.state.value.email)
+    }
+
     @Test fun olderOrUnversionedBalancesCannotReplaceAVersionedBalance() = runTest {
         val api = Service(); val storage = Store().apply { value = validSession }
         val controller = AccountController(api, storage) { timestamp }
@@ -45,7 +61,7 @@ class AccountControllerTest {
         fun version(revision: String) = original.copy(presentation = MuralMinutesPresentation(
             1, "2026-09-26T12:00:00Z", revision, 521_234, 0, false, 521_234, "exactFree", null,
             "ready", "settled", false))
-        api.minuteValue = version("10"); controller.restore()
+        api.minuteValue = version("10"); controller.restore(); controller.refresh()
         assertEquals("10", controller.state.value.minutes?.presentation?.revision)
         api.minuteValue = version("9"); controller.refresh()
         assertNull(controller.state.value.minutes); assertEquals(AccountNotice.INVALID_RESPONSE, controller.state.value.notice)

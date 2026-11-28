@@ -40,4 +40,6 @@ internal class ConversationProviderStore(context: Context) {
     suspend fun select(provider: ConversationProvider) = withContext(Dispatchers.IO) {
         check(preferences.edit().putString("selection", provider.name).commit())
     }
+    /** The durable choice, for an automatic probe that must never run while On-Device Model is active. */
+    suspend fun onDeviceChosen(): Boolean = read().selection == ConversationProvider.ON_DEVICE
 }

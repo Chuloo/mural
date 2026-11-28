@@ -63,6 +63,16 @@ adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
    - Confirm **Type** appears once a conversation is `active` on every provider.
 8. **Typed / non-voice Continue**:
    - On a Typed-only Module (`kok-Latn`, `jam`) and on a text-only On-Device Model, end a conversation at its time limit and tap **Continue conversation**: confirm it resumes a typed conversation and opens the typed reply sheet, with no `RECORD_AUDIO` prompt and no no-op.
+9. **Zero server telemetry (ticket 18)** — run this one with Airplane Mode **off**, so an attempt would really leave the phone:
+   - Save an API key, sign in to an account with minutes available, and choose **On-device model**.
+   - Cold-start the app, send it to the background and return, change the Language Module, and open and close the account sheet. Confirm no hosted readiness, account or minute-store request is made:
+     ```sh
+     adb shell dumpsys netstats detail | grep -A3 chat.mural.android
+     ```
+     shows no new transmitted bytes for the UID between the steps.
+   - Hold a full voice conversation, ask for a meaning subtitle and a word lookup, then end it, and re-read the same counters: a complete on-device session adds zero transmitted bytes.
+   - Report a reply from the transcript: the sheet says the report is saved on this phone, and **Settings → Data → Export backup** contains it. No report request reaches the service.
+   - Repeat the conversation on **Mural Minutes** to confirm the gated probes still serve a provider that needs them: readiness and balance appear and the conversation is hosted.
 
 ## 3. Standards & Spec Review Fixes (this branch)
 
@@ -82,3 +92,9 @@ Applied on `ticket/review-fixes`; all still strictly Android-only.
 | Copy accuracy for Qwen2.5 1.5B and Gemini Nano (no built-in audio input), EN + ES parity; `IMPORTING_SUFFIX`, `onDevice` wording, one provider-label helper | `values{,-es}/on_device.xml`, `OnDeviceModelController.kt`, `OnDeviceLiveSession.kt`, `MuralViewModel.kt`, `SettingsScreen.kt` | `:app:lintDebug`, `:app:testDebugUnitTest` |
 
 **Deployment**: still none required — every fix above is client-side. The Mural Minutes locale guard makes the Android client *stricter* than production `services/api`, so it needs no server change to be correct; relaxing it later does.
+
+## 4. Zero server telemetry (ticket 18)
+
+The egress inventory, the gates on automatic probes, the offline report storage, the dependency and merged-manifest audit and the tests that pin the guarantee are recorded in [`verification/zero-server-telemetry.md`](../../verification/zero-server-telemetry.md). Offline: `OnDeviceZeroEgressTest` (JVM). On a device: `OnDeviceZeroNetworkTest` (instrumented) and §2.9 above with a real service origin.
+
+The app change needs **no server deployment**. `services/api` no longer accepts a report (`POST /v1/feedback/ai` and `GET /v1/feedback/capabilities` are removed), which ships whenever a human next deploys; retention of rows stored before the removal continues until then. See `services/api/docs/ai-reporting.md`.

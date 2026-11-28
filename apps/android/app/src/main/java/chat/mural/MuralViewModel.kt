@@ -363,8 +363,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.delete(name) }
     var accountChangeBlocked by mutableStateOf(true); private set
 
-    private val reports = ReportController(viewModelScope,
-        ReportConfiguration.parse(BuildConfig.MANAGED_API_ORIGIN)?.let(::ReportClient))
+    /** Reports stay on this phone: the submission joins the learning archive and its backup, and
+     * no network client takes part. Durability is awaited, so "saved" is only shown once stored. */
+    private val reports = ReportController(viewModelScope, save = { record ->
+        if (!storageReady) throw IllegalStateException("Learning storage is not ready.")
+        val kept = archive.reports.filterNot { it.reportID.equals(record.reportID, ignoreCase = true) }
+        // shortcut: a full report log drops its oldest entry; give the learner a list if reports become visible.
+        archive = archive.copy(reports = (kept + record).takeLast(MAXIMUM_SAVED_REPORTS).toMutableList())
+        persistAndWait()
+    })
     val reportState = reports.state
 
     fun reportUtterance(sessionID: String, passageID: String) {
@@ -510,8 +517,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** A recovered final assessment is a cloud Helper paid by the learner's own key, so it runs only
+     * while Personal Key is the chosen provider: never on its own for On-Device Model or Mural Minutes. */
     private fun recoverFinalAssessments() {
-        if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != 1) return
+        if (!storageReady || !hasKey || archive.preferences.aiConsentVersion != 1 ||
+            conversationProvider != ConversationProvider.PERSONAL_KEY) return
         val remaining = FinalAssessmentRecovery.MAX_RECOVERED_PER_LAUNCH - recoveredAssessmentIDs.size
         if (remaining <= 0) return
         FinalAssessmentRecovery.recover(archive.sessions, finalAssessmentTickets, nowSeconds())
@@ -603,7 +613,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             try { providerStore.select(provider) }
             catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
         }
-        if (provider == ConversationProvider.HOSTED_MINUTES) refreshHostedReadiness()
+        // Choosing Mural Minutes checks its readiness; choosing another provider clears a minute
+        // balance that is no longer the learner's business, and probes nothing.
+        refreshHostedReadiness()
+        // Choosing the provider that pays for them resumes any final assessment still owed to a
+        // Personal Key conversation; another provider leaves the queue alone.
+        recoverFinalAssessments()
         // Switching to On-Device Model loads the active model into the Model Runtime; switching away
         // releases that RAM and keeps the selection, so a cloud provider never pays for a held model.
         if (provider == ConversationProvider.ON_DEVICE) onDeviceModels.ensureLoaded() else onDeviceModels.unload()
@@ -647,6 +662,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         if (!account.busy) refreshHostedReadiness()
     }
     fun refreshHostedReadiness() {
+        // Zero server telemetry: a readiness probe belongs to Mural Minutes. It never runs on its
+        // own for another Conversation Provider, so a launch, a foreground return or a preference
+        // change reaches no server while Personal Key or On-Device Model is the learner's choice.
+        if (!ConversationProviderPolicy.consumesMinutes(conversationProvider)) {
+            readiness.selectAccount(null, false); return
+        }
         if (selectedAccount.busy || !storageReady) return
         accessJob?.cancel()
         accessJob = viewModelScope.launch {
@@ -663,7 +684,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     readiness.selectAccount(member.accountID, false)
                     readiness.refresh()
                 } else {
-                    if (archive.preferences.aiConsentVersion != 1 || conversationProvider != ConversationProvider.HOSTED_MINUTES) {
+                    if (archive.preferences.aiConsentVersion != 1) {
                         readiness.selectAccount(null, false); return@launch
                     }
                     guests?.acquire()

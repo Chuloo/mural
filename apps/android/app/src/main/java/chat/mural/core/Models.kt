@@ -2,6 +2,7 @@ package chat.mural.core
 
 import java.util.UUID
 import java.net.URI
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
@@ -150,7 +151,10 @@ data class Preferences(
     var meaningLanguage: String = "English", var sessionMinutes: Int = 15, var hiddenWords: List<String> = emptyList(),
     var interests: String = "", var hasOnboarded: Boolean = false, var aiConsentVersion: Int? = null
 )
-@Serializable data class Archive(var schemaVersion: Int = 2, var sessions: MutableList<SessionRecord> = mutableListOf(), var preferences: Preferences = Preferences())
+/** [reports] are the learner's own AI reports, saved on this phone and never transmitted. They are
+ * Kotlin-only and omitted while empty, so the shared iPhone fixture and its backups keep their shape. */
+@Serializable data class Archive(var schemaVersion: Int = 2, var sessions: MutableList<SessionRecord> = mutableListOf(), var preferences: Preferences = Preferences(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) var reports: MutableList<ReportRecord> = mutableListOf())
 class ArchiveError private constructor(val kind: Kind) : Exception() {
     enum class Kind { TOO_LARGE, UNSUPPORTED_VERSION, UNSUPPORTED_LANGUAGE, INVALID }
     companion object {
@@ -182,6 +186,9 @@ object ArchiveCodec {
         val adds = incoming.sessions.filter { s -> s.id.lowercase() !in known }
         if (adds.size > MAXIMUM_SESSIONS - current.sessions.size) throw ArchiveError.TOO_LARGE
         val out = decode(encode(current))
+        val knownReports = current.reports.map { it.reportID.lowercase() }.toSet()
+        out.reports = (out.reports + incoming.reports.filter { it.reportID.lowercase() !in knownReports })
+            .takeLast(MAXIMUM_SAVED_REPORTS).toMutableList()
         adds.forEach { source ->
             val s = source.copy(fragments=source.fragments.toMutableList(), assessments=source.assessments.toMutableList(), translations=source.translations.toMutableMap(), topics=source.topics.toMutableList())
             s.invalidateChangedAssessments(); s.assessments = s.assessments.mapNotNull { LearningEngine.validate(it,s) }.toMutableList(); out.sessions += s
@@ -239,6 +246,11 @@ object ArchiveCodec {
     private fun validate(a: Archive) {
         if (AndroidLanguages.get(a.preferences.learningLanguageID) == null) throw ArchiveError.UNSUPPORTED_LANGUAGE
         if (a.schemaVersion != 2 || a.sessions.size > MAXIMUM_SESSIONS || a.preferences.sessionMinutes !in 1..60 || a.sessions.map { it.id.lowercase() }.toSet().size != a.sessions.size) throw ArchiveError.INVALID
+        if (a.reports.size > MAXIMUM_SAVED_REPORTS || a.reports.map { it.reportID.lowercase() }.toSet().size != a.reports.size) throw ArchiveError.INVALID
+        a.reports.forEach {
+            if (!validUUID(it.reportID) || !validDate(it.savedAt) || it.consentVersion != REPORT_CONSENT_VERSION ||
+                ReportReason.entries.none { reason -> reason.wireValue == it.reason } || !validReportExcerpt(it.excerpt)) throw ArchiveError.INVALID
+        }
         a.sessions.forEach { s ->
             if (AndroidLanguages.get(s.languageID) == null) throw ArchiveError.UNSUPPORTED_LANGUAGE
             if (!validUUID(s.id) || !s.voiceSeconds.isFinite() || s.voiceSeconds !in 0.0..31536000.0 || listOf(s.inputTokens,s.outputTokens,s.searchCalls).any { it !in 0..1_000_000_000 } || !validDate(s.startedAt) || s.endedAt?.let { !validDate(it) } == true) throw ArchiveError.INVALID
