@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] Kokoro 82M and PocketTTS 100M can be downloaded and deleted through the same Advanced catalogue experience
 - [ ] The learner picks the teacher voice per learning language; platform text-to-speech remains the default until picked
@@ -16,3 +16,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/10-open-weight-voices`, branch `ticket/10-open-weight-voices`, base `feature/on-device-model` @ 7b74825.
+- 2026-11-27: Done. Ticket branch `cf54ca9`, merged into `feature/on-device-model` as `286741f`. Kokoro 82M and PocketTTS 100M open-weight teacher voices via MediaPipe `TextToSpeech`, per-language persistence, variety honesty (`pt-PT`), and automatic start + mid-sentence fallback to platform TTS.
