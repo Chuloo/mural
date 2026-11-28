@@ -16,6 +16,12 @@
     <string name="settings_on_device_speech_input_footer">Tu voz se convierte en subtítulos de todas formas. El audio nativo del modelo no necesita descarga; un modelo de reconocimiento de voz transcribe tu voz en este teléfono en su lugar.</string>
     <string name="settings_on_device_speech_input_choice">Entrada de voz del alumno</string>
     <string name="settings_on_device_speech_native">Audio nativo del modelo</string>
+    <string name="settings_on_device_teacher_voice">Voz del profesor</string>
+    <string name="settings_on_device_teacher_voice_footer">Tu profesor habla con la voz integrada de tu teléfono hasta que eliges una voz de pesos abiertos para un idioma. Una voz elegida que falta o que falla vuelve a la voz integrada a mitad de la conversación, así que nada queda en silencio.</string>
+    <string name="settings_on_device_voice_platform">Voz integrada del teléfono</string>
+    <string name="settings_on_device_voice_kokoro_option">Kokoro 82M — portugués, francés, italiano, chino mandarín, japonés, español, inglés</string>
+    <string name="settings_on_device_voice_pocket_option">PocketTTS 100M — francés, italiano, portugués, alemán, neerlandés, español, inglés</string>
+    <string name="settings_on_device_voice_variety_note">Las voces de pesos abiertos en portugués hablan con pronunciación brasileña.</string>
     <string name="settings_on_device_download">Descargar</string>
     <string name="settings_on_device_cancel_download">Cancelar la descarga</string>
     <string name="settings_on_device_downloading_percent">Descargando %1$d%%</string>
@@ -56,6 +62,10 @@
     <string name="settings_on_device_model_gemini_nano_description">El modelo del sistema de tu teléfono: nada que descargar y nada que eliminar. Elígelo y conversa en este teléfono de inmediato.</string>
     <string name="settings_on_device_model_parakeet">Parakeet TDT 0.6B</string>
     <string name="settings_on_device_model_parakeet_description">Un modelo dedicado de reconocimiento de voz: escucha el portugués europeo, el francés y el italiano, además del español, el alemán, el neerlandés, el griego, el ruso y el inglés. Necesita un teléfono con 4 GB de memoria.</string>
+    <string name="settings_on_device_model_kokoro">Kokoro 82M</string>
+    <string name="settings_on_device_model_kokoro_description">Una voz de profesor de pesos abiertos: habla portugués, francés, italiano, chino mandarín, japonés, español e inglés. Necesita un teléfono con 4 GB de memoria.</string>
+    <string name="settings_on_device_model_pocket_tts">PocketTTS 100M</string>
+    <string name="settings_on_device_model_pocket_tts_description">Una voz de profesor de pesos abiertos: habla francés, italiano, portugués, alemán, neerlandés, español e inglés. Necesita un teléfono con 4 GB de memoria.</string>
     <string name="settings_on_device_no_download">Sin descarga</string>
     <string name="error_on_device_aicore_unavailable">Gemini Nano no está disponible en este teléfono en este momento. Inténtalo más tarde o elige un modelo para descargar.</string>
     <string name="error_topic_offline">Encontrar un tema actual con fuentes necesita internet. Tu conversación en el dispositivo sigue sin conexión: elige otro tema o inténtalo de nuevo con conexión.</string>

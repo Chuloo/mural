@@ -232,8 +232,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private fun onDeviceChanged(next: OnDeviceReadiness) {
         if (next.failure != null && next.failure != onDeviceReadiness.failure) presentError(next.failure)
         onDeviceReadiness = next; onDeviceStoredModels = onDeviceModels.stored()
-        // Deleting the speech recognition alternate puts the learner back on native audio input.
+        // Deleting the speech recognition alternate puts the learner back on native audio input, and
+        // deleting a voice model puts its languages back on the phone's built-in voice.
         onDeviceSpeechInput = onDeviceModels.speechInputEngine()
+        onDeviceTeacherVoices = onDeviceModels.teacherVoices()
     }
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
     private val onDeviceTeaching = OnDeviceTeachingClient(onDeviceModels.turn) { language.lookupUnavailableReply }
@@ -245,6 +247,16 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** Chooses it; a running conversation keeps the microphone it opened with. */
     fun selectOnDeviceSpeechInput(engine: SpeechInputEngine) {
         if (!isRunning) onDeviceModels.selectSpeechInput(engine)
+    }
+    /**
+     * The teacher voice of every Language Module on this phone. A language the learner never picked
+     * one for speaks with the phone's built-in voice, which is also what a picked voice that is
+     * missing, deleted or unsupported for that language falls back to.
+     */
+    var onDeviceTeacherVoices by mutableStateOf(onDeviceModels.teacherVoices()); private set
+    /** Chooses the active Language Module's teacher voice; a running conversation keeps its voice. */
+    fun selectOnDeviceTeacherVoice(engine: TeacherVoiceEngine) {
+        if (!isRunning) onDeviceModels.selectTeacherVoice(language.id, engine)
     }
     /** Whether this phone offers the zero-download system model: the AICore device probe. */
     var onDeviceSystemModelAvailable by mutableStateOf(false); private set
@@ -953,7 +965,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val history = ConversationHistory.messages(continuing ?: session)
         startingWithHistory = history.isNotEmpty()
         val local = OnDeviceLiveSession(viewModelScope, onDeviceModels.turn,
-            onDeviceModels.speechInput(speechEngine), PlatformSpeechOutput(app),
+            onDeviceModels.speechInput(speechEngine),
+            // The teacher's voice: the learner's open-weight pick for this Language Module, or the
+            // phone's built-in voice, which a missing or failing pick falls back to sentence by sentence.
+            onDeviceModels.speechOutput(module.id, module.locale),
             // The model calls back on the engine's own thread; events land on the main one in order.
             onEvent = { event -> viewModelScope.launch { deliver(event) } },
             onLevels = ::applyLevels,

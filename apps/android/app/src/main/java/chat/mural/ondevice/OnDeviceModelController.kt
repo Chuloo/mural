@@ -87,6 +87,32 @@ class OnDeviceModelController(
             audioFallback = session != null && hearsAudio)
     }
 
+    /** The teacher voice each Language Module has on this phone: the platform voice until one is picked. */
+    fun teacherVoices(): Map<String, TeacherVoiceEngine> = store.teacherVoices()
+
+    /** Chooses a Language Module's teacher voice explicitly, and the platform voice is one tap too. */
+    fun selectTeacherVoice(languageID: String, engine: TeacherVoiceEngine) {
+        store.selectTeacherVoice(languageID, engine)
+        publish(current())
+    }
+
+    /**
+     * The teacher's voice of a voice conversation: the learner's choice for this Language Module when
+     * its model is on this phone and speaks the language, or the phone's built-in text-to-speech. An
+     * open-weight voice that fails mid-conversation falls back to the platform voice sentence by
+     * sentence, so a missing or broken pick is never an error and never silence.
+     */
+    fun speechOutput(languageID: String, locale: String): OnDeviceSpeechOutput {
+        val platform = PlatformSpeechOutput(context)
+        val chosen = store.teacherVoice(languageID)
+        val engine = TeacherVoiceSelector.resolve(chosen, voiceModelOnPhone(chosen), locale)
+        val model = OnDeviceModelCatalogue.voiceModel(engine) ?: return platform
+        val voice = TeacherVoiceSelector.voice(engine, locale) ?: return platform
+        return OpenWeightSpeechOutput(platform, voice, open = {
+            MediaPipeVoiceSynthesizer(context, File(directory, model.fileName.orEmpty()), engine.supportsGpu)
+        })
+    }
+
     /** Whether this phone offers the zero-download system model: the AICore device probe. */
     suspend fun systemModelAvailable(): Boolean = aicore.available()
 
@@ -133,14 +159,14 @@ class OnDeviceModelController(
     fun plan(model: CataloguedModel): DownloadPlan = plan(model.fileName, model.sizeBytes, model.minDeviceMemoryGb)
 
     /** Downloads a curated catalogue model. A conversation model becomes the active one; a speech
-     * recognition model lands on this phone beside it and never disturbs the active model. */
+     * recognition or voice model lands on this phone beside it and never disturbs the active model. */
     fun download(model: CataloguedModel) {
         val url = model.downloadURL
         val fileName = model.fileName
         // A zero-download Model Runtime (AICore) has neither, and downloads nothing here.
         if (url == null || fileName == null) return
         begin(url, fileName, model.sizeBytes, model.minDeviceMemoryGb,
-            activates = model !in OnDeviceModelCatalogue.speechRecognition)
+            activates = model !in OnDeviceModelCatalogue.support)
     }
 
     /** Downloads a pasted direct HTTPS `.litertlm` link through the same flow. */
@@ -169,6 +195,11 @@ class OnDeviceModelController(
             // learner's input again, exactly as an alternate that was never downloaded resolves.
             if (OnDeviceModelCatalogue.speechRecognition.any { it.fileName == name })
                 store.selectSpeechInput(SpeechInputEngine.NATIVE_AUDIO)
+            // A deleted voice model cannot stay chosen either: its languages speak with the phone's
+            // own voice again, exactly as a voice that was never downloaded resolves.
+            TeacherVoiceEngine.entries
+                .firstOrNull { OnDeviceModelCatalogue.voiceModel(it)?.fileName == name }
+                ?.let(store::clearTeacherVoice)
             publish(current())
         }
     }
@@ -237,6 +268,10 @@ class OnDeviceModelController(
     private fun speechModelFile() = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B.fileName.orEmpty()
 
     private fun speechModelOnPhone() = store.models.any { it.name == speechModelFile() }
+
+    /** Whether a teacher voice engine's model file is on this phone. */
+    private fun voiceModelOnPhone(engine: TeacherVoiceEngine) = OnDeviceModelCatalogue.voiceModel(engine)
+        ?.let { voice -> store.models.any { it.name == voice.fileName } } == true
 
     private fun partialBytes(fileName: String?) =
         fileName?.let { File(directory, it + OnDeviceModelDownloader.PARTIAL_SUFFIX).length() } ?: 0L

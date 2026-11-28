@@ -107,6 +107,57 @@ class OnDeviceModelStoreTest {
         assertEquals("gemma-4-E4B-it.litertlm", store.activeID())
     }
 
+    @Test fun theTeacherVoiceChoiceIsPerLearningLanguageAndSurvivesARestart() {
+        val saved = mutableListOf<String>()
+        val store = OnDeviceModelStore(save = { saved += it })
+        // The phone's built-in voice is the default for every Language Module until one is picked.
+        assertEquals(TeacherVoiceEngine.PLATFORM, store.teacherVoice("pt-PT"))
+        assertTrue(store.teacherVoices().isEmpty())
+
+        store.selectTeacherVoice("pt-PT", TeacherVoiceEngine.KOKORO_82M)
+        store.selectTeacherVoice("fr", TeacherVoiceEngine.POCKET_TTS_100M)
+        assertEquals(TeacherVoiceEngine.KOKORO_82M, store.teacherVoice("pt-PT"))
+        assertEquals(TeacherVoiceEngine.POCKET_TTS_100M, store.teacherVoice("fr"))
+        // Another language keeps the default: the choice is per Language Module, never global.
+        assertEquals(TeacherVoiceEngine.PLATFORM, store.teacherVoice("es"))
+        assertEquals(mapOf("pt-PT" to TeacherVoiceEngine.KOKORO_82M, "fr" to TeacherVoiceEngine.POCKET_TTS_100M),
+            store.teacherVoices())
+
+        val restored = OnDeviceModelStore(saved.last(), save = { saved += it })
+        assertEquals(TeacherVoiceEngine.KOKORO_82M, restored.teacherVoice("pt-PT"))
+        assertEquals(TeacherVoiceEngine.POCKET_TTS_100M, restored.teacherVoice("fr"))
+
+        // A voice model lands on this phone beside the active conversation model, never on top of it,
+        // and picking a voice never changes the active model either.
+        val conversation = restored.import("gemma-4-E4B-it.litertlm", 3_659_530_240L)
+        restored.import("kokoro_int8_gpu_fp16.litertlm", 294_750_530L, makeActive = false)
+        assertEquals(conversation, restored.active())
+        assertEquals(conversation.name, restored.activeID())
+
+        // Deleting a voice model clears every choice that pointed at it, so those languages speak
+        // with the phone's built-in voice again, while a choice of the other model stays.
+        restored.clearTeacherVoice(TeacherVoiceEngine.KOKORO_82M)
+        assertEquals(TeacherVoiceEngine.PLATFORM, restored.teacherVoice("pt-PT"))
+        assertEquals(TeacherVoiceEngine.POCKET_TTS_100M, restored.teacherVoice("fr"))
+        assertEquals(TeacherVoiceEngine.PLATFORM, OnDeviceModelStore(saved.last()).teacherVoice("pt-PT"))
+
+        // Switching back to the built-in voice is one explicit choice, and it persists too.
+        restored.selectTeacherVoice("fr", TeacherVoiceEngine.PLATFORM)
+        assertEquals(TeacherVoiceEngine.PLATFORM, OnDeviceModelStore(saved.last()).teacherVoice("fr"))
+    }
+
+    @Test fun aRecordWrittenBeforeTheTeacherVoiceChoiceExistedKeepsThePlatformDefault() {
+        val legacy = """{"models":[{"name":"gemma-4-E4B-it.litertlm","sizeBytes":1,"importedAt":1.0}],"active":"gemma-4-E4B-it.litertlm","speechInput":"PARAKEET"}"""
+        val store = OnDeviceModelStore(legacy)
+        assertEquals(SpeechInputEngine.PARAKEET, store.speechInput())
+        assertEquals(TeacherVoiceEngine.PLATFORM, store.teacherVoice("es"))
+        assertEquals("gemma-4-E4B-it.litertlm", store.activeID())
+        // A voice engine this build does not know resolves to the built-in voice, never to a guess.
+        val later = OnDeviceModelStore("""{"teacherVoices":{"es":"PHONON_31M"}}""")
+        assertEquals(TeacherVoiceEngine.PLATFORM, later.teacherVoice("es"))
+        assertTrue(later.teacherVoices().isEmpty())
+    }
+
     @Test fun onlyASafeLitertlmFileNameIsAcceptedFromTheDocumentPicker() {
         assertEquals("gemma-4-e4b.litertlm", OnDeviceModelStore.fileName("Downloads/gemma-4-e4b.litertlm"))
         assertEquals("gemma-4-e4b.litertlm", OnDeviceModelStore.fileName("..\\..\\gemma-4-e4b.litertlm"))

@@ -80,6 +80,8 @@ import chat.mural.ondevice.CataloguedModel
 import chat.mural.ondevice.OnDeviceModel
 import chat.mural.ondevice.OnDeviceModelCatalogue
 import chat.mural.ondevice.SpeechInputEngine
+import chat.mural.ondevice.TeacherVoiceEngine
+import chat.mural.ondevice.TeacherVoiceSelector
 import kotlinx.coroutines.launch
 
 @Composable
@@ -307,14 +309,16 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     val readiness = vm.onDeviceReadiness
                     val download = readiness.download
                     val catalogue = OnDeviceModelCatalogue.conversation
-                    val speech = OnDeviceModelCatalogue.speechRecognition
+                    // Curated models that are never the active conversation model: speech input and voices.
+                    val support = OnDeviceModelCatalogue.support
                     val alternate = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B
+                    val voices = OnDeviceModelCatalogue.voiceSynthesis
                     val system = OnDeviceModelCatalogue.GEMINI_NANO_AICORE
                     val stored = vm.onDeviceStoredModels
                     // A pasted link's download is only on the phone once it lands, so it gets a row of its own.
                     val inFlight = download?.takeIf { progress ->
                         catalogue.none { it.fileName == progress.fileName } &&
-                            speech.none { it.fileName == progress.fileName } &&
+                            support.none { it.fileName == progress.fileName } &&
                             stored.none { it.name == progress.fileName }
                     }?.let { OnDeviceModel(it.fileName, it.totalBytes) }
                     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
@@ -362,7 +366,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                             }
                         }
                         val own = stored.filterNot { file ->
-                            (catalogue + speech).any { it.fileName == file.name }
+                            (catalogue + support).any { it.fileName == file.name }
                         } + listOfNotNull(inFlight)
                         if (own.isNotEmpty()) SettingsGroup(stringResource(R.string.settings_on_device_stored_group)) {
                             own.forEachIndexed { index, file ->
@@ -408,6 +412,48 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                 onCancel = vm::cancelOnDeviceDownload,
                                 onDelete = onPhone?.let { file -> { deleteModel = file } },
                                 tag = "on-device-speech-model-${alternate.id}")
+                        }
+                        // The teacher's voice: the phone's own text-to-speech, or an open-weight voice
+                        // picked per language and downloaded and deleted right here.
+                        val module = vm.language
+                        val teacherVoice = vm.onDeviceTeacherVoices[module.id] ?: TeacherVoiceEngine.PLATFORM
+                        SettingsGroup(stringResource(R.string.settings_on_device_teacher_voice),
+                            stringResource(R.string.settings_on_device_teacher_voice_footer)) {
+                            SettingsChoiceRow(module.settingsTitle,
+                                OnDeviceModelCatalogue.voiceModel(teacherVoice)?.let { stringResource(it.title) }
+                                    ?: stringResource(R.string.settings_on_device_voice_platform),
+                                teacherVoice.name,
+                                listOf(TeacherVoiceEngine.PLATFORM.name to
+                                    stringResource(R.string.settings_on_device_voice_platform),
+                                    TeacherVoiceEngine.KOKORO_82M.name to
+                                    stringResource(R.string.settings_on_device_voice_kokoro_option),
+                                    TeacherVoiceEngine.POCKET_TTS_100M.name to
+                                    stringResource(R.string.settings_on_device_voice_pocket_option)),
+                                "on-device-teacher-voice", !vm.isRunning,
+                                { vm.selectOnDeviceTeacherVoice(TeacherVoiceEngine.valueOf(it)) })
+                            // No open-weight voice speaks European Portuguese: say so, never promise it.
+                            if (TeacherVoiceSelector.speaksAnotherVariety(module.locale))
+                                Text(stringResource(R.string.settings_on_device_voice_variety_note),
+                                    style = MaterialTheme.typography.bodySmall, color = MuralColors.Secondary,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                        .testTag("on-device-voice-variety-note"))
+                            voices.forEach { voice ->
+                                SettingsDivider()
+                                val voiceOnPhone = stored.firstOrNull { it.name == voice.fileName }
+                                OnDeviceModelRow(title = stringResource(voice.title),
+                                    detail = stringResource(voice.description),
+                                    status = if (voiceOnPhone != null)
+                                        stringResource(R.string.settings_on_device_downloaded_badge)
+                                    else Formatter.formatFileSize(context, voice.sizeBytes),
+                                    download = download?.takeIf { it.fileName == voice.fileName },
+                                    enabled = !vm.isRunning && download == null,
+                                    // The choice row above picks the voice: a voice model only downloads here.
+                                    action = if (voiceOnPhone != null) null else R.string.settings_on_device_download,
+                                    onAction = { pendingDownload = voice },
+                                    onCancel = vm::cancelOnDeviceDownload,
+                                    onDelete = voiceOnPhone?.let { file -> { deleteModel = file } },
+                                    tag = "on-device-voice-model-${voice.id}")
+                            }
                         }
                         SettingsGroup {
                             SettingsRow(stringResource(R.string.settings_on_device_link), chevron = true,
@@ -549,7 +595,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
     if (modelLink) OnDeviceLinkDialog(enabled = !vm.isRunning && vm.onDeviceReadiness.download == null,
         onDismiss = { modelLink = false }, onDownload = { modelLink = false; vm.downloadOnDeviceModelURL(it) })
     deleteModel?.let { file ->
-        val curated = (OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.speechRecognition)
+        val curated = (OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.support)
             .firstOrNull { it.fileName == file.name }
         ConfirmDialog(
             stringResource(R.string.settings_on_device_delete_confirm_title,

@@ -5,6 +5,7 @@ import chat.mural.core.Fragment
 import chat.mural.core.ON_DEVICE_PROVIDER_ID
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
+import java.util.concurrent.Executor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
@@ -74,16 +75,38 @@ class OnDeviceLiveSessionTest {
         override fun close() { closed = true }
     }
 
+    /** One open-weight teacher voice that fails on a scripted sentence, to drive the fallback. */
+    private class FakeVoiceModel(private val failsOn: Int) : VoiceSynthesizer {
+        val sentences = mutableListOf<String>()
+        var stopped = 0
+        var closed = false
+        override val level get() = 0.5
+        override fun synthesize(sentence: String, voice: TeacherVoice): Boolean {
+            sentences += sentence
+            if (sentences.size == failsOn) throw ModelRuntimeException("The voice model failed")
+            return true
+        }
+        override fun stop() { stopped++ }
+        override fun close() { closed = true }
+    }
+
     private fun TestScope.conversation(
         runtime: ScriptedModelRuntime,
         turns: List<SpeechTurn> = emptyList(),
         hangingTurns: Boolean = false,
         /** Transcribes every recorded clip, so the alternate drives the session instead of native audio input. */
         heardByAlternate: String? = null,
+        /** Speaks every sentence with an open-weight voice instead of the platform voice alone. */
+        teacherVoice: VoiceSynthesizer? = null,
         onDeliver: (SpeechTurn) -> Unit = {},
     ): OnDeviceLiveSession {
         input = FakeSpeechInput(turns, onDeliver)
         output = FakeSpeechOutput(log)
+        // An open-weight teacher voice speaks over the same fake platform voice it falls back to.
+        val voice: OnDeviceSpeechOutput = teacherVoice?.let { model ->
+            OpenWeightSpeechOutput(output, TeacherVoice("pf_dora", "pt-BR"), open = { model },
+                worker = Executor { task -> task.run() })
+        } ?: output
         val microphone: OnDeviceSpeechInput = heardByAlternate?.let { text ->
             ParakeetSpeechInput(input, open = { object : SpeechTranscriber {
                 override fun transcribe(samples: FloatArray) = text
@@ -101,7 +124,7 @@ class OnDeviceLiveSessionTest {
                 reply
             },
             input = microphone,
-            output = output,
+            output = voice,
             onEvent = { events += it },
             onLevels = { microphone, voice -> levels += microphone to voice },
             onFailure = { failures += it },
@@ -418,5 +441,45 @@ class OnDeviceLiveSessionTest {
         session.command("instructions", "Greet the learner.")
         settle()
         assertEquals("Teach Spanish.\n" + OnDeviceHeardCaption.rule, runtime.requests.single().systemPrompt)
+    }
+
+    @Test fun anOpenWeightTeacherVoiceSpeaksTheReplyAndAFailingSentenceFallsBackToThePlatformVoice() = runTest {
+        val runtime = ScriptedModelRuntime(ScriptedReply("Olá! ", "Tudo bem? ", "Vamos falar."))
+        val voiceModel = FakeVoiceModel(failsOn = 2)
+        val session = conversation(runtime, teacherVoice = voiceModel)
+        session.start("Teach Portuguese.", "pt-PT", nativeAudioInput = true)
+        settle()
+
+        session.command("instructions", "Greet the learner in Portuguese.")
+        settle()
+
+        // The open-weight voice speaks what it can, and the phone's own voice speaks the sentence it
+        // failed on and every one after it: no error, no silence, and no caption lost to the fallback.
+        assertEquals(listOf("Olá!", "Tudo bem?"), voiceModel.sentences)
+        assertEquals(listOf("Tudo bem?", "Vamos falar."), output.spoken)
+        assertEquals(listOf("Olá!", "Tudo bem?", "Vamos falar."), events.captions)
+        assertTrue(failures.isEmpty())
+        // A model that failed is released, and the conversation carries on without it.
+        assertTrue(voiceModel.closed)
+    }
+
+    @Test fun closingASessionWithAnOpenWeightVoiceReleasesTheVoiceModelAndThePlatformVoice() = runTest {
+        val voiceModel = FakeVoiceModel(failsOn = 0)
+        val session = conversation(ScriptedModelRuntime(ScriptedReply("Olá!")), teacherVoice = voiceModel)
+        session.start("Teach Portuguese.", "pt-PT", nativeAudioInput = true)
+        settle()
+        session.command("instructions", "Greet the learner.")
+        settle()
+        assertEquals(listOf("Olá!"), voiceModel.sentences)
+        assertTrue(output.spoken.isEmpty())
+
+        session.close()
+        settle()
+
+        // A session stops its voice and then closes it, and both reach the model and the platform voice.
+        assertEquals(2, voiceModel.stopped)
+        assertTrue(voiceModel.closed)
+        assertTrue(output.closed)
+        assertEquals(2, output.stopped)
     }
 }

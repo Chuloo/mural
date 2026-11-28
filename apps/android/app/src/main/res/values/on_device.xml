@@ -16,6 +16,12 @@
     <string name="settings_on_device_speech_input_footer">Your speech becomes captions either way. Model native audio needs no download; a speech recognition model transcribes your speech on this phone instead.</string>
     <string name="settings_on_device_speech_input_choice">Learner speech input</string>
     <string name="settings_on_device_speech_native">Model native audio</string>
+    <string name="settings_on_device_teacher_voice">Teacher voice</string>
+    <string name="settings_on_device_teacher_voice_footer">Your teacher speaks with your phone\'s built-in voice until you pick an open-weight voice for a language. A picked voice that is missing or fails falls back to the built-in voice mid-conversation, so nothing goes silent.</string>
+    <string name="settings_on_device_voice_platform">Phone built-in voice</string>
+    <string name="settings_on_device_voice_kokoro_option">Kokoro 82M — Portuguese, French, Italian, Mandarin, Japanese, Spanish, English</string>
+    <string name="settings_on_device_voice_pocket_option">PocketTTS 100M — French, Italian, Portuguese, German, Dutch, Spanish, English</string>
+    <string name="settings_on_device_voice_variety_note">Open-weight Portuguese voices speak with Brazilian pronunciation.</string>
     <string name="settings_on_device_download">Download</string>
     <string name="settings_on_device_cancel_download">Cancel download</string>
     <string name="settings_on_device_downloading_percent">Downloading %1$d%%</string>
@@ -56,6 +62,10 @@
     <string name="settings_on_device_model_gemini_nano_description">Your phone\'s own system model: nothing to download and nothing to delete. Pick it and converse on this phone right away.</string>
     <string name="settings_on_device_model_parakeet">Parakeet TDT 0.6B</string>
     <string name="settings_on_device_model_parakeet_description">A dedicated speech recognition model: it hears European Portuguese, French and Italian, plus Spanish, German, Dutch, Greek, Russian and English. Needs a phone with 4 GB of memory.</string>
+    <string name="settings_on_device_model_kokoro">Kokoro 82M</string>
+    <string name="settings_on_device_model_kokoro_description">An open-weight teacher voice: it speaks Portuguese, French, Italian, Mandarin, Japanese, Spanish and English. Needs a phone with 4 GB of memory.</string>
+    <string name="settings_on_device_model_pocket_tts">PocketTTS 100M</string>
+    <string name="settings_on_device_model_pocket_tts_description">An open-weight teacher voice: it speaks French, Italian, Portuguese, German, Dutch, Spanish and English. Needs a phone with 4 GB of memory.</string>
     <string name="settings_on_device_no_download">No download</string>
     <string name="error_on_device_aicore_unavailable">Gemini Nano is unavailable on this phone right now. Try again later, or pick a downloadable model.</string>
     <string name="error_topic_offline">Finding a sourced current topic needs the internet. Your on-device conversation stays offline: pick another topic, or try again with a connection.</string>
