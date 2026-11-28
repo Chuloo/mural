@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A written egress inventory lands in the verification documentation: every outbound network path in the app, categorized as user-initiated functional (sign-in, minutes/purchases, hosted conversation setup) or automatic, with the automatic ones removed or gated — the AI report is no longer server traffic at all, since reports are now stored offline
 - [ ] Automatic calls are removed or gated: hosted readiness refreshes and any startup/diagnostic probes run only while the learner has chosen a cloud provider for that action, never in the background on their own, and never while On-Device Model is the active provider
@@ -16,3 +16,8 @@
 - [ ] The inventory and this ticket's outcome are recorded in the verification documentation with the standard handover note (no server deployment required)
 
 **Out of scope (do not remove):** user-initiated functional traffic the learner explicitly asked for — account sign-in, minute balance checks on demand, purchases, and hosted conversation setup while a cloud provider is chosen. The distinction is consent: the app may ask a server only when the learner's action requires that server, never on its own.
+
+## Comments
+
+- 2026-11-28: Claimed. Worktree `../mural-worktrees/18-zero-server-telemetry`, branch `ticket/18-zero-server-telemetry`, base `feature/on-device-model` @ 9d0c962.
+- 2026-11-28: Done. Ticket branch `55f3d27`, merged into `feature/on-device-model` as `f41bec7`. Egress inventory in verification/zero-server-telemetry.md; automatic probes gated on provider choice; AI reports stored offline in the archive (backup-exportable), ReportClient and server feedback routes removed (retention kept). Checks on the merged branch: 605 JVM tests incl. OnDeviceZeroEgressTest, lint, API tsc + 519/519 tests — all pass. Human decisions pending: (1) transitive Google DataTransport/CCT via ML Kit/MediaPipe — removal snippet documented, needs the §2.10 device byte-measurement first; (2) production still serves the removed report routes until the next deploy; (3) release/privacy/Data-safety text still describes server-side reports. Instrumented OnDeviceZeroNetworkTest written and compiled, not run (no device).
