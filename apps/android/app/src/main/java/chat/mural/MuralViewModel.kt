@@ -1331,7 +1331,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val current = session ?: return
         val passage = current.passages.lastOrNull { it.speaker == Speaker.assistant } ?: return
         val request = MeaningRequest(current.id, passage, current.languageID, archive.preferences.meaningLanguage)
-        meanings.update(request, current.translations[request.cacheKey], utteranceComplete, conversationEnded = state == "ended")
+        // An On-Device Model voice reply speaks one fragment per sentence chunk, so its meaning keeps
+        // pace with the speech. Cloud providers and a typed conversation keep the paced whole passage.
+        val spoken = if (voiceSession && current.id in onDeviceSessionIDs) passage.fragments.map { it.text } else emptyList()
+        meanings.update(request, current.translations[request.cacheKey], utteranceComplete,
+            conversationEnded = state == "ended", sentences = spoken)
     }
     fun retryMeaning() { scheduleTranslation(); meanings.retry() }
     private fun checkLanguage() {
