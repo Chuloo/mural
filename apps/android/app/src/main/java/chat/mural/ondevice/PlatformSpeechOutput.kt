@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import chat.mural.core.ApproximateVoicePolicy
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -20,6 +21,8 @@ class PlatformSpeechOutput(context: Context) : OnDeviceSpeechOutput {
     private var ready = false
     private var unavailable = false
     private var appliedLocale: Locale? = null
+    /** The tags this engine's voices report, cached once, so a wanted voice can fall back. */
+    private var available: Set<String> = emptySet()
     private var sequence = 0
     private val inFlight = AtomicInteger(0)
 
@@ -88,6 +91,8 @@ class PlatformSpeechOutput(context: Context) : OnDeviceSpeechOutput {
         if (status != TextToSpeech.SUCCESS) { unavailable = true; pending.clear(); return }
         created.setOnUtteranceProgressListener(progress)
         ready = true
+        available = runCatching { created.voices?.map { it.locale.toLanguageTag() }.orEmpty() }
+            .getOrDefault(emptyList()).toSet()
         val waiting = pending.toList()
         pending.clear()
         waiting.forEach { speakNow(it) }
@@ -95,7 +100,9 @@ class PlatformSpeechOutput(context: Context) : OnDeviceSpeechOutput {
 
     private fun speakNow(sentence: Sentence) {
         val created = engine ?: return
-        val locale = localeFor(sentence.locale)
+        // Resolve the wanted tag against this phone's voices; null means keep the sentence's own,
+        // so a phone without the stand-in voice still speaks rather than erroring.
+        val locale = localeFor(ApproximateVoicePolicy.localeTag(sentence.locale, available) ?: sentence.locale)
         // A missing language pack must not silence the teacher: the engine's own voice still speaks.
         if (locale != appliedLocale) { runCatching { created.setLanguage(locale) }; appliedLocale = locale }
         val utteranceID = "mural-${sequence++}"

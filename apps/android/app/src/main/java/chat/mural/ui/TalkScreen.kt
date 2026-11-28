@@ -162,7 +162,7 @@ fun TalkScreen(
             val status = if (vm.hasContinuation) {
                 stringResource(if (vm.continuationReady) R.string.talk_status_continue_ready
                     else if (vm.continuationNeedsMinutes) R.string.talk_status_continue_saved else R.string.talk_status_continue_settling)
-            } else statusText(vm.state, vm.isMuted, vm.isVoiceSession, vm.inactivitySeconds)
+            } else statusText(vm.state, vm.isMuted, vm.isVoiceSession, vm.speaksApproximateVoice, vm.inactivitySeconds)
             val statusCaption = buildAnnotatedString {
                 if (vm.inactivitySeconds != null) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")) { append(status.substringBefore('\n')) }
@@ -475,9 +475,10 @@ internal fun TypedReplySheet(languageName: String, working: Boolean, onSend: (St
 
 
 @Composable
-private fun statusText(state: String, muted: Boolean, voice: Boolean, inactivitySeconds: Int? = null) = when (state) {
+private fun statusText(state: String, muted: Boolean, voice: Boolean, approximate: Boolean, inactivitySeconds: Int? = null) = when (state) {
     "connecting" -> stringResource(R.string.talk_status_connecting)
-    "active" -> if (inactivitySeconds != null && voice) stringResource(R.string.talk_inactivity_warning, inactivitySeconds) else if (!voice) stringResource(R.string.talk_status_written) else if (muted) stringResource(R.string.talk_status_muted) else stringResource(R.string.talk_status_listening)
+    // A Typed-only Module's teacher is read aloud by a stand-in voice: say which voice that is.
+    "active" -> if (inactivitySeconds != null && voice) stringResource(R.string.talk_inactivity_warning, inactivitySeconds) else if (!voice) stringResource(if (approximate) R.string.talk_status_written_approximate else R.string.talk_status_written) else if (muted) stringResource(R.string.talk_status_muted) else stringResource(R.string.talk_status_listening)
     "closing" -> stringResource(R.string.talk_status_closing)
     "ended" -> stringResource(R.string.talk_status_ended)
     "failed" -> stringResource(R.string.talk_status_failed)

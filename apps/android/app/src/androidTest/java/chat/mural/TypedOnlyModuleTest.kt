@@ -1,18 +1,21 @@
 package chat.mural
 
+import android.content.Context
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import chat.mural.core.*
+import chat.mural.ondevice.OnDeviceSpeechOutput
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
 
 /**
- * A Typed-only Module (Roman Konkani) offers no voice on any Conversation Provider: no microphone,
- * no listening or mute state, and typing is the complete conversation. Choosing another Language
- * Module brings voice back.
+ * A Typed-only Module (Roman Konkani) offers the learner no voice on any Conversation Provider: no
+ * microphone, no listening or mute state, and typing is the learner's whole conversation. Choosing
+ * another Language Module brings voice back. The teacher's side may be read aloud through an
+ * opt-in Approximate Voice where a module has one — Jamaican Patois does, Roman Konkani does not.
  */
 @RunWith(AndroidJUnit4::class)
 class TypedOnlyModuleTest {
@@ -41,6 +44,24 @@ class TypedOnlyModuleTest {
             val restored = ArchiveCodec.decode(original); state("archive", restored)
             vm.updatePreferences(restored.preferences)
         }
+        // The Approximate Voice opt-in is persisted, so it must not leak into the next test's VM.
+        compose.activity.getSharedPreferences("mural_conversation_providers", Context.MODE_PRIVATE)
+            .edit().putBoolean("approximate_voice", false).commit()
+    }
+
+    /** Stands in for the phone's engine, so a spoken teacher is silent and deterministic here. */
+    private class FakeApproximateVoice : OnDeviceSpeechOutput {
+        val spoken = mutableListOf<Pair<String, String>>()
+        override val speaking = false
+        override val level = 0.0
+        override fun speak(sentence: String, locale: String, queueAdd: Boolean) { spoken += sentence to locale }
+        override fun stop() = Unit
+        override fun close() = Unit
+    }
+
+    /** Sets a plain VM field — [state] targets the `by mutableStateOf` delegates instead. */
+    private fun field(name: String, value: Any?) {
+        MuralViewModel::class.java.getDeclaredField(name).apply { isAccessible = true }.set(vm, value)
     }
 
     @Suppress("UNCHECKED_CAST") private fun state(name: String, value: Any?) {
@@ -141,5 +162,57 @@ class TypedOnlyModuleTest {
                 }
             }
         }
+    }
+
+    /** The Approximate Voice reads the teacher, never the learner: the microphone stays absent. */
+    @Test fun anApproximateVoiceReadsThePatwaTeacherAloudAndStillOffersNoMicrophoneOnAnyProvider() {
+        compose.runOnIdle { vm.selectLanguage("jam"); vm.setApproximateVoice(true) }
+        for (provider in ConversationProvider.entries) {
+            compose.runOnIdle { state("conversationProvider", provider); vm.start() }
+            compose.onNodeWithTag("start-conversation").assertDoesNotExist()
+            compose.onNodeWithContentDescription(compose.activity.getString(R.string.talk_mic_start_desc)).assertDoesNotExist()
+            compose.onNodeWithTag("talk-type-button").assertIsDisplayed()
+            // Talk keeps its idle home screen: the approximation is named once a conversation runs.
+            compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_idle))
+            compose.runOnIdle {
+                assertTrue(provider.name, vm.speaksApproximateVoice)
+                assertFalse(provider.name, vm.isVoiceSession)
+                assertEquals(provider.name, "idle", vm.state)
+                assertNull(provider.name, vm.session)
+                assertNull(provider.name, vm.error)
+            }
+        }
+        compose.runOnIdle {
+            state("conversationProvider", ConversationProvider.PERSONAL_KEY)
+            state("session", SessionRecord(languageID = "jam"))
+            state("state", "active")
+        }
+        compose.onNodeWithTag("conversation-status")
+            .assertTextEquals(compose.activity.getString(R.string.talk_status_written_approximate))
+        compose.onNodeWithTag("start-conversation").assertDoesNotExist()
+        compose.onNodeWithTag("talk-type-button").assertIsDisplayed()
+        // Injected before anything is spoken, so no real TextToSpeech engine is ever constructed.
+        val patwa = FakeApproximateVoice()
+        compose.runOnIdle {
+            field("approximateOutput", patwa)
+            vm.speakApproximateVoice("Wah gwaan! Mi a-go a di market. Di pikni dem a play.")
+        }
+        assertEquals(listOf("Wah gwaan!", "Mi a-go a di market.", "Di pikni dem a play."), patwa.spoken.map { it.first })
+        assertEquals(listOf("en-JM", "en-JM", "en-JM"), patwa.spoken.map { it.second })
+        // Roman Konkani is unchanged: the opt-in persists, but no stand-in voice exists for it.
+        compose.runOnIdle { state("state", "idle"); vm.resetConversation(); vm.selectLanguage("kok-Latn") }
+        compose.runOnIdle {
+            assertTrue(vm.approximateVoice)
+            assertFalse(vm.speaksApproximateVoice)
+            state("session", SessionRecord(languageID = "kok-Latn")); state("state", "active")
+        }
+        compose.onNodeWithTag("conversation-status").assertTextEquals(compose.activity.getString(R.string.talk_status_written))
+        compose.onNodeWithTag("start-conversation").assertDoesNotExist()
+        val konkani = FakeApproximateVoice()
+        compose.runOnIdle {
+            field("approximateOutput", konkani)
+            vm.speakApproximateVoice("Mhaka ek kafe zai.")
+        }
+        assertTrue(konkani.spoken.toString(), konkani.spoken.isEmpty())
     }
 }

@@ -10,17 +10,23 @@ internal class ConversationProviderStore(context: Context) {
     private val preferences = context.getSharedPreferences("mural_conversation_providers", Context.MODE_PRIVATE)
     data class Snapshot(val hostedIDs: Set<String>, val onDeviceIDs: Set<String>, val pendingOwnerID: String?, val selection: ConversationProvider,
         /** Untimed Conversation opt-in. Local only: it never joins the exported archive. */
-        val untimedOnDevice: Boolean = false)
+        val untimedOnDevice: Boolean = false,
+        /** Approximate Voice opt-in. Local only: it never joins the exported archive. */
+        val approximateVoice: Boolean = false)
     suspend fun read(defaultSelection: ConversationProvider = ConversationProvider.PERSONAL_KEY) = withContext(Dispatchers.IO) {
         Snapshot(preferences.getStringSet("hosted", emptySet())?.toSet().orEmpty(),
             preferences.getStringSet("on_device", emptySet())?.toSet().orEmpty(),
             preferences.getString("pending_owner", null),
             runCatching { ConversationProvider.valueOf(preferences.getString("selection", null).orEmpty()) }
                 .getOrDefault(defaultSelection),
-            preferences.getBoolean("untimed_on_device", false))
+            preferences.getBoolean("untimed_on_device", false),
+            preferences.getBoolean("approximate_voice", false))
     }
     suspend fun setUntimedOnDevice(enabled: Boolean) = withContext(Dispatchers.IO) {
         check(preferences.edit().putBoolean("untimed_on_device", enabled).commit())
+    }
+    suspend fun setApproximateVoice(enabled: Boolean) = withContext(Dispatchers.IO) {
+        check(preferences.edit().putBoolean("approximate_voice", enabled).commit())
     }
     suspend fun markHosted(localID: String, ownerID: String) = withContext(Dispatchers.IO) {
         val ids = preferences.getStringSet("hosted", emptySet()).orEmpty() + localID

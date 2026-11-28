@@ -285,6 +285,13 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** Untimed Conversation opt-in: On-Device Model sessions with no conversation-length limit. */
     private var untimedConversation by mutableStateOf(false)
     val untimedOnDevice get() = untimedConversation
+    /** Approximate Voice opt-in: a Typed-only Module's teacher replies are read aloud. */
+    private var approximateVoiceEnabled by mutableStateOf(false)
+    val approximateVoice get() = approximateVoiceEnabled
+    /** True only for a module with a stand-in voice, so Roman Konkani never speaks. */
+    val speaksApproximateVoice get() = ApproximateVoicePolicy.speaks(approximateVoiceEnabled, language.id)
+    /** The platform engine, built on the first spoken reply only: most learners never opt in. */
+    private var approximateOutput: OnDeviceSpeechOutput? = null
     var providerIssue by mutableStateOf<ProviderFailureKind?>(null); private set
     var hostedReadiness by mutableStateOf(HostedReadiness()); private set
     private val readiness = HostedReadinessController(viewModelScope,
@@ -427,6 +434,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     onFailure = { presentError(getApplication<Application>().getString(R.string.error_guest_secure_storage_unavailable)) })
                 conversationProvider = providers.selection
                 untimedConversation = providers.untimedOnDevice
+                // Restored before any conversation starts, so an opt-in survives an app restart.
+                approximateVoiceEnabled = providers.approximateVoice
                 // The Model Runtime's RAM follows the explicit choice: On-Device Model loads the
                 // active model, any other provider keeps only its stored selection.
                 if (providers.selection == ConversationProvider.ON_DEVICE) onDeviceModels.ensureLoaded()
@@ -604,6 +613,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         untimedConversation = enabled
         viewModelScope.launch {
             try { providerStore.setUntimedOnDevice(enabled) }
+            catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
+        }
+    }
+    /** Turns the Approximate Voice on or off; turning it off stops a reply already being read. */
+    fun setApproximateVoice(enabled: Boolean) {
+        approximateVoiceEnabled = enabled
+        if (!enabled) stopApproximateVoice()
+        viewModelScope.launch {
+            try { providerStore.setApproximateVoice(enabled) }
             catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
         }
     }
@@ -920,6 +938,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                         it.append(Fragment(speaker = Speaker.assistant, text = result.text, startMS = offset, endMS = offset + 1))
                         addUsage(it, result.usage)
                     }
+                    // The teacher's answer is now final text: read it aloud if the learner opted in.
+                    speakApproximateVoice(result.text)
                     scheduleTranslation()
                 } catch (_: CancellationException) { }
                 catch (e: Exception) { if (token == generation) presentError(e, R.string.error_help_failed) }
@@ -1109,6 +1129,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         actionJob?.cancel(); clearLookup(); languageCheckJob?.cancel()
         delegations.values.toList().forEach { it.cancel() }; delegations.clear()
         onDeviceVoice?.close(); onDeviceVoice = null
+        stopApproximateVoice()
         transport.disconnect(); inputLevel = 0.0; outputLevel = 0.0; working = false; isMuted = false
         answering = false
         VoiceConversationService.stop(getApplication(), session?.id)
@@ -1186,6 +1207,24 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             if (output > 0.03) activity.assistantActive(activityNow())
         }
     }
+    /**
+     * The Approximate Voice: an already generated typed teacher reply is read aloud through the
+     * same output a voice conversation uses, sentence by sentence. Nothing is spoken unless the
+     * learner opted in for a module that has a stand-in voice, so the engine is created lazily.
+     */
+    // shortcut: a typed conversation holds no foreground service, so backgrounding stops the
+    // read-aloud exactly as it already ends the conversation; upgrade if learners report cut-off replies.
+    internal fun speakApproximateVoice(text: String) {
+        if (!speaksApproximateVoice) return
+        val locale = ApproximateVoicePolicy.localeTags[language.id] ?: return
+        val output = approximateOutput
+            ?: PlatformSpeechOutput(getApplication<Application>()).also { approximateOutput = it }
+        SentenceChunker.segment(text, isComplete = true).forEachIndexed { index, sentence ->
+            output.speak(sentence, locale, queueAdd = index > 0)
+        }
+    }
+    /** Silences a reply still being read — on opt-out and on [finish], which already ends the session. */
+    private fun stopApproximateVoice() { approximateOutput?.close(); approximateOutput = null }
     private fun handle(event: JsonObject) {
         if (session == null || !isRunning) return
         when (event["type"]?.jsonPrimitive?.content) {
@@ -1429,6 +1468,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     updateSession { it.append(fragment) }
                     val end = ((nowSeconds() - session!!.startedAt) * 1000).toInt().coerceAtLeast(offset + 2)
                     updateSession { it.append(Fragment(speaker = Speaker.assistant, text = result.text, startMS = end, endMS = end + 1)) }
+                    // The teacher's answer is now final text: read it aloud if the learner opted in.
+                    speakApproximateVoice(result.text)
                     scheduleTranslation()
                 }
                 typedRepliesSent++

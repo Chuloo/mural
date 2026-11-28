@@ -68,6 +68,7 @@ import androidx.compose.ui.window.DialogWindowProvider
 import chat.mural.MuralViewModel
 import chat.mural.R
 import chat.mural.core.AndroidLanguages
+import chat.mural.core.ApproximateVoicePolicy
 import chat.mural.core.DownloadProgress
 import chat.mural.core.MeaningLanguages
 import chat.mural.core.MinuteBalanceTime
@@ -239,6 +240,15 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     "settings-untimed-on-device", vm.untimedOnDevice, vm::setUntimedOnDevice)
                                 Text(stringResource(R.string.settings_on_device_untimed_note), style = MaterialTheme.typography.bodySmall,
                                     color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                            }
+                            // The Approximate Voice is Patois only: no other Language Module has a stand-in voice.
+                            if (ApproximateVoicePolicy.offered(vm.language.id)) {
+                                SettingsDivider()
+                                SettingsSwitchRow(stringResource(R.string.settings_approximate_voice),
+                                    "settings-approximate-voice", vm.approximateVoice, vm::setApproximateVoice)
+                                Text(stringResource(R.string.settings_approximate_voice_note), style = MaterialTheme.typography.bodySmall,
+                                    color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                                        .testTag("settings-approximate-voice-note"))
                             }
                             if (vm.conversationProvider == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
                                 Text(stringResource(R.string.settings_personal_key_note), style = MaterialTheme.typography.bodySmall,

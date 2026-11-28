@@ -73,6 +73,8 @@
     <string name="talk_checking">Checking that for you…</string>
     <string name="talk_meaning_label">Meaning</string>
     <string name="talk_status_written">Written conversation</string>
+    <!-- Approximate Voice: the status names the stand-in voice, so the approximation is never hidden. -->
+    <string name="talk_status_written_approximate">Written conversation · read aloud in a Jamaican English voice</string>
     <string name="talk_mic_start_desc">Start conversation</string>
     <string name="talk_mic_unmute_desc">Unmute microphone</string>
     <string name="talk_mic_mute_desc">Mute microphone</string>
@@ -179,6 +181,9 @@
     <string name="settings_openai_data_controls">AI Data Controls</string>
     <string name="settings_open_source_notices">Open-source notices</string>
     <string name="settings_data_use_footer">Audio and selected text go to OpenAI while you practise. Requests disable provider storage where supported; abuse-monitoring retention may still apply. Raw audio is not saved by Mural.</string>
+    <!-- Approximate Voice (Patois only): states plainly that an English voice reads Patwa, and that the learner is never listened to. -->
+    <string name="settings_approximate_voice">Read the teacher aloud</string>
+    <string name="settings_approximate_voice_note">No Patwa voice exists on your phone, so a Jamaican English voice reads the teacher\'s replies aloud. You still type everything, and Mural never listens to you.</string>
     <string name="settings_app_version_footer">Mural %1$s · Android</string>
     <string name="settings_open_api_keys">Manage API keys</string>
     <string name="settings_delete_key_confirm_title">Delete the saved key?</string>

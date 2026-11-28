@@ -38,6 +38,12 @@ class ConversationProviderStoreTest {
             assertTrue(ConversationProviderStore(context).read().untimedOnDevice)
             store.setUntimedOnDevice(false)
             assertFalse(ConversationProviderStore(context).read().untimedOnDevice)
+            // An Approximate Voice is opt-in too: nothing stored means a silent teacher.
+            assertFalse(ConversationProviderStore(context).read().approximateVoice)
+            store.setApproximateVoice(true)
+            assertTrue(ConversationProviderStore(context).read().approximateVoice)
+            store.setApproximateVoice(false)
+            assertFalse(ConversationProviderStore(context).read().approximateVoice)
         } finally { preferences.edit().clear().commit() }
     }
 }
