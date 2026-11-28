@@ -84,6 +84,26 @@ class ConversationProvidersTest {
         assertFalse(ConversationProviderPolicy.consumesMinutes(ConversationProvider.PERSONAL_KEY))
     }
 
+    @Test fun anUntimedConversationNeverEndsByDurationAndCloudProvidersStayTimed() {
+        val limit = 15
+        val atLimit = limit * 60.0
+        val pastLimit = atLimit + 1.0
+        // An Untimed Conversation has no conversation-length limit: only the existing idle end or
+        // manual end applies, so no duration ever ends it.
+        for (elapsed in listOf(0.0, atLimit, pastLimit, 24 * 3600.0))
+            assertFalse(ConversationProviderPolicy.endsForDuration(true, true, elapsed, limit))
+        // With the toggle off, timed On-Device Model behavior is unchanged.
+        assertFalse(ConversationProviderPolicy.endsForDuration(true, false, atLimit, limit))
+        assertTrue(ConversationProviderPolicy.endsForDuration(true, false, pastLimit, limit))
+        // The toggle reaches On-Device Model sessions only: Personal Key and Mural Minutes keep the
+        // conversation length at every duration.
+        for (untimed in listOf(false, true)) {
+            assertFalse(ConversationProviderPolicy.endsForDuration(false, untimed, atLimit, limit))
+            assertTrue(ConversationProviderPolicy.endsForDuration(false, untimed, pastLimit, limit))
+            assertTrue(ConversationProviderPolicy.endsForDuration(false, untimed, 24 * 3600.0, limit))
+        }
+    }
+
     @Test fun onDeviceProvenanceExcludesPersonalKeyAssessmentRecovery() {
         val record = SessionRecord(languageID = "es", title = "test", providerID = ON_DEVICE_PROVIDER_ID, endedAt = nowSeconds())
         record.usageFinal = true

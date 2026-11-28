@@ -213,6 +213,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private var reconciliationJob: Job? = null
     var conversationProvider by mutableStateOf(ConversationProvider.PERSONAL_KEY); private set
+    /** Untimed Conversation opt-in: On-Device Model sessions with no conversation-length limit. */
+    private var untimedConversation by mutableStateOf(false)
+    val untimedOnDevice get() = untimedConversation
     var providerIssue by mutableStateOf<ProviderFailureKind?>(null); private set
     var hostedReadiness by mutableStateOf(HostedReadiness()); private set
     private val readiness = HostedReadinessController(viewModelScope,
@@ -324,6 +327,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     clear = { owner -> clearAcknowledgedGuestMarker(owner) },
                     onFailure = { presentError(getApplication<Application>().getString(R.string.error_guest_secure_storage_unavailable)) })
                 conversationProvider = providers.selection
+                untimedConversation = providers.untimedOnDevice
                 if (providers.selection == ConversationProvider.ON_DEVICE) onDeviceModels.initialize() else onDeviceModels.refresh()
                 finalAssessmentTickets = ConversationProviderPolicy.recoveryTickets(loaded.first.finalAssessments, hostedSessionIDs, onDeviceSessionIDs)
                 hasKey = loaded.second
@@ -488,6 +492,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (provider == ConversationProvider.HOSTED_MINUTES) refreshHostedReadiness()
         if (provider == ConversationProvider.ON_DEVICE) onDeviceModels.initialize()
+    }
+    /** Turns the Untimed Conversation option on or off; it reaches On-Device Model sessions only. */
+    fun setUntimedOnDevice(enabled: Boolean) {
+        untimedConversation = enabled
+        viewModelScope.launch {
+            try { providerStore.setUntimedOnDevice(enabled) }
+            catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
+        }
     }
     /** A source preview never creates a hosted lease or changes who pays. */
     suspend fun checkHostedBalanceForSwitch(): Long? {
@@ -1099,7 +1111,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 if (current.id in hostedSessionIDs && hostedBindings.reachedDeadline(current.id)) {
                     updateSession { it.endReason = "Reserved conversation time ended" }; finish(false); break
                 }
-                if (nowSeconds() - current.startedAt > archive.preferences.sessionMinutes * 60) {
+                // An Untimed Conversation never ends here: the idle end and the manual end still do.
+                if (ConversationProviderPolicy.endsForDuration(current.id in onDeviceSessionIDs, untimedOnDevice,
+                        nowSeconds() - current.startedAt, archive.preferences.sessionMinutes)) {
                     notice = getApplication<Application>().getString(R.string.notice_time_limit_reached); end("Time limit"); break
                 }
                 inactivitySeconds = null

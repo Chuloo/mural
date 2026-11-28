@@ -234,6 +234,11 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     },
                                     enabled = !vm.isRunning, chevron = true,
                                     modifier = Modifier.testTag("advanced-on-device-models"), onClick = { page = "models" })
+                                SettingsDivider()
+                                SettingsSwitchRow(stringResource(R.string.settings_on_device_untimed),
+                                    "settings-untimed-on-device", vm.untimedOnDevice, vm::setUntimedOnDevice)
+                                Text(stringResource(R.string.settings_on_device_untimed_note), style = MaterialTheme.typography.bodySmall,
+                                    color = MuralColors.Secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                             }
                             if (vm.conversationProvider == chat.mural.core.ConversationProvider.PERSONAL_KEY) {
                                 Text(stringResource(R.string.settings_personal_key_note), style = MaterialTheme.typography.bodySmall,

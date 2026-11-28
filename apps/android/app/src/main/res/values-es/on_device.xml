@@ -5,6 +5,8 @@
     <string name="settings_on_device_none">Ningún modelo importado</string>
     <string name="settings_on_device_preparing">Preparando tu modelo…</string>
     <string name="settings_on_device_import">Importar un archivo de modelo</string>
+    <string name="settings_on_device_untimed">Conversaciones sin límite en el dispositivo</string>
+    <string name="settings_on_device_untimed_note">Tu conversación en el dispositivo continúa más allá del límite de sesión. Solo termina cuando la conversación queda en silencio o cuando la terminas tú.</string>
     <string name="settings_switch_on_device_title">¿Usar un modelo en el dispositivo?</string>
     <string name="settings_switch_on_device_note">Tu clave de API y tus minutos de Mural siguen como están. Descarga un modelo, o importa tu propio archivo .litertlm, para conversar en este teléfono.</string>
     <string name="settings_on_device_models">Modelos en el dispositivo</string>

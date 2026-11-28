@@ -32,6 +32,12 @@ class ConversationProviderStoreTest {
             assertEquals("owner", reopened.pendingOwnerID)
             store.clearPending()
             assertNull(ConversationProviderStore(context).read().pendingOwnerID)
+            // An Untimed Conversation is opt-in: nothing stored means the timed default.
+            assertFalse(ConversationProviderStore(context).read().untimedOnDevice)
+            store.setUntimedOnDevice(true)
+            assertTrue(ConversationProviderStore(context).read().untimedOnDevice)
+            store.setUntimedOnDevice(false)
+            assertFalse(ConversationProviderStore(context).read().untimedOnDevice)
         } finally { preferences.edit().clear().commit() }
     }
 }
