@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] A dedicated speech recognition model can be downloaded and deleted through the same Advanced catalogue experience
 - [ ] The learner can choose it as the speech-input engine for on-device sessions and switch back to native audio input
@@ -16,3 +16,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/09-pluggable-speech-input`, branch `ticket/09-pluggable-speech-input`, base `feature/on-device-model` @ 76bd804.
+- 2026-11-27: Done. Ticket branch `152d5de`, merged into `feature/on-device-model` as `deda7a1`. Pluggable speech-input alternate (`ParakeetSpeechInput` over MediaPipe `AudioTranscriber` + `PARAKEET_TDT_0_6B` catalogue download/delete, language coverage note incl. `pt-PT`/French/Italian, automatic fallback to native audio input, and JVM tests).

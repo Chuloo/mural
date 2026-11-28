@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] The toggle lives in Settings > Advanced next to the on-device model picker, defaults to off, and persists
 - [ ] With it on, on-device sessions never end by time: only the existing idle end or manual end apply, and no limit reason or report is triggered by duration
@@ -15,3 +15,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/08-untimed-conversations-toggle`, branch `ticket/08-untimed-conversations-toggle`, base `feature/on-device-model` @ 76bd804.
+- 2026-11-27: Done. Ticket branch `56fbdba`, merged into `feature/on-device-model` as `4dbc5cf`. Untimed on-device conversations toggle in Settings > Advanced (`ConversationProviderStore` + `ConversationProviderPolicy.endsForDuration`), leaving cloud providers and archive `Preferences` untouched.

@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** claimed
+**Status:** done
 
 - [ ] Japanese (`id = "ja"`, `locale = "ja-JP"`, `nativeName = "日本語"`, `variety = "Japan"`) is selectable in Onboarding and Settings on Android with full voice and typed support
 - [ ] Speech, writing and lemma guidance cover natural spoken Japanese, polite/plain register, Kanji + Kana orthography without spaces, and dictionary-form lemmas while preserving observed forms and quotes
@@ -16,3 +16,4 @@
 ## Comments
 
 - 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/14-japanese-language-module`, branch `ticket/14-japanese-language-module`, base `feature/on-device-model` @ 76bd804.
+- 2026-11-27: Done. Ticket branch `c154230`, merged into `feature/on-device-model` as `2003a61`. Android-scoped Japanese (`ja-JP`) Language Module, 8 localized Japanese theme overrides, `BreakIterator`-based spaceless Japanese word-tap segmentation, CJK full-width sentence chunking (`。`/`！`/`？`), and JVM + compiled androidTest coverage.
