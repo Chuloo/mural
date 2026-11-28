@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] A dedicated speech recognition model can be downloaded and deleted through the same Advanced catalogue experience
 - [ ] The learner can choose it as the speech-input engine for on-device sessions and switch back to native audio input
@@ -12,3 +12,7 @@
 - [ ] An unavailable or not-yet-downloaded alternate never blocks the native input path
 - [ ] The picker notes which languages the alternate covers (European Portuguese, French, Italian)
 - [ ] Input-engine selection and its fallback behavior are unit tested at the existing seams
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/09-pluggable-speech-input`, branch `ticket/09-pluggable-speech-input`, base `feature/on-device-model` @ 76bd804.

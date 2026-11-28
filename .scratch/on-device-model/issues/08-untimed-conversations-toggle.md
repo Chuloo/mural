@@ -4,10 +4,14 @@
 
 **Blocked by:** 07 (Local voice Talk)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The toggle lives in Settings > Advanced next to the on-device model picker, defaults to off, and persists
 - [ ] With it on, on-device sessions never end by time: only the existing idle end or manual end apply, and no limit reason or report is triggered by duration
 - [ ] With it off, timed on-device behavior is unchanged, including the standard end flow
 - [ ] The toggle affects only On-Device Model sessions; cloud providers are untouched
 - [ ] The preference and its policy are unit tested alongside the existing provider policy tests
+
+## Comments
+
+- 2026-11-27: Claimed by foreman. Worktree `../mural-worktrees/08-untimed-conversations-toggle`, branch `ticket/08-untimed-conversations-toggle`, base `feature/on-device-model` @ 76bd804.
