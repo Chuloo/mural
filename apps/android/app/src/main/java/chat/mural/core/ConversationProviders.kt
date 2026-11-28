@@ -61,6 +61,11 @@ object ConversationProviderPolicy {
     /** Only Mural Minutes move a minute balance. An On-Device Model conversation costs nothing. */
     fun consumesMinutes(choice: ConversationProvider) = choice == ConversationProvider.HOSTED_MINUTES
 
+    /** An Untimed Conversation has no conversation-length limit: duration never ends it, and only the
+     * existing idle end or manual end applies. Every cloud provider keeps its session limit. */
+    fun endsForDuration(isOnDeviceSession: Boolean, untimedOnDevice: Boolean, elapsedSeconds: Double, sessionMinutes: Int): Boolean =
+        !(isOnDeviceSession && untimedOnDevice) && elapsedSeconds > sessionMinutes * 60
+
     /** Assessment evidence keeps Session Provenance inside the unchanged `Assessment.context`: an
      * On-Device Model judgment stays distinguishable from a cloud one, in records and in backups. */
     fun assessmentContext(onDevice: Boolean, themeID: String?) =

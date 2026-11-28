@@ -5,6 +5,8 @@
     <string name="settings_on_device_none">No model imported</string>
     <string name="settings_on_device_preparing">Preparing your model…</string>
     <string name="settings_on_device_import">Import a model file</string>
+    <string name="settings_on_device_untimed">Untimed on-device conversations</string>
+    <string name="settings_on_device_untimed_note">Your on-device conversation keeps going past your session limit. It ends only when the conversation goes quiet, or when you end it.</string>
     <string name="settings_switch_on_device_title">Use an on-device model?</string>
     <string name="settings_switch_on_device_note">Your API key and your Mural minutes stay as they are. Download a model, or import your own .litertlm file, to converse on this phone.</string>
     <string name="settings_on_device_models">On-device models</string>
