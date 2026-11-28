@@ -125,13 +125,23 @@ class HostedAPIClientTest {
         }
     }
 
-    @Test fun createSendsTheEuropeanPortugueseLocaleOfTheAndroidRegistry() = runBlocking {
-        // The client admits every Android registry locale; hosted admission still needs pt-PT in
-        // `services/api/src/live-provider.ts`, which rejects locales the server does not list.
-        server.enqueue(MockResponse().setBody(created()))
-        api.createLiveSession(create.copy(language = AndroidLanguages.get("pt-PT")!!.locale))
-        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
-        assertEquals(JsonPrimitive("pt-PT"), body["language"])
+    @Test fun androidFirstVoiceLocalesAreRefusedUntilHostedAdmitsThem() = runBlocking {
+        // Portuguese (Portugal) and Japanese are Android-first Language Modules: hosted admission in
+        // `services/api/src/live-provider.ts` does not list them yet, so the client refuses them
+        // honestly instead of opening a session the server would reject mid-connection.
+        for (id in listOf("pt-PT", "ja")) {
+            val locale = AndroidLanguages.get(id)!!.locale
+            try { api.createLiveSession(create.copy(language = locale)); fail("$locale accepted") }
+            catch (_: HostedFailure.InvalidRequest) { }
+        }
+        assertEquals(0, server.requestCount)
+        // Every cross-platform registry locale the server does list is still admitted unchanged.
+        for (language in LanguageRegistry.all) {
+            server.enqueue(MockResponse().setBody(created()))
+            api.createLiveSession(create.copy(language = language.locale))
+            assertEquals(JsonPrimitive(language.locale),
+                Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject["language"])
+        }
     }
 
     @Test fun rejectsOversizedInstructionsAndMalformedOrOversizedHistoryBeforeCallingServer() = runBlocking {

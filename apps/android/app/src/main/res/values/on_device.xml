@@ -58,9 +58,9 @@
     <string name="settings_on_device_model_gemma_4_e2b">Gemma 4 E2B</string>
     <string name="settings_on_device_model_gemma_4_e2b_description">Lighter and faster than Gemma 4 E4B, and it hears your voice. Needs a phone with 8 GB of memory.</string>
     <string name="settings_on_device_model_qwen2_5_1_5b">Qwen2.5 1.5B</string>
-    <string name="settings_on_device_model_qwen2_5_1_5b_description">The smallest curated model. Typed conversations only: it cannot hear your voice. Needs a phone with 6 GB of memory.</string>
+    <string name="settings_on_device_model_qwen2_5_1_5b_description">The smallest curated model. No built-in audio input — type, or enable Parakeet speech recognition for supported languages. Needs a phone with 6 GB of memory.</string>
     <string name="settings_on_device_model_gemini_nano">Gemini Nano (System AICore)</string>
-    <string name="settings_on_device_model_gemini_nano_description">Your phone\'s own system model: nothing to download and nothing to delete. Pick it and converse on this phone right away.</string>
+    <string name="settings_on_device_model_gemini_nano_description">Your phone\'s own system model: nothing to download and nothing to delete. No built-in audio input — type, or enable Parakeet speech recognition for supported languages.</string>
     <string name="settings_on_device_model_parakeet">Parakeet TDT 0.6B</string>
     <string name="settings_on_device_model_parakeet_description">A dedicated speech recognition model: it hears European Portuguese, French and Italian, plus Spanish, German, Dutch, Greek, Russian and English. Needs a phone with 4 GB of memory.</string>
     <string name="settings_on_device_model_kokoro">Kokoro 82M</string>

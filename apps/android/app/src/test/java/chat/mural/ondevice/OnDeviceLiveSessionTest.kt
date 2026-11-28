@@ -5,7 +5,6 @@ import chat.mural.core.Fragment
 import chat.mural.core.ON_DEVICE_PROVIDER_ID
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
-import java.util.concurrent.Executor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
@@ -105,7 +104,7 @@ class OnDeviceLiveSessionTest {
         // An open-weight teacher voice speaks over the same fake platform voice it falls back to.
         val voice: OnDeviceSpeechOutput = teacherVoice?.let { model ->
             OpenWeightSpeechOutput(output, TeacherVoice("pf_dora", "pt-BR"), open = { model },
-                worker = Executor { task -> task.run() })
+                worker = InlineVoiceWorker())
         } ?: output
         val microphone: OnDeviceSpeechInput = heardByAlternate?.let { text ->
             ParakeetSpeechInput(input, open = { object : SpeechTranscriber {

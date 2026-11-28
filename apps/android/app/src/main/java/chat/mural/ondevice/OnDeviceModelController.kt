@@ -27,9 +27,12 @@ import kotlinx.coroutines.withContext
  * follows the chosen model: a `.litertlm` file runs on LiteRT-LM, the zero-download system model on
  * AICore (both injectable for tests). One model is active for every language and every Helper.
  * Models arrive from the curated [OnDeviceModelCatalogue], a pasted direct link, or the document
- * picker, and leave through [delete]. Main-confined like HostedReadinessController: every change
- * publishes an [OnDeviceReadiness], so the Conversation Provider never guesses whether it can
- * start and never substitutes another provider when the model is missing or still downloading.
+ * picker, and leave through [delete]. A model is loaded into the Model Runtime's RAM only while
+ * On-Device Model is the chosen Conversation Provider ([providerIsOnDevice]); [unload] releases that
+ * RAM and keeps the selection, so switching away never strands gigabytes of an unused model.
+ * Main-confined like HostedReadinessController: every change publishes an [OnDeviceReadiness], so
+ * the Conversation Provider never guesses whether it can start and never substitutes another
+ * provider when the model is missing or still downloading.
  */
 class OnDeviceModelController(
     private val context: Context,
@@ -37,6 +40,8 @@ class OnDeviceModelController(
     private val runtime: ModelRuntime = LiteRtModelRuntime(),
     private val aicore: AICoreModelRuntime = AICoreModelRuntime(),
     private val changed: (OnDeviceReadiness) -> Unit = {},
+    /** Whether On-Device Model is the chosen Conversation Provider right now. */
+    private val providerIsOnDevice: () -> Boolean,
 ) {
     private val preferences = context.getSharedPreferences("mural_on_device_models", Context.MODE_PRIVATE)
     private val store = OnDeviceModelStore(preferences.getString(KEY_MODELS, null)) { json ->
@@ -120,9 +125,12 @@ class OnDeviceModelController(
     /** Publishes readiness from the imported metadata without loading a model. */
     fun refresh() { publish(current()) }
 
-    /** Loads the active model, if one is chosen and not held yet. */
-    fun initialize() {
+    /** Loads the active model into the Model Runtime's RAM, if one is chosen and not held yet.
+     * Another Conversation Provider is chosen means metadata only: a multi-gigabyte model is never
+     * held in RAM for a provider that will not run it. */
+    fun ensureLoaded() {
         refresh()
+        if (!providerIsOnDevice()) return
         val id = store.activeID() ?: return
         if (session != null && loadedName == id) return
         job?.cancel()
@@ -132,15 +140,27 @@ class OnDeviceModelController(
         }
     }
 
+    /**
+     * Releases the Model Runtime's RAM: the live [RuntimeSession] closes and readiness reports no
+     * initialized model, while the active model stays chosen in [OnDeviceModelStore]. Another
+     * Conversation Provider is now paying for the conversation, so this phone's model is stored,
+     * not held; picking On-Device Model again reloads the same model with no learner-visible loss.
+     */
+    fun unload() {
+        job?.cancel()
+        closeSession()
+        publish(current())
+    }
+
     /** Switches the active model — an imported file, or the zero-download system model — and loads it. */
     fun select(name: String) {
         val system = OnDeviceModelCatalogue.byID(name)?.takeIf { it.runtime == ModelRuntimeKind.AICORE }
-        if (system == null) { if (store.select(name)) initialize(); return }
+        if (system == null) { if (store.select(name)) ensureLoaded(); return }
         job?.cancel()
         // One tap: the system model has no download to confirm and no storage to plan.
         job = scope.launch {
             store.selectSystem(system.id)
-            loadSystem(system)
+            if (providerIsOnDevice()) loadSystem(system) else publish(current())
         }
     }
 
@@ -150,7 +170,8 @@ class OnDeviceModelController(
         job = scope.launch {
             publish(current(preparing = true))
             try {
-                load(copy(uri))
+                val imported = copy(uri)
+                if (providerIsOnDevice()) load(imported) else publish(current())
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { publish(current(failure = context.getString(R.string.error_on_device_import_failed))) }
         }
@@ -247,8 +268,11 @@ class OnDeviceModelController(
                     progress.value = DownloadProgress(fileName, received, total)
                 }
                 progress.value = null
-                if (activates) load(store.import(fileName, downloaded.length()))
-                else { store.import(fileName, downloaded.length(), makeActive = false); publish(current()) }
+                if (activates) {
+                    val imported = store.import(fileName, downloaded.length())
+                    // A model downloaded for another Conversation Provider is stored, not held in RAM.
+                    if (providerIsOnDevice()) load(imported) else publish(current())
+                } else { store.import(fileName, downloaded.length(), makeActive = false); publish(current()) }
             } catch (cancelled: CancellationException) { progress.value = null; throw cancelled }
             catch (error: Exception) { progress.value = null; publish(current(failure = downloadMessage(error))) }
         }
@@ -331,9 +355,9 @@ class OnDeviceModelController(
         val copied = withContext(Dispatchers.IO) {
             val name = OnDeviceModelStore.fileName(displayName(uri))
             val models = directory.apply { mkdirs() }
-            models.listFiles { file -> file.name.endsWith(PARTIAL_SUFFIX) }?.forEach { it.delete() }
+            models.listFiles { file -> file.name.endsWith(IMPORTING_SUFFIX) }?.forEach { it.delete() }
             // Copy beside the target and rename, so a failed import cannot corrupt the active model.
-            val partial = File(models, name + PARTIAL_SUFFIX)
+            val partial = File(models, name + IMPORTING_SUFFIX)
             context.contentResolver.openInputStream(uri)?.use { source -> partial.outputStream().use { source.copyTo(it) } }
                 ?: throw ModelRuntimeException(context.getString(R.string.error_on_device_import_failed))
             val target = File(models, name)
@@ -365,6 +389,7 @@ class OnDeviceModelController(
     companion object {
         private const val KEY_MODELS = "models"
         private const val MODELS_DIRECTORY = "models"
-        private const val PARTIAL_SUFFIX = ".importing"
+        /** An import in flight, named apart from a download's resumable `.part` file. */
+        private const val IMPORTING_SUFFIX = ".importing"
     }
 }

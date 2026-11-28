@@ -21,6 +21,62 @@ class ConversationProvidersTest {
         session.endReason = "Imported unfinished conversation"
         assertNull(restored.recover(listOf(session), "original-owner", "nb"))
     }
+
+    @Test fun anOnDeviceContinuationSurvivesRelaunchWithNoOwnerAndNeverLeaksIntoTheHostedOne() {
+        fun interrupted(reason: String, spoken: Boolean = true) = SessionRecord(languageID = "pt-PT").apply {
+            if (spoken) append(Fragment(id = "f-1", speaker = Speaker.user, text = "Olá", startMS = 0, endMS = 900))
+            endedAt = nowSeconds(); endReason = reason
+        }
+        val timed = interrupted("Time limit")
+        val checkpoint = ConversationContinuationCheckpoint(timed.id, "", onDevice = true)
+        val encoded = Json.encodeToString(kotlinx.serialization.serializer<ConversationContinuationCheckpoint>(), checkpoint)
+        val restored = Json.decodeFromString<ConversationContinuationCheckpoint>(encoded)
+        assertTrue(restored.onDevice)
+        // A timed on-device conversation is offered again after a relaunch, with no owner to match.
+        assertEquals(timed.id, restored.recoverOnDevice(listOf(timed), "pt-PT")?.id)
+        assertNull(restored.recoverOnDevice(listOf(timed), "ja"))
+        // Neither checkpoint can be recovered as the other kind.
+        assertNull(restored.recover(listOf(timed), "", "pt-PT"))
+        assertNull(checkpoint.copy(onDevice = false, accountID = "owner").recoverOnDevice(listOf(timed), "pt-PT"))
+
+        // A low-memory kill leaves the repository's own recovery reason on the unfinished session.
+        val killed = interrupted(ConversationContinuationPolicy.RECOVERED_ON_DEVICE_END_REASON)
+        val onDeviceIDs = setOf(killed.id)
+        val languageID = "pt-PT"
+        assertEquals(killed.id, ConversationContinuationPolicy
+            .recoveredOnDeviceSession(listOf(killed), onDeviceIDs, languageID, null)?.id)
+        assertEquals(killed.id, ConversationContinuationCheckpoint(killed.id, "", onDevice = true)
+            .recoverOnDevice(listOf(killed), languageID)?.id)
+        // Another provider's provenance, another Language Module, a transcript that never got a
+        // fragment, a session the learner already declined, and a conversation the learner ended
+        // themselves are none of them continuable.
+        assertNull(ConversationContinuationPolicy.recoveredOnDeviceSession(listOf(killed), emptySet(), languageID, null))
+        assertNull(ConversationContinuationPolicy.recoveredOnDeviceSession(listOf(killed), onDeviceIDs, "ja", null))
+        assertNull(ConversationContinuationPolicy
+            .recoveredOnDeviceSession(listOf(killed), onDeviceIDs, languageID, killed.id))
+        val empty = interrupted(ConversationContinuationPolicy.RECOVERED_ON_DEVICE_END_REASON, spoken = false)
+        assertNull(ConversationContinuationPolicy
+            .recoveredOnDeviceSession(listOf(empty), setOf(empty.id), languageID, null))
+        val ended = interrupted("Ended by you")
+        assertNull(ConversationContinuationPolicy
+            .recoveredOnDeviceSession(listOf(ended), setOf(ended.id), languageID, null))
+    }
+
+    @Test fun continueResumesTypedWhenThisPhoneHasNoVoiceForTheSavedConversation() {
+        fun resumes(provider: ConversationProvider, typedOnly: Boolean, hears: Boolean, wasVoice: Boolean) =
+            ConversationContinuationPolicy.resumesVoice(provider, typedOnly, hears, wasVoice)
+        // A voice conversation continues as voice on a provider that can hear it. Mural Minutes
+        // carry voice leases only, so their continuation is always the voice one.
+        assertTrue(resumes(ConversationProvider.PERSONAL_KEY, typedOnly = false, hears = false, wasVoice = true))
+        assertTrue(resumes(ConversationProvider.ON_DEVICE, typedOnly = false, hears = true, wasVoice = true))
+        assertTrue(resumes(ConversationProvider.HOSTED_MINUTES, typedOnly = false, hears = false, wasVoice = true))
+        // A Typed-only Module, an On-Device Model that cannot hear, and a conversation that was
+        // typed all continue typed: never a microphone prompt that leads to a no-op.
+        assertFalse(resumes(ConversationProvider.ON_DEVICE, typedOnly = true, hears = true, wasVoice = true))
+        assertFalse(resumes(ConversationProvider.ON_DEVICE, typedOnly = false, hears = false, wasVoice = true))
+        assertFalse(resumes(ConversationProvider.PERSONAL_KEY, typedOnly = false, hears = false, wasVoice = false))
+        assertFalse(resumes(ConversationProvider.ON_DEVICE, typedOnly = false, hears = true, wasVoice = false))
+    }
     private val response = APIResult("Hola", emptyList(), APIUsage(12, 4))
     private class Teacher(val action: suspend (HelperPurpose?) -> APIResult) : TeachingClient {
         override suspend fun respond(instructions: String, input: String, schema: JsonObject?, search: Boolean,

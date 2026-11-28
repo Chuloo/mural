@@ -12,11 +12,24 @@ enum class ConversationProvider { PERSONAL_KEY, HOSTED_MINUTES, ON_DEVICE }
 const val ON_DEVICE_PROVIDER_ID = "on-device"
 
 @kotlinx.serialization.Serializable
-data class ConversationContinuationCheckpoint(val sessionID: String, val accountID: String) {
+data class ConversationContinuationCheckpoint(val sessionID: String, val accountID: String,
+    val onDevice: Boolean = false) {
     fun recover(sessions: List<SessionRecord>, accountID: String, languageID: String): SessionRecord? =
-        if (this.accountID != accountID) null else sessions.firstOrNull {
+        if (onDevice || this.accountID != accountID) null else sessions.firstOrNull {
             it.id == sessionID && it.languageID == languageID && it.endedAt != null &&
                 it.endReason in listOf("Time limit", "Reserved conversation time ended")
+        }
+
+    /**
+     * An On-Device Model continuation: no owner and no minute balance take part, so the interrupted
+     * conversation of the same Language Module is offered again after a low-memory kill. Its
+     * transcript has to be on this phone, or there is nothing for the learner to continue.
+     */
+    fun recoverOnDevice(sessions: List<SessionRecord>, languageID: String): SessionRecord? =
+        if (!onDevice) null else sessions.firstOrNull {
+            it.id == sessionID && it.languageID == languageID && it.endedAt != null &&
+                it.fragments.isNotEmpty() && it.endReason in listOf("Time limit",
+                    ConversationContinuationPolicy.RECOVERED_ON_DEVICE_END_REASON)
         }
 }
 

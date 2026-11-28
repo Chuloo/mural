@@ -1,6 +1,6 @@
 package chat.mural.ondevice
 
-import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
@@ -42,7 +42,7 @@ class OpenWeightSpeechOutput(
     private val platform: OnDeviceSpeechOutput,
     private val voice: TeacherVoice,
     private val open: () -> VoiceSynthesizer,
-    private val worker: Executor = Executors.newSingleThreadExecutor { task ->
+    private val worker: ExecutorService = Executors.newSingleThreadExecutor { task ->
         Thread(task, VOICE_THREAD).apply { isDaemon = true } },
 ) : OnDeviceSpeechOutput {
     private val lock = Any()
@@ -85,8 +85,16 @@ class OpenWeightSpeechOutput(
     override fun close() {
         closed = true
         stop()
-        // The native engine is released on the thread that created it, as its GPU context requires.
-        worker.execute { release() }
+        // The native engine is released on the thread that created it, as its GPU context requires,
+        // and that same thread then stops the worker: shutting the worker down first would drop the
+        // queued release and leak both the GPU context and the voice thread for the app's lifetime.
+        worker.execute {
+            release()
+            worker.shutdownNow()
+            // shutdownNow() interrupts the worker that calls it. This one is about to exit anyway;
+            // clearing the flag keeps an inline test executor from carrying it into the test thread.
+            Thread.interrupted()
+        }
         platform.close()
     }
 

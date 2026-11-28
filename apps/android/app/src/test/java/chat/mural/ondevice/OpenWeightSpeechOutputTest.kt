@@ -1,8 +1,9 @@
 package chat.mural.ondevice
 
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,7 +19,7 @@ import org.junit.Test
 class OpenWeightSpeechOutputTest {
     private val voice = TeacherVoice("pf_dora", "pt-BR")
     /** Runs a queued sentence on the calling thread, so a test observes one sentence at a time. */
-    private val inline = Executor { task -> task.run() }
+    private val inline = InlineVoiceWorker()
     /** One real worker thread, so a test can stop or replace the queue while a sentence is spoken. */
     private val threaded = Executors.newSingleThreadExecutor { task ->
         Thread(task, "mural-test-teacher-voice").apply { isDaemon = true } }
@@ -76,7 +77,7 @@ class OpenWeightSpeechOutputTest {
     }
 
     private fun openWeight(failsOn: Int = 0, silentOn: Int = 0, cannotOpen: Boolean = false,
-        worker: Executor = inline, started: CountDownLatch? = null, release: CountDownLatch? = null)
+        worker: ExecutorService = inline, started: CountDownLatch? = null, release: CountDownLatch? = null)
         : OnDeviceSpeechOutput {
         opened.clear()
         output = OpenWeightSpeechOutput(platform, voice, open = {
@@ -92,6 +93,30 @@ class OpenWeightSpeechOutputTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
         while (output.speaking && System.nanoTime() < deadline) Thread.sleep(10)
         assertFalse(output.speaking)
+    }
+
+    /** Waits for the voice worker to stop, bounded so a leaked thread cannot hang the suite. */
+    private fun stopped(worker: ExecutorService) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (!worker.isShutdown && System.nanoTime() < deadline) Thread.sleep(10)
+        assertTrue(worker.isShutdown)
+        assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS))
+    }
+
+    @Test fun closeStopsTheVoiceWorkerSoAConversationNeverLeaksItsThread() {
+        val output = openWeight(worker = threaded)
+        output.speak("Olá!", "pt-PT", queueAdd = true)
+        quiescent(output)
+
+        output.close()
+        // The engine is released on the thread that created it, and that thread then stops: one
+        // conversation is one worker thread, and a closed conversation holds none.
+        stopped(threaded)
+        assertTrue(opened.single().closed)
+
+        output.speak("Tudo bem?", "pt-PT", queueAdd = true)
+        assertEquals(listOf("Olá!"), opened.single().sentences)
+        assertTrue(platform.spoken.isEmpty())
     }
 
     @Test fun sentencesAreSpokenOneByOneInTheVoiceOfTheLanguageAndNeverByThePlatformVoice() {
@@ -217,4 +242,18 @@ class OpenWeightSpeechOutputTest {
         assertEquals(1, opened.single().stopped)
         output.close()
     }
+}
+
+/**
+ * An [ExecutorService] that runs each queued task on the calling thread, so a voice test observes one
+ * sentence at a time — and reports itself shut down the moment a closed voice stops its worker.
+ */
+internal class InlineVoiceWorker : AbstractExecutorService() {
+    private var stopped = false
+    override fun execute(command: Runnable) = command.run()
+    override fun shutdown() { stopped = true }
+    override fun shutdownNow(): MutableList<Runnable> { stopped = true; return mutableListOf() }
+    override fun isShutdown() = stopped
+    override fun isTerminated() = stopped
+    override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
 }

@@ -11,4 +11,5 @@
     <string name="notice_continue_remaining_free">Continúa esta conversación con los minutos que te quedan. Primero se usan tus minutos gratuitos.</string>
     <string name="notice_continue_settling">Tus minutos gratuitos se han agotado. Estamos actualizando tu saldo. Podrás continuar esta conversación cuando esté listo.</string>
     <string name="notice_free_minutes_first">Primero se usan tus minutos gratuitos. La llamada se pausará cuando se agoten; después podrás continuar con tus minutos comprados.</string>
+    <string name="notice_continue_on_device_saved">Tu conversación está guardada en este teléfono. Continúala o empieza una nueva.</string>
 </resources>

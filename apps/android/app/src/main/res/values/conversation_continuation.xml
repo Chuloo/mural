@@ -11,4 +11,5 @@
     <string name="notice_continue_remaining_free">Continue this conversation with your remaining minutes. Your free minutes are used first.</string>
     <string name="notice_continue_settling">Your free minutes have ended. Your balance is updating. You can continue this conversation when it is ready.</string>
     <string name="notice_free_minutes_first">Your free minutes come first. This call will pause when they end; you can then continue with your purchased minutes.</string>
+    <string name="notice_continue_on_device_saved">Your conversation is saved on this phone. Continue it, or start a new one.</string>
 </resources>

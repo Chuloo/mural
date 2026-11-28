@@ -5,7 +5,7 @@
 - **Scope**: Strictly Android-only (`apps/android/`). `apps/ios/`, `services/api/`, `scripts/`, `shared/fixtures/`, `Languages.kt`, and `Models.kt` archive struct fields are untouched (`minSdk = 26` preserved).
 - **Server deployment required**: **None for On-Device Model.**
   - All On-Device Model features (Conversation Provider selection, `.litertlm` model catalogue/download/import, LiteRT-LM & AICore runtimes, offline Helpers, two-pass defensive assessments, local voice Talk, untimed conversations toggle, Parakeet speech recognition, Kokoro 82M & PocketTTS 100M voices, Typed-only Modules, and Japanese/Mandarin on-device wiring) execute strictly on the phone with zero API contract, database migration, or backend configuration changes.
-  - **Hosted cloud note (`Mural Minutes`)**: The new Android-first voice Language Modules (`pt-PT` Portuguese Portugal and `ja-JP` Japanese) work offline on On-Device Model and online via Personal Key (`APIClient` sends instructions directly to OpenAI without server locale admission). Enabling `pt-PT` or `ja-JP` on **Mural Minutes** (`services/api/src/live-provider.ts`) will require a separate backend locale-allowlist PR and server deployment before hosted voice calls admit those two locales. Typed-only Modules (`kok-Latn` Roman Konkani, `jam` Jamaican Patois) never open voice sessions on any provider.
+  - **Hosted cloud note (`Mural Minutes`)**: The new Android-first voice Language Modules (`pt-PT` Portuguese Portugal and `ja-JP` Japanese) work offline on On-Device Model and online via Personal Key (`APIClient` sends instructions directly to OpenAI without server locale admission). **Mural Minutes refuses both on the client**: `HostedAPIClient.validateCreate` admits only the cross-platform `LanguageRegistry` locales that `services/api/src/live-provider.ts` lists, and `MuralViewModel.start()` fails before the foreground service and before any provider call with `hosted_language_unsupported`, which names *On-device model* and *My API key* in Settings → Advanced and never switches the learner's provider. Adding `pt-PT` or `ja-JP` to the hosted allowlist still needs a separate backend PR and deployment, after which both guards are relaxed together. Typed-only Modules (`kok-Latn` Roman Konkani, `jam` Jamaican Patois) never open voice sessions on any provider.
 
 ## 1. Local Automated Verification (Completed)
 
@@ -13,7 +13,7 @@ Executed inside `mural-android-builder` (`linux/amd64`) and repository contract 
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Android JVM unit suite | `./gradlew :app:testDebugUnitTest` | **PASS** — 587 tests, 0 failures, 0 errors |
+| Android JVM unit suite | `./gradlew :app:testDebugUnitTest` | **PASS** — 591 tests, 0 failures, 0 errors |
 | Android Lint | `./gradlew :app:lintDebug` | **PASS** — 0 errors |
 | Debug APK build | `./gradlew :app:assembleDebug` | **PASS** — `app-debug.apk` built |
 | UI test APK build | `./gradlew :app:assembleUiTestAndroidTest` | **PASS** — `app-uiTest-androidTest.apk` built (incl. `ConversationProviderStoreTest`, `TypedOnlyModuleTest`, `CaptionParityTest`) |
@@ -52,3 +52,33 @@ adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
 5. **Untimed long session & low-memory recovery**:
    - Enable **Untimed on-device conversations**, run past `sessionMinutes`, confirm no `"Time limit"` cutoff occurs, and verify 30 s idle end still closes cleanly.
    - Simulate process death / low-memory kill mid-session (`adb shell am kill chat.mural.android` while backgrounded) and confirm local conversation history & provenance (`providerID = "on-device"`) remain intact on relaunch.
+   - Confirm the relaunch offers **Continue conversation / New conversation** for the killed session: `LearningRepository` recovers it as `"App closed before finalization"`, `ConversationContinuationPolicy.recoveredOnDeviceSession` picks it up, and the sheet resumes it ready at once with no minutes to settle.
+6. **Model RAM follows the provider choice**:
+   - With On-Device Model chosen and a model loaded, switch to **My API key** or **Mural Minutes** in Settings → Advanced and confirm `dumpsys meminfo chat.mural.android` drops the model footprint (`OnDeviceModelController.unload()` closes the `RuntimeSession`).
+   - Switch back to **On-device model** and confirm the same active model reloads with no re-download and no lost selection.
+   - With **My API key** chosen, download or import a model and confirm it is stored as the active selection without being held in RAM.
+7. **Talk's idle home screen**:
+   - On-Device Model with a model that hears the active language (native audio input, or Parakeet for a language it covers): confirm the idle home screen shows the orb and microphone only, with no **Type** button — identical to a cloud voice provider.
+   - On-Device Model with a text-only model and no speech recognition alternate: confirm **Type** is offered from idle.
+   - Confirm **Type** appears once a conversation is `active` on every provider.
+8. **Typed / non-voice Continue**:
+   - On a Typed-only Module (`kok-Latn`, `jam`) and on a text-only On-Device Model, end a conversation at its time limit and tap **Continue conversation**: confirm it resumes a typed conversation and opens the typed reply sheet, with no `RECORD_AUDIO` prompt and no no-op.
+
+## 3. Standards & Spec Review Fixes (this branch)
+
+Applied on `ticket/review-fixes`; all still strictly Android-only.
+
+| Fix | Where | Verified by |
+| --- | --- | --- |
+| Third-party notices for LiteRT-LM, ML Kit GenAI Prompt/Common and MediaPipe Tasks Audio (Apache-2.0) | `app/src/main/assets/THIRD-PARTY-NOTICES.txt` | `:app:assembleDebug` packages the asset; `OpenSourceNoticesTest` opens it |
+| Mural Minutes refuses `pt-PT` / `ja-JP` on the client, with a localized message naming the two providers that can | `HostedAPIClient.validateCreate`, `MuralViewModel.start()`, `values{,-es}/hosted_conversations.xml` | `HostedAPIClientTest.androidFirstVoiceLocalesAreRefusedUntilHostedAdmitsThem` |
+| Seventeen learning languages stated accurately (13 cross-platform + 4 Android-first), Typed-only Modules and the On-Device Model provider noted | `apps/android/README.md` | Read against `LanguageRegistry.all` (13) and `AndroidLanguages.extraModules` (4) |
+| Test-only `ScriptedModelRuntime` no longer ships in the APK/AAB | `src/main` → `src/test` (`git mv`) | `:app:assembleDebug`, `:app:assembleUiTestAndroidTest` |
+| `OpenWeightSpeechOutput.close()` stops its worker, so a conversation never leaks its voice thread | `OpenWeightSpeechOutput.kt` | `OpenWeightSpeechOutputTest.closeStopsTheVoiceWorkerSoAConversationNeverLeaksItsThread` |
+| Model RAM lifecycle: load only for On-Device Model, `unload()` on switching away, selection preserved | `OnDeviceModelController.kt`, `MuralViewModel.selectConversationProvider` | `OnDeviceModelControllerTest` (instrumented — needs a device, see §2) |
+| Low-memory / process-death continuation checkpoint, and typed Continue for Typed-only and text-only setups | `ConversationProviders.kt`, `ConversationContinuationPolicy.kt`, `MuralViewModel.kt`, `TalkScreen.kt` | `ConversationProvidersTest.anOnDeviceContinuationSurvivesRelaunchWithNoOwnerAndNeverLeaksIntoTheHostedOne`, `…continueResumesTypedWhenThisPhoneHasNoVoiceForTheSavedConversation` |
+| Talk's idle home screen stays minimal when the On-Device Model can hear (`canHearOnDeviceVoice`) | `MuralViewModel.kt`, `TalkScreen.kt` | Device check §2.7 |
+| Mixed-provider recall: one situation practised on cloud and on-device counts once, provenance kept in `Assessment.context` | `LearningEngine.project` | `CoreTest.theSameThemeOnCloudAndOnDeviceIsOneSituationAndTwoOnDeviceThemesAreTwo`; `scripts/check_cross_platform.py` constants unchanged |
+| Copy accuracy for Qwen2.5 1.5B and Gemini Nano (no built-in audio input), EN + ES parity; `IMPORTING_SUFFIX`, `onDevice` wording, one provider-label helper | `values{,-es}/on_device.xml`, `OnDeviceModelController.kt`, `OnDeviceLiveSession.kt`, `MuralViewModel.kt`, `SettingsScreen.kt` | `:app:lintDebug`, `:app:testDebugUnitTest` |
+
+**Deployment**: still none required — every fix above is client-side. The Mural Minutes locale guard makes the Android client *stricter* than production `services/api`, so it needs no server change to be correct; relaxing it later does.

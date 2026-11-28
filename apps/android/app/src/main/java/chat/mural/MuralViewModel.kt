@@ -123,23 +123,92 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     var hasContinuation by mutableStateOf(false); private set
     var continuationReady by mutableStateOf(false); private set
     var continuationNeedsMinutes by mutableStateOf(false); private set
+    /** Whether the saved conversation was a voice one: a typed conversation stays typed when continued. */
+    var continuationWasVoice by mutableStateOf(false); private set
+    /** Whether Continue resumes voice or typed Talk on this phone, for the saved conversation. */
+    val continuationIsVoice get() = ConversationContinuationPolicy.resumesVoice(conversationProvider,
+        language.isTypedOnly, canHearOnDeviceVoice, continuationWasVoice)
     private val continuationPreferences = application.getSharedPreferences("mural_continuation", android.content.Context.MODE_PRIVATE)
     private val continuationKey = "v1." + BuildConfig.MANAGED_API_ORIGIN
+    private val continuationDeclinedKey = "declined.v1." + BuildConfig.MANAGED_API_ORIGIN
+    /**
+     * Remembers the On-Device Model continuation the learner just continued or declined. A session a
+     * process death interrupted keeps its recovery reason in the learning record forever, so without
+     * this the same Continue/New choice would come back at every launch.
+     */
+    private fun declineOnDeviceContinuation() {
+        continuationSession?.takeIf { it.id in onDeviceSessionIDs }
+            ?.let { continuationPreferences.edit().putString(continuationDeclinedKey, it.id).apply() }
+    }
     private fun clearContinuation() {
+        declineOnDeviceContinuation()
         continuationSession = null; continuationOwnerID = null; freeBoundaryOwnerID = null
         hasContinuation = false; continuationReady = false; continuationNeedsMinutes = false
+        continuationWasVoice = false
         continuationPreferences.edit().remove(continuationKey).apply()
     }
+    /** A record restored from disk keeps its own evidence of having been a voice conversation. */
+    private fun wasVoice(saved: SessionRecord) = saved.voiceSeconds > 0 || saved.fragments.any { !it.typed }
     private fun restoreContinuation(accountID: String) {
         if (isRunning || hasContinuation || conversationProvider != ConversationProvider.HOSTED_MINUTES) return
         val checkpoint = runCatching { json.decodeFromString<ConversationContinuationCheckpoint>(
             continuationPreferences.getString(continuationKey, null) ?: return) }.getOrNull() ?: return
         val saved = checkpoint.recover(archive.sessions, accountID, language.id) ?: return
         continuationSession = saved; continuationOwnerID = accountID; hasContinuation = true; continuationReady = false
+        continuationWasVoice = wasVoice(saved)
         session = saved; selectedTheme = language.themes.firstOrNull { it.id == saved.themeID }; topicResult = saved.topics.lastOrNull()
         if (saved.themeID == "current") selectedTheme = topicResult?.let(::currentTheme)
         state = "ended"; resetJob?.cancel()
         notice = getApplication<Application>().getString(R.string.notice_continue_settling)
+    }
+    /**
+     * The On-Device Model conversation a low-memory kill or a relaunch interrupted. Its transcript
+     * never left this phone, so the same Continue/New choice is offered again with nothing to settle:
+     * a killed process never costs the learner the conversation.
+     */
+    private fun restoreOnDeviceContinuation() {
+        if (isRunning || hasContinuation || conversationProvider != ConversationProvider.ON_DEVICE) return
+        val checkpoint = runCatching { json.decodeFromString<ConversationContinuationCheckpoint>(
+            continuationPreferences.getString(continuationKey, null) ?: "") }.getOrNull()
+        val saved = checkpoint?.recoverOnDevice(archive.sessions, language.id)
+            ?: ConversationContinuationPolicy.recoveredOnDeviceSession(archive.sessions, onDeviceSessionIDs,
+                language.id, continuationPreferences.getString(continuationDeclinedKey, null))
+                ?.also(::saveOnDeviceContinuationCheckpoint)
+            ?: return
+        continuationSession = saved; continuationOwnerID = null
+        continuationWasVoice = wasVoice(saved)
+        hasContinuation = true; continuationReady = true; continuationNeedsMinutes = false
+        session = saved; selectedTheme = language.themes.firstOrNull { it.id == saved.themeID }; topicResult = saved.topics.lastOrNull()
+        if (saved.themeID == "current") selectedTheme = topicResult?.let(::currentTheme)
+        state = "ended"; resetJob?.cancel()
+        notice = getApplication<Application>().getString(R.string.notice_continue_on_device_saved)
+    }
+    private fun saveOnDeviceContinuationCheckpoint(saved: SessionRecord) {
+        continuationPreferences.edit().putString(continuationKey, json.encodeToString(
+            kotlinx.serialization.serializer<ConversationContinuationCheckpoint>(),
+            ConversationContinuationCheckpoint(saved.id, "", onDevice = true))).apply()
+    }
+    /**
+     * Continue resumes typed: the saved conversation is reopened with its own transcript, so a
+     * Typed-only Module, an On-Device Model that cannot hear the learner and a conversation that was
+     * typed all carry on instead of meeting a microphone prompt that leads to nothing.
+     */
+    fun continueTypedConversation() {
+        if (isRunning || !hasContinuation) return
+        val continuing = continuationSession ?: return
+        generation++; resetJob?.cancel(); assessmentJob?.cancel(); actionJob?.cancel(); clearLookup()
+        dismissError(); working = false; isMuted = false; meanings.reset()
+        selectedTheme = language.themes.firstOrNull { it.id == continuing.themeID }
+        topicResult = continuing.topics.lastOrNull()
+        if (continuing.themeID == "current") selectedTheme = topicResult?.let(::currentTheme)
+        val resumed = clone(continuing).also { it.endedAt = null; it.endReason = null }
+        voiceSession = false; session = resumed; save(resumed)
+        clearContinuation()
+        notice = null
+        // The length limit runs from the moment of continuing: the transcript already spent the
+        // previous clock, and measuring it again would end the conversation at once.
+        durationBaseline = nowSeconds()
+        state = "active"; startDurationChecks()
     }
     private suspend fun refreshContinuation() {
         val expected = continuationOwnerID ?: return
@@ -226,9 +295,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             HostedReadiness(owner.accountID, balance?.readinessMilliseconds ?: 0, enabled,
                 verified = balance != null)
         }, changed = { hostedReadiness = it })
-    private val onDeviceModels = OnDeviceModelController(application, viewModelScope, changed = ::onDeviceChanged)
+    private val onDeviceModels = OnDeviceModelController(application, viewModelScope, changed = ::onDeviceChanged,
+        // The Model Runtime holds a model in RAM only for the Conversation Provider that runs it.
+        providerIsOnDevice = { conversationProvider == ConversationProvider.ON_DEVICE })
     var onDeviceReadiness by mutableStateOf(OnDeviceReadiness()); private set
     var onDeviceStoredModels by mutableStateOf(emptyList<OnDeviceModel>()); private set
+    /** Whether this phone can hear the learner on the active On-Device Model setup: a text-only
+     * model with no speech recognition alternate cannot, and Talk then stays typed from idle. */
+    var canHearOnDeviceVoice by mutableStateOf(false); private set
+    private fun refreshOnDeviceVoice() { canHearOnDeviceVoice = onDeviceModels.resolvedSpeechInput(language.locale) != null }
     private fun onDeviceChanged(next: OnDeviceReadiness) {
         if (next.failure != null && next.failure != onDeviceReadiness.failure) presentError(next.failure)
         onDeviceReadiness = next; onDeviceStoredModels = onDeviceModels.stored()
@@ -236,6 +311,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         // deleting a voice model puts its languages back on the phone's built-in voice.
         onDeviceSpeechInput = onDeviceModels.speechInputEngine()
         onDeviceTeacherVoices = onDeviceModels.teacherVoices()
+        refreshOnDeviceVoice()
     }
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
     private val onDeviceTeaching = OnDeviceTeachingClient(onDeviceModels.turn) { language.lookupUnavailableReply }
@@ -302,6 +378,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     /** The live On-Device Model voice conversation, while a session runs on this phone. */
     private var onDeviceVoice: OnDeviceLiveSession? = null
     private var durationJob: Job? = null
+    /** A conversation's length limit runs from when it started or was continued, never from the
+     * transcript it carries: a continued conversation would otherwise end at once. */
+    private var durationBaseline = 0.0
     private var closeJob: Job? = null
     private var resetJob: Job? = null
     private var assessmentJob: Job? = null
@@ -348,7 +427,11 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                     onFailure = { presentError(getApplication<Application>().getString(R.string.error_guest_secure_storage_unavailable)) })
                 conversationProvider = providers.selection
                 untimedConversation = providers.untimedOnDevice
-                if (providers.selection == ConversationProvider.ON_DEVICE) onDeviceModels.initialize() else onDeviceModels.refresh()
+                // The Model Runtime's RAM follows the explicit choice: On-Device Model loads the
+                // active model, any other provider keeps only its stored selection.
+                if (providers.selection == ConversationProvider.ON_DEVICE) onDeviceModels.ensureLoaded()
+                else onDeviceModels.refresh()
+                restoreOnDeviceContinuation()
                 finalAssessmentTickets = ConversationProviderPolicy.recoveryTickets(loaded.first.finalAssessments, hostedSessionIDs, onDeviceSessionIDs)
                 hasKey = loaded.second
                 storageReady = true
@@ -511,7 +594,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             catch (_: Exception) { presentError(getApplication<Application>().getString(R.string.provider_preference_save_failed)) }
         }
         if (provider == ConversationProvider.HOSTED_MINUTES) refreshHostedReadiness()
-        if (provider == ConversationProvider.ON_DEVICE) onDeviceModels.initialize()
+        // Switching to On-Device Model loads the active model into the Model Runtime; switching away
+        // releases that RAM and keeps the selection, so a cloud provider never pays for a held model.
+        if (provider == ConversationProvider.ON_DEVICE) onDeviceModels.ensureLoaded() else onDeviceModels.unload()
     }
     /** Turns the Untimed Conversation option on or off; it reaches On-Device Model sessions only. */
     fun setUntimedOnDevice(enabled: Boolean) {
@@ -788,6 +873,8 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         generation++; meanings.reset()
         if (languageChanged) resetConversation()
         archive = archive.copy(preferences = preferences.copy(interests = preferences.interests.take(500)))
+        // Another Language Module can be one this phone's speech recognition alternate does not hear.
+        refreshOnDeviceVoice()
         persist(); scheduleTranslation(); recoverFinalAssessments(); refreshHostedReadiness()
     }
     fun selectLanguage(id: String) {
@@ -855,6 +942,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             // shortcut: best-effort store write; providerID in the archive rebuilds this set at startup.
             viewModelScope.launch { runCatching { providerStore.markOnDevice(id) } }
         }
+        durationBaseline = record.startedAt
         session = record; save(record)
     }
     fun start() {
@@ -870,6 +958,14 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         // text-to-speech speaks the streamed reply. No network call is made, and no cloud provider,
         // key or minute balance takes part.
         if (choice == ConversationProvider.ON_DEVICE) { startOnDeviceVoice(continuing); return }
+        // An Android-first Language Module (Portuguese Portugal, Japanese) has no hosted voice yet:
+        // `services/api/src/live-provider.ts` does not list its locale. Refuse it here, before the
+        // foreground service and before any provider call, and name the two providers that can —
+        // never switch the learner's provider for them.
+        if (choice == ConversationProvider.HOSTED_MINUTES && LanguageRegistry.all.none { it.locale == language.locale }) {
+            presentError(getApplication<Application>()
+                .getString(R.string.hosted_language_unsupported, language.settingsTitle)); return
+        }
         if (choice == ConversationProvider.HOSTED_MINUTES && accountChangeBlocked) {
             presentError(getApplication<Application>().getString(R.string.hosted_checking_previous))
             reconcileHostedSessions(); return
@@ -966,7 +1062,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val instructions = TeachingPolicy.voice(module, learner, selectedTheme, archive.preferences.interests, archive.preferences.meaningLanguage)
         val history = ConversationHistory.messages(continuing ?: session)
         startingWithHistory = history.isNotEmpty()
-        val local = OnDeviceLiveSession(viewModelScope, onDeviceModels.turn,
+        val onDevice = OnDeviceLiveSession(viewModelScope, onDeviceModels.turn,
             onDeviceModels.speechInput(speechEngine),
             // The teacher's voice: the learner's open-weight pick for this Language Module, or the
             // phone's built-in voice, which a missing or failing pick falls back to sentence by sentence.
@@ -976,10 +1072,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             onLevels = ::applyLevels,
             onBusy = { answering = it },
             onFailure = { error -> if (session?.id == id && isRunning) fail(error, R.string.error_voice_connect_failed) })
-        onDeviceVoice = local
+        onDeviceVoice = onDevice
         // Only a native audio input turn needs the model to report what it heard: an alternate
         // already transcribed the learner, so its turns carry no <heard> rule overhead.
-        local.start(instructions, module.locale,
+        onDevice.start(instructions, module.locale,
             nativeAudioInput = speechEngine == SpeechInputEngine.NATIVE_AUDIO, history = history)
     }
     fun end(reason: String = "Ended by you") {
@@ -1024,7 +1120,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (freeBoundaryOwnerID != null && session?.endReason in listOf("Time limit", "Reserved conversation time ended")) {
             continuationSession = session; continuationOwnerID = freeBoundaryOwnerID
-            hasContinuation = true; continuationReady = false
+            hasContinuation = true; continuationReady = false; continuationWasVoice = voiceSession
             session?.let { saved ->
                 continuationPreferences.edit().putString(continuationKey, json.encodeToString(
                     kotlinx.serialization.serializer<ConversationContinuationCheckpoint>(),
@@ -1033,9 +1129,12 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
             notice = getApplication<Application>().getString(R.string.notice_continue_settling)
         } else if (ConversationContinuationPolicy.reachedOnDeviceTimeLimit(session?.id in onDeviceSessionIDs, session?.endReason)) {
             // The identical Continue/New choice, with nothing to settle: an On-Device Model
-            // conversation consumed no minutes, so it is ready to continue at once.
+            // conversation consumed no minutes, so it is ready to continue at once. Its checkpoint
+            // survives process death, so a low-memory kill cannot lose the conversation either.
             continuationSession = session; continuationOwnerID = null
             hasContinuation = true; continuationReady = true; continuationNeedsMinutes = false
+            continuationWasVoice = voiceSession
+            session?.let(::saveOnDeviceContinuationCheckpoint)
         }
         session?.let {
             if (it.id in hostedSessionIDs) {
@@ -1061,10 +1160,10 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun command(kind: String, content: String, delegationID: String? = null): Boolean {
         if (state != "active" || !voiceSession) return false
-        // A local conversation has no data channel: an instruction is a turn of its own model,
+        // An on-device conversation has no data channel: an instruction is a turn of its own model,
         // and no delegation ever reaches a client offline.
-        onDeviceVoice?.let { local ->
-            return local.command(kind, content)
+        onDeviceVoice?.let { onDevice ->
+            return onDevice.command(kind, content)
                 .also { if (!it) notice = getApplication<Application>().getString(R.string.notice_update_send_failed) }
         }
         return transport.send(buildJsonObject {
@@ -1091,7 +1190,9 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         when (event["type"]?.jsonPrimitive?.content) {
             "mural.session.created" -> updateSession { it.providerID = (event["session"] as? JsonObject)?.get("id")?.jsonPrimitive?.content; it.voiceSeconds = 15.0 }
             "session.started" -> if (state == "connecting") {
+                declineOnDeviceContinuation()
                 continuationSession = null; continuationOwnerID = null; hasContinuation = false; continuationReady = false
+                continuationWasVoice = false
                 continuationPreferences.edit().remove(continuationKey).apply()
                 state = "active"; activity = ConversationActivity(activityNow()); conversationPace = ConversationPace(); inactivitySeconds = null
                 if (conversationProvider == ConversationProvider.PERSONAL_KEY) providerIssue = null
@@ -1143,7 +1244,7 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 // An Untimed Conversation never ends here: the idle end and the manual end still do.
                 if (ConversationProviderPolicy.endsForDuration(current.id in onDeviceSessionIDs, untimedOnDevice,
-                        nowSeconds() - current.startedAt, archive.preferences.sessionMinutes)) {
+                        nowSeconds() - durationBaseline, archive.preferences.sessionMinutes)) {
                     notice = getApplication<Application>().getString(R.string.notice_time_limit_reached); end("Time limit"); break
                 }
                 inactivitySeconds = null
