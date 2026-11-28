@@ -57,6 +57,36 @@ class OnDeviceModelController(
     /** The models on this phone, curated downloads and imported files alike. */
     fun stored(): List<OnDeviceModel> = store.models
 
+    /** The learner's speech-input engine choice: native audio input, or the speech recognition alternate. */
+    fun speechInputEngine(): SpeechInputEngine = store.speechInput()
+
+    /** Chooses it explicitly, and switching back to the native audio input is one tap too. */
+    fun selectSpeechInput(engine: SpeechInputEngine) {
+        store.selectSpeechInput(engine)
+        publish(current())
+    }
+
+    /**
+     * The speech-input engine a voice conversation would use right now: the learner's choice, or the
+     * native audio input an unavailable alternate falls back to. Null means this phone cannot hear
+     * the learner at all, so the caller owes them an honest notice instead of a silent session.
+     */
+    fun resolvedSpeechInput(): SpeechInputEngine? = OnDeviceSpeechInputSelector.resolve(
+        store.speechInput(), speechModelOnPhone(), session != null && hearsAudio)
+
+    /**
+     * The learner's microphone for a resolved engine. A speech recognition model that turns out to
+     * be unusable when a turn is transcribed falls back to the clip the active model can hear, so it
+     * never blocks the conversation; a text-only model gets an honest failure instead of audio.
+     */
+    fun speechInput(engine: SpeechInputEngine): OnDeviceSpeechInput {
+        val microphone = NativeAudioSpeechInput(context)
+        if (engine != SpeechInputEngine.PARAKEET) return microphone
+        return ParakeetSpeechInput(microphone,
+            open = { MediaPipeSpeechTranscriber(context, File(directory, speechModelFile())) },
+            audioFallback = session != null && hearsAudio)
+    }
+
     /** Whether this phone offers the zero-download system model: the AICore device probe. */
     suspend fun systemModelAvailable(): Boolean = aicore.available()
 
@@ -102,13 +132,15 @@ class OnDeviceModelController(
     /** The warnings for a catalogue model, decided before its multi-gigabyte transfer starts. */
     fun plan(model: CataloguedModel): DownloadPlan = plan(model.fileName, model.sizeBytes, model.minDeviceMemoryGb)
 
-    /** Downloads a curated catalogue model, then makes it the active model. */
+    /** Downloads a curated catalogue model. A conversation model becomes the active one; a speech
+     * recognition model lands on this phone beside it and never disturbs the active model. */
     fun download(model: CataloguedModel) {
         val url = model.downloadURL
         val fileName = model.fileName
         // A zero-download Model Runtime (AICore) has neither, and downloads nothing here.
         if (url == null || fileName == null) return
-        begin(url, fileName, model.sizeBytes, model.minDeviceMemoryGb)
+        begin(url, fileName, model.sizeBytes, model.minDeviceMemoryGb,
+            activates = model !in OnDeviceModelCatalogue.speechRecognition)
     }
 
     /** Downloads a pasted direct HTTPS `.litertlm` link through the same flow. */
@@ -133,6 +165,10 @@ class OnDeviceModelController(
                 File(directory, name + OnDeviceModelDownloader.PARTIAL_SUFFIX).delete()
             }
             store.delete(name)
+            // A deleted speech recognition model cannot stay chosen: the native microphone is the
+            // learner's input again, exactly as an alternate that was never downloaded resolves.
+            if (OnDeviceModelCatalogue.speechRecognition.any { it.fileName == name })
+                store.selectSpeechInput(SpeechInputEngine.NATIVE_AUDIO)
             publish(current())
         }
     }
@@ -163,7 +199,8 @@ class OnDeviceModelController(
         closeSession()
     }
 
-    private fun begin(url: String, fileName: String, sizeBytes: Long, minDeviceMemoryGb: Int) {
+    private fun begin(url: String, fileName: String, sizeBytes: Long, minDeviceMemoryGb: Int,
+        activates: Boolean = true) {
         if (downloadJob?.isActive == true) return
         // shortcut: the transfer lives in the ViewModel scope, so leaving the app can stop it; the
         // partial file resumes on the next tap. Upgrade to a foreground service if learners lose
@@ -178,7 +215,8 @@ class OnDeviceModelController(
                     progress.value = DownloadProgress(fileName, received, total)
                 }
                 progress.value = null
-                load(store.import(fileName, downloaded.length()))
+                if (activates) load(store.import(fileName, downloaded.length()))
+                else { store.import(fileName, downloaded.length(), makeActive = false); publish(current()) }
             } catch (cancelled: CancellationException) { progress.value = null; throw cancelled }
             catch (error: Exception) { progress.value = null; publish(current(failure = downloadMessage(error))) }
         }
@@ -194,6 +232,11 @@ class OnDeviceModelController(
         // A resumed download plans only the bytes that are still missing.
         (sizeBytes - partialBytes(fileName)).coerceAtLeast(0L),
         context.noBackupFilesDir.usableSpace, deviceMemoryBytes(), minDeviceMemoryGb)
+
+    /** The chosen speech recognition alternate's file, whether or not it is on this phone yet. */
+    private fun speechModelFile() = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B.fileName.orEmpty()
+
+    private fun speechModelOnPhone() = store.models.any { it.name == speechModelFile() }
 
     private fun partialBytes(fileName: String?) =
         fileName?.let { File(directory, it + OnDeviceModelDownloader.PARTIAL_SUFFIX).length() } ?: 0L

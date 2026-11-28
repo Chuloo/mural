@@ -9,11 +9,13 @@ import kotlinx.serialization.json.Json
 data class OnDeviceModel(val name: String, val sizeBytes: Long, val importedAt: Double = nowSeconds())
 
 /**
- * Imported On-Device Model metadata plus the one active model, persisted as JSON beside the
- * learning records: a model choice is this phone's state and never exported learning content.
+ * Imported On-Device Model metadata, the one active model and the learner's speech-input engine
+ * choice, persisted as JSON beside the learning records: a model choice is this phone's state and
+ * never exported learning content.
  */
 class OnDeviceModelStore(initial: String? = null, private val save: (String) -> Unit = {}) {
-    @Serializable private data class Stored(val models: List<OnDeviceModel> = emptyList(), val active: String? = null)
+    @Serializable private data class Stored(val models: List<OnDeviceModel> = emptyList(), val active: String? = null,
+        val speechInput: String = SpeechInputEngine.NATIVE_AUDIO.name)
 
     private var stored = runCatching { json.decodeFromString<Stored>(initial.orEmpty()) }.getOrNull() ?: Stored()
 
@@ -32,10 +34,15 @@ class OnDeviceModelStore(initial: String? = null, private val save: (String) -> 
         persist()
     }
 
-    /** A newly imported model becomes the active one; re-importing a name replaces its metadata. */
-    fun import(displayName: String?, sizeBytes: Long): OnDeviceModel {
+    /**
+     * A newly imported model becomes the active one; re-importing a name replaces its metadata. A
+     * speech recognition model is recorded with [makeActive] false: it lands on this phone beside
+     * the active conversation model and never replaces it.
+     */
+    fun import(displayName: String?, sizeBytes: Long, makeActive: Boolean = true): OnDeviceModel {
         val model = OnDeviceModel(fileName(displayName), sizeBytes)
-        stored = stored.copy(models = stored.models.filterNot { it.name == model.name } + model, active = model.name)
+        stored = stored.copy(models = stored.models.filterNot { it.name == model.name } + model,
+            active = if (makeActive) model.name else stored.active)
         persist()
         return model
     }
@@ -58,6 +65,16 @@ class OnDeviceModelStore(initial: String? = null, private val save: (String) -> 
             active = stored.active?.takeIf { it != name })
         persist()
         return true
+    }
+
+    /** The learner's speech-input engine. A record from before the choice existed keeps the default. */
+    fun speechInput(): SpeechInputEngine =
+        runCatching { SpeechInputEngine.valueOf(stored.speechInput) }.getOrDefault(SpeechInputEngine.NATIVE_AUDIO)
+
+    /** Chooses the learner's speech input; the native audio input is the default and always stays available. */
+    fun selectSpeechInput(engine: SpeechInputEngine) {
+        stored = stored.copy(speechInput = engine.name)
+        persist()
     }
 
     private fun persist() = save(json.encodeToString(Stored.serializer(), stored))

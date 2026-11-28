@@ -10,6 +10,10 @@
     <string name="settings_on_device_models">Modelos en el dispositivo</string>
     <string name="settings_on_device_stored_group">Tus modelos</string>
     <string name="settings_on_device_models_footer">Un solo modelo está activo para todos los idiomas y todas las ayudas. Descarga un modelo seleccionado, pega un enlace directo o importa tu propio archivo .litertlm.</string>
+    <string name="settings_on_device_speech_input">Reconocimiento de voz</string>
+    <string name="settings_on_device_speech_input_footer">Tu voz se convierte en subtítulos de todas formas. El audio nativo del modelo no necesita descarga; un modelo de reconocimiento de voz transcribe tu voz en este teléfono en su lugar.</string>
+    <string name="settings_on_device_speech_input_choice">Entrada de voz del alumno</string>
+    <string name="settings_on_device_speech_native">Audio nativo del modelo</string>
     <string name="settings_on_device_download">Descargar</string>
     <string name="settings_on_device_cancel_download">Cancelar la descarga</string>
     <string name="settings_on_device_downloading_percent">Descargando %1$d%%</string>
@@ -31,7 +35,7 @@
     <string name="talk_review_on_device_issue">Revisa tu modelo en el dispositivo en Avanzado</string>
     <string name="talk_on_device_downloading">Descargando el modelo — ve el progreso en Avanzado</string>
     <string name="error_on_device_model_needed">Importa un modelo en el dispositivo en Ajustes para conversar en este teléfono.</string>
-    <string name="error_on_device_no_audio_input">Este modelo no puede escuchar tu voz, así que no puede mantener una conversación de voz. Elige un modelo que escuche tu voz en Ajustes, en Avanzado, o escribe tu parte.</string>
+    <string name="error_on_device_no_audio_input">Este modelo no puede escuchar tu voz, así que no puede mantener una conversación de voz. Elige un modelo que escuche tu voz, o descarga el modelo de reconocimiento de voz, en Ajustes en Avanzado — o escribe tu parte.</string>
     <string name="error_on_device_import_failed">No se pudo importar ese archivo de modelo.</string>
     <string name="error_on_device_model_failed">El modelo en el dispositivo no pudo iniciarse. Inténtalo de nuevo en Ajustes, en Avanzado.</string>
     <string name="error_on_device_storage_short">No hay suficiente espacio libre para ese modelo. Libera %1$s e inténtalo de nuevo.</string>
@@ -48,6 +52,8 @@
     <string name="settings_on_device_model_qwen2_5_1_5b_description">El modelo seleccionado más pequeño. Solo conversaciones escritas: no puede escuchar tu voz. Necesita un teléfono con 6 GB de memoria.</string>
     <string name="settings_on_device_model_gemini_nano">Gemini Nano (AICore del sistema)</string>
     <string name="settings_on_device_model_gemini_nano_description">El modelo del sistema de tu teléfono: nada que descargar y nada que eliminar. Elígelo y conversa en este teléfono de inmediato.</string>
+    <string name="settings_on_device_model_parakeet">Parakeet TDT 0.6B</string>
+    <string name="settings_on_device_model_parakeet_description">Un modelo dedicado de reconocimiento de voz: escucha el portugués europeo, el francés y el italiano, además del español, el alemán, el neerlandés, el griego, el ruso y el inglés. Necesita un teléfono con 4 GB de memoria.</string>
     <string name="settings_on_device_no_download">Sin descarga</string>
     <string name="error_on_device_aicore_unavailable">Gemini Nano no está disponible en este teléfono en este momento. Inténtalo más tarde o elige un modelo para descargar.</string>
     <string name="error_topic_offline">Encontrar un tema actual con fuentes necesita internet. Tu conversación en el dispositivo sigue sin conexión: elige otro tema o inténtalo de nuevo con conexión.</string>

@@ -79,6 +79,7 @@ import chat.mural.core.ProviderFailureKind
 import chat.mural.ondevice.CataloguedModel
 import chat.mural.ondevice.OnDeviceModel
 import chat.mural.ondevice.OnDeviceModelCatalogue
+import chat.mural.ondevice.SpeechInputEngine
 import kotlinx.coroutines.launch
 
 @Composable
@@ -301,11 +302,15 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     val readiness = vm.onDeviceReadiness
                     val download = readiness.download
                     val catalogue = OnDeviceModelCatalogue.conversation
+                    val speech = OnDeviceModelCatalogue.speechRecognition
+                    val alternate = OnDeviceModelCatalogue.PARAKEET_TDT_0_6B
                     val system = OnDeviceModelCatalogue.GEMINI_NANO_AICORE
                     val stored = vm.onDeviceStoredModels
                     // A pasted link's download is only on the phone once it lands, so it gets a row of its own.
                     val inFlight = download?.takeIf { progress ->
-                        catalogue.none { it.fileName == progress.fileName } && stored.none { it.name == progress.fileName }
+                        catalogue.none { it.fileName == progress.fileName } &&
+                            speech.none { it.fileName == progress.fileName } &&
+                            stored.none { it.name == progress.fileName }
                     }?.let { OnDeviceModel(it.fileName, it.totalBytes) }
                     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
                         // Probed each time the picker opens: a phone below AICore's API 33 floor, or one
@@ -351,7 +356,9 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     tag = "on-device-model-${model.id}")
                             }
                         }
-                        val own = stored.filterNot { file -> catalogue.any { it.fileName == file.name } } + listOfNotNull(inFlight)
+                        val own = stored.filterNot { file ->
+                            (catalogue + speech).any { it.fileName == file.name }
+                        } + listOfNotNull(inFlight)
                         if (own.isNotEmpty()) SettingsGroup(stringResource(R.string.settings_on_device_stored_group)) {
                             own.forEachIndexed { index, file ->
                                 if (index > 0) SettingsDivider()
@@ -368,6 +375,34 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                                     onDelete = if (removable) { { deleteModel = file } } else null,
                                     tag = "on-device-stored-model-$index")
                             }
+                        }
+                        // The learner's speech input: the active model's own microphone, or a
+                        // dedicated speech recognition model downloaded and deleted right here.
+                        val onPhone = stored.firstOrNull { it.name == alternate.fileName }
+                        SettingsGroup(stringResource(R.string.settings_on_device_speech_input),
+                            stringResource(R.string.settings_on_device_speech_input_footer)) {
+                            SettingsChoiceRow(stringResource(R.string.settings_on_device_speech_input_choice),
+                                stringResource(if (vm.onDeviceSpeechInput == SpeechInputEngine.PARAKEET)
+                                    alternate.title else R.string.settings_on_device_speech_native),
+                                vm.onDeviceSpeechInput.name,
+                                listOf(SpeechInputEngine.NATIVE_AUDIO.name to
+                                    stringResource(R.string.settings_on_device_speech_native),
+                                    SpeechInputEngine.PARAKEET.name to stringResource(alternate.title)),
+                                "on-device-speech-input", !vm.isRunning,
+                                { vm.selectOnDeviceSpeechInput(SpeechInputEngine.valueOf(it)) })
+                            SettingsDivider()
+                            OnDeviceModelRow(title = stringResource(alternate.title),
+                                detail = stringResource(alternate.description),
+                                status = if (onPhone != null)
+                                    stringResource(R.string.settings_on_device_downloaded_badge)
+                                else Formatter.formatFileSize(context, alternate.sizeBytes),
+                                download = download?.takeIf { it.fileName == alternate.fileName },
+                                enabled = !vm.isRunning && download == null,
+                                action = if (onPhone != null) null else R.string.settings_on_device_download,
+                                onAction = { pendingDownload = alternate },
+                                onCancel = vm::cancelOnDeviceDownload,
+                                onDelete = onPhone?.let { file -> { deleteModel = file } },
+                                tag = "on-device-speech-model-${alternate.id}")
                         }
                         SettingsGroup {
                             SettingsRow(stringResource(R.string.settings_on_device_link), chevron = true,
@@ -509,7 +544,8 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
     if (modelLink) OnDeviceLinkDialog(enabled = !vm.isRunning && vm.onDeviceReadiness.download == null,
         onDismiss = { modelLink = false }, onDownload = { modelLink = false; vm.downloadOnDeviceModelURL(it) })
     deleteModel?.let { file ->
-        val curated = OnDeviceModelCatalogue.conversation.firstOrNull { it.fileName == file.name }
+        val curated = (OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.speechRecognition)
+            .firstOrNull { it.fileName == file.name }
         ConfirmDialog(
             stringResource(R.string.settings_on_device_delete_confirm_title,
                 curated?.let { stringResource(it.title) } ?: file.name),

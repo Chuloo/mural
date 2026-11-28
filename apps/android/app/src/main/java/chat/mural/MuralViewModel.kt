@@ -229,12 +229,20 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
     private fun onDeviceChanged(next: OnDeviceReadiness) {
         if (next.failure != null && next.failure != onDeviceReadiness.failure) presentError(next.failure)
         onDeviceReadiness = next; onDeviceStoredModels = onDeviceModels.stored()
+        // Deleting the speech recognition alternate puts the learner back on native audio input.
+        onDeviceSpeechInput = onDeviceModels.speechInputEngine()
     }
     /** The Helpers of an On-Device Model session: strictly offline, never a cloud call. */
     private val onDeviceTeaching = OnDeviceTeachingClient(onDeviceModels.turn) { language.lookupUnavailableReply }
     private var onDeviceSessionIDs = emptySet<String>()
     /** Switches the active On-Device Model: an imported file, or the zero-download system model. */
     fun selectOnDeviceModel(name: String) { if (!isRunning) onDeviceModels.select(name) }
+    /** The learner's speech-input engine: the active model's native audio input, or the alternate. */
+    var onDeviceSpeechInput by mutableStateOf(onDeviceModels.speechInputEngine()); private set
+    /** Chooses it; a running conversation keeps the microphone it opened with. */
+    fun selectOnDeviceSpeechInput(engine: SpeechInputEngine) {
+        if (!isRunning) onDeviceModels.selectSpeechInput(engine)
+    }
     /** Whether this phone offers the zero-download system model: the AICore device probe. */
     var onDeviceSystemModelAvailable by mutableStateOf(false); private set
     /** Probed when the model picker opens, so an unsupported phone never sees the row at all. */
@@ -903,13 +911,15 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     /**
-     * Opens a voice conversation on this phone. The active model has to hear the learner: a model
-     * with no native audio input never opens a voice session and is never substituted by another
-     * provider — typed Talk keeps working with it.
+     * Opens a voice conversation on this phone. The learner's speech has to reach the model: through
+     * its own native audio input, or through the downloaded speech recognition alternate, which also
+     * lets a text-only model hear. With neither, a voice session is honestly refused and never
+     * substituted by another provider — typed Talk keeps working.
      */
     private fun startOnDeviceVoice(continuing: SessionRecord?) {
         val app = getApplication<Application>()
-        if (!onDeviceReadiness.audioInput) {
+        val speechEngine = onDeviceModels.resolvedSpeechInput()
+        if (speechEngine == null) {
             presentError(app.getString(R.string.error_on_device_no_audio_input)); return
         }
         // The same microphone gate the cloud transport applies, so a revoked permission is an
@@ -931,14 +941,17 @@ class MuralViewModel(application: Application) : AndroidViewModel(application) {
         val history = ConversationHistory.messages(continuing ?: session)
         startingWithHistory = history.isNotEmpty()
         val local = OnDeviceLiveSession(viewModelScope, onDeviceModels.turn,
-            NativeAudioSpeechInput(app), PlatformSpeechOutput(app),
+            onDeviceModels.speechInput(speechEngine), PlatformSpeechOutput(app),
             // The model calls back on the engine's own thread; events land on the main one in order.
             onEvent = { event -> viewModelScope.launch { deliver(event) } },
             onLevels = ::applyLevels,
             onBusy = { answering = it },
             onFailure = { error -> if (session?.id == id && isRunning) fail(error, R.string.error_voice_connect_failed) })
         onDeviceVoice = local
-        local.start(instructions, module.locale, nativeAudioInput = true, history = history)
+        // Only a native audio input turn needs the model to report what it heard: an alternate
+        // already transcribed the learner, so its turns carry no <heard> rule overhead.
+        local.start(instructions, module.locale,
+            nativeAudioInput = speechEngine == SpeechInputEngine.NATIVE_AUDIO, history = history)
     }
     fun end(reason: String = "Ended by you") {
         if (state !in listOf("active", "connecting")) return
