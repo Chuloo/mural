@@ -22,17 +22,3 @@ William requested on September 16, 2026 that required server deployment be part 
 - Record the deployed revision, verification results, rollback location and any remaining limits. Distinguish local tests, live verification, merging and deployment in the handover.
 
 Use the user's current instructions to resolve release scope and deferred work. Do not ask again for deployment approval already provided for that scope. This workflow does not authorize unrelated feature activation, pricing changes or destructive data operations.
-
-## Agent skills
-
-### Issue tracker
-
-Issues and specs live as local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical triage roles, label strings identical to role names, recorded as `Status:` lines. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `GLOSSARY.md` at the repo root, ADRs under `docs/adr/` when needed. See `docs/agents/domain.md`.
