@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import chat.mural.core.AccountController
 import chat.mural.core.AccountState
 import chat.mural.core.AccountMutationCoordinator
+import chat.mural.core.ConversationProviderStore
 import chat.mural.network.AccountSessionStore
 import chat.mural.network.ManagedAccountClient
 import chat.mural.network.ManagedAccountConfiguration
@@ -23,12 +24,24 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
     val state = controller?.state ?: MutableStateFlow(AccountState())
     private val mutations = AccountMutationCoordinator(viewModelScope)
     val transitionBusy = mutations.busy
-    init { viewModelScope.launch { controller?.restore() } }
+    /** Zero server telemetry: reading the stored session is local, and the durable Conversation
+     * Provider choice — not an in-memory one a launch has not restored yet — gates every probe. */
+    private val providers = ConversationProviderStore(application)
+    private val restored = viewModelScope.launch { controller?.restore() }
     fun refresh() {
         if (transitionBusy.value) return
         viewModelScope.launch {
             // A recreated Activity must not take the controller lock while settlement precedes sign-out.
             if (!transitionBusy.value) controller?.refresh()
+        }
+    }
+    /** The launch and foreground probe. It never runs while On-Device Model is the learner's choice;
+     * an explicit refresh — the account sheet, sign-in, a purchase — is never gated. */
+    fun refreshAutomatically() {
+        if (transitionBusy.value) return
+        viewModelScope.launch {
+            restored.join()
+            if (!transitionBusy.value && !providers.onDeviceChosen()) controller?.refresh()
         }
     }
     suspend fun refreshAndWait() { controller?.refresh() }

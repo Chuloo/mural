@@ -31,12 +31,13 @@ class AccountController(
     private var session: AccountSession? = null
     private var balanceRevision: Pair<String, java.math.BigInteger>? = null
 
+    /** Local only: the stored session is published without a profile or balance request, so a
+     * launch reaches no server. [refresh] is the explicit probe the caller may gate. */
     suspend fun restore() = operation {
         val stored = storage.read()
         if (stored != null && !stored.isValid(now())) { storage.clear(); return@operation }
         session = stored
         mutable.value = mutable.value.copy(accountID = stored?.accountID)
-        if (stored != null) refreshAccount(stored)
     }
     suspend fun refresh() = operation {
         mutable.value = mutable.value.copy(minutes = null)

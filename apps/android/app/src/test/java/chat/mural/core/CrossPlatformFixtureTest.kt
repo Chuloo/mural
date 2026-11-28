@@ -57,6 +57,8 @@ class CrossPlatformFixtureTest {
         assertEquals(fieldPaths(Json.parseToJsonElement(source)), fieldPaths(Json.parseToJsonElement(reencoded)))
         assertEquals(content(Json.parseToJsonElement(source)), content(Json.parseToJsonElement(reencoded)))
         assertEquals(archive.sessions.map { it.passages }, ArchiveCodec.decode(reencoded).sessions.map { it.passages })
+        // An iPhone-shaped backup carries no report key: it decodes with none and re-encodes without one.
+        assertTrue(archive.reports.isEmpty())
     }
 
     @Test fun transcriptPassagesMatchTheSharedFixture() {

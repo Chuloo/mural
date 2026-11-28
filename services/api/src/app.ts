@@ -15,7 +15,6 @@ import { ACCESS_REQUEST_PATH, trustedClientNetwork, type AccessRequests } from '
 import type { AuthAdmission } from './auth-admission.js';
 import { claimWelcomeMinutes, minuteBalance, UnconfiguredMinuteAttestor, type MinuteAttestor } from './minutes.js';
 import { startGuestMinutes, linkGuestMinutes, UnconfiguredGuestMinuteAttestor, type GuestMinuteAttestor } from './guest-minutes.js';
-import { AI_REPORT_BODY_LIMIT, AI_REPORT_PATH, reportNetwork, type AIReports } from './feedback.js';
 import { stripeOrderByKey, type MinutePurchases, type PurchaseEnvironment } from './minute-purchases.js';
 import { appleAppTransactionHeader, appleSignedEnvironment, type ApplePurchaseScopes } from './apple-purchase-scope.js';
 import type { AIValuePurchases, PurchaseFulfillmentRouter } from './ai-value-purchases.js';
@@ -32,7 +31,7 @@ declare module 'fastify' {
   interface FastifyContextConfig { rateLimit?: { max: number; timeWindow: number } }
 }
 
-export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthConfig; payments?: SandboxPayments; attestor?: TrialAttestor; minuteAttestor?: MinuteAttestor; guestMinuteAttestor?: GuestMinuteAttestor; appleRevoker?: AppleRevoker; hosted?: HostedVoice; accessRequests?: AccessRequests; aiReports?: AIReports;
+export interface Services { diagnostics?: Diagnostics; db: Database; auth: AuthConfig; payments?: SandboxPayments; attestor?: TrialAttestor; minuteAttestor?: MinuteAttestor; guestMinuteAttestor?: GuestMinuteAttestor; appleRevoker?: AppleRevoker; hosted?: HostedVoice; accessRequests?: AccessRequests;
   webPurchases?: WebPurchases;
   onStartupDiagnostic?: (diagnostic: StartupDiagnostic) => void | Promise<void>;
   hostedHelpers?: HostedHelpers;
@@ -153,7 +152,7 @@ export function createApp(services: Services) {
       return;
     }
     // This endpoint has separate durable admission limits; Caddy's shared address is not its visitor identity.
-    if (path === ACCESS_REQUEST_PATH || path === AI_REPORT_PATH || path === '/healthz') return;
+    if (path === ACCESS_REQUEST_PATH || path === '/healthz') return;
     if (!routeLimit) limitNetworkRequest(request, reply, paymentReadOptions.config.rateLimit);
   });
   app.setErrorHandler((error, request, reply) => {
@@ -308,17 +307,6 @@ export function createApp(services: Services) {
   app.get('/v1/auth/providers', async () => ({ google: Boolean(services.accounts && (services.auth.googleClientID || services.auth.googleIOSClientIDs?.length)),
     googleAndroid: Boolean(services.accounts && services.auth.googleAndroidServerClientID && services.auth.googleAndroidClientIDs?.length),
     apple: Boolean(services.accounts && services.auth.appleClientID && services.appleRevoker) }));
-  app.get('/v1/feedback/capabilities', async () => ({ aiReports: Boolean(services.aiReports?.config) }));
-  app.post(AI_REPORT_PATH, { bodyLimit: AI_REPORT_BODY_LIMIT }, async (request, reply) => {
-    const reports = services.aiReports;
-    if (!reports?.config) throw new ServiceError('ai_reports_unavailable', 503);
-    const network = reportNetwork(request.headers, request.raw.socket.remoteAddress ?? request.ip, reports.config);
-    try { return reply.code(202).send(await reports.submit(objectBody(request), network)); }
-    catch (error) {
-      if (error instanceof ServiceError && error.status === 429) reply.header('Retry-After', '3600');
-      throw error;
-    }
-  });
   app.post('/v1/auth/challenge', { bodyLimit: 1024 }, async request => {
     if (Object.keys(objectBody(request)).length) throw new ServiceError('invalid_request');
     return createChallenge(db);

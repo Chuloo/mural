@@ -117,6 +117,8 @@ class MinutePurchaseViewModel(application: Application) : AndroidViewModel(appli
     private val selectedAccount = MutableStateFlow<String?>(null)
     private val walletOwner = MutableStateFlow<String?>(null)
     private val launchGate = MinutePurchaseLaunchGate()
+    /** The durable Conversation Provider choice, read before an automatic store probe. */
+    private val providers = ConversationProviderStore(application)
     private val controller = if (enabled && channel == PurchaseChannel.PLAY) MinutePurchaseController(viewModelScope, MinuteCommerceClient(configuration!!), store!!,
         readMember = { access!!.read() }, enabled = true, expectedEnvironment = capability.environment,
         onBalanceChanged = {
@@ -145,7 +147,12 @@ class MinutePurchaseViewModel(application: Application) : AndroidViewModel(appli
     /** Call from the foreground lifecycle and pass the current AccountViewModel state. */
     fun onForeground(account: AccountState) {
         selectAccount(account)
-        viewModelScope.launch { controller?.onForeground(); stripeController?.onForeground() }
+        viewModelScope.launch {
+            // Zero server telemetry: a store probe belongs to Mural Minutes, so it never runs on its
+            // own while On-Device Model is the learner's choice. An explicit refresh() still does.
+            if (providers.onDeviceChosen()) return@launch
+            controller?.onForeground(); stripeController?.onForeground()
+        }
     }
     /** Call when membership or account-operation state changes, including sign-out and deletion. */
     fun onAccountChanged(account: AccountState) {

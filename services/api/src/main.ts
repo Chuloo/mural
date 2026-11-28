@@ -11,7 +11,7 @@ import { HostedVoice } from './hosted-voice.js';
 import { OpenAILiveProvider } from './live-provider.js';
 import { AccessRequests, accessRequestConfig, pruneAccessRequests } from './access-requests.js';
 import { AuthAdmission, accountAdmissionConfig } from './auth-admission.js';
-import { AIReports, aiReportConfig, pruneAIReports } from './feedback.js';
+import { pruneAIReports } from './feedback.js';
 import { configuredMinuteCommerce } from './minute-commerce-config.js';
 import { HostedHelpers } from './hosted-helpers.js';
 import { OpenAIHostedResponses } from './hosted-responses-transport.js';
@@ -103,8 +103,6 @@ try {
   if (process.env.GUEST_MINUTES_ENABLED==='true' && (!accounts || !hosted?.publicMinuteAccess || !hostedHelpers))
     throw new Error('Guest minutes require public minute voice, teaching and trusted admission.');
   const guestMinuteAttestor = process.env.GUEST_MINUTES_ENABLED==='true' ? new InstallationGuestMinuteAttestor() : undefined;
-  const reportConfig = aiReportConfig(process.env);
-  const aiReports = reportConfig ? new AIReports(db, reportConfig) : undefined;
   await pruneAccessRequests(db);
   await pruneAuthenticationRecords(db);
   await pruneAIReports(db);
@@ -121,7 +119,7 @@ try {
     !(appleClient && appleRevoker)) throw new Error('No account identity provider configured.');
   const app = createApp({ db, auth: { googleClientID: process.env.GOOGLE_CLIENT_ID, googleIOSClientIDs, appleClientID: appleClient,
     googleAndroidServerClientID, googleAndroidClientIDs }, payments, appleRevoker, hosted, hostedHelpers,
-    minuteCommerce, accessRequests, accounts, aiReports,guestMinuteAttestor,webPurchases,
+    minuteCommerce, accessRequests, accounts, guestMinuteAttestor,webPurchases,
     diagnostics });
   const cleanup = setInterval(() => {
     void pruneAuthenticationRecords(db).catch(error => { diagnostics.record('background_failed', { operation: 'retention.accounts' }, error); });

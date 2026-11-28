@@ -34,4 +34,39 @@ class ReportSubmissionTest {
         assertFalse(json.contains("accountID"))
         assertEquals("ai-report-v1", report.consentVersion)
     }
+
+    private val record = ReportRecord("e3c1d862-2d0f-4bf0-a44f-404e9c559581", "es", "incorrect",
+        "Selected private excerpt", REPORT_CONSENT_VERSION, 1_234.0)
+    private fun archive(vararg reports: ReportRecord) = Archive(preferences = Preferences(learningLanguageID = "es"),
+        reports = reports.toMutableList())
+
+    @Test fun aSavedReportStaysOnThisPhoneAndTravelsWithTheLearningBackup() {
+        assertFalse(record.toString().contains(record.excerpt))
+        assertEquals(listOf(record), ArchiveCodec.decode(ArchiveCodec.encode(archive(record))).reports)
+        // An imported backup brings its reports, and one report ID is stored once.
+        val other = record.copy(reportID = "1b671a64-40d5-491e-99b0-da01ff1f3341")
+        val merged = ArchiveCodec.merge(archive(record), archive(record, other))
+        assertEquals(listOf(record, other), merged.reports)
+    }
+
+    @Test fun aReportThisPhoneWouldNotSaveMakesABackupInvalid() {
+        for (broken in listOf(record.copy(reportID = "not-uuid"), record.copy(reason = "unknown"),
+            record.copy(consentVersion = ""), record.copy(excerpt = " "),
+            record.copy(excerpt = "sk-" + "example-not-a-key".repeat(3)))) {
+            try {
+                ArchiveCodec.decode(ArchiveCodec.encode(archive(broken)))
+                fail("a backup holding $broken must be refused")
+            } catch (expected: ArchiveError) { }
+        }
+    }
+
+    @Test fun aReportLogIsBoundedSoABackupStaysExportable() {
+        val reports = Array(MAXIMUM_SAVED_REPORTS + 1) { record.copy(reportID = java.util.UUID.randomUUID().toString()) }
+        assertEquals(MAXIMUM_SAVED_REPORTS,
+            ArchiveCodec.decode(ArchiveCodec.encode(archive(*reports.dropLast(1).toTypedArray()))).reports.size)
+        try {
+            ArchiveCodec.decode(ArchiveCodec.encode(archive(*reports)))
+            fail("an over-full report log must be refused")
+        } catch (expected: ArchiveError) { }
+    }
 }

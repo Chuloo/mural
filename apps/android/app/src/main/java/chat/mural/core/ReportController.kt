@@ -4,17 +4,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-interface ReportService {
-    suspend fun available(): Boolean
-    suspend fun submit(report: AIReportSubmission)
-}
-
-sealed class ReportFailure : Exception() {
-    data object Unavailable : ReportFailure()
-    data object Retry : ReportFailure()
-    data object Invalid : ReportFailure()
-}
-
 /** Immutable local selection; it is never serialized or added to learning archives. */
 data class ReportSelection(val sessionID: String, val passageID: String, val languageID: String, val excerpt: String) {
     override fun toString() = "ReportSelection([redacted])"
@@ -46,11 +35,16 @@ internal fun validReportExcerpt(excerpt: String): Boolean {
     return true
 }
 
-data class ReportState(val selection: ReportSelection? = null, val available: Boolean = false,
+data class ReportState(val selection: ReportSelection? = null,
     val delivery: ReportDelivery = ReportDelivery.IDLE, val generation: Long = 0)
 
-/** UI-thread commands. Only submit() can send text, after the sheet's explicit consent action. */
-class ReportController(private val scope: CoroutineScope, private val service: ReportService?) {
+/**
+ * UI-thread commands. Only submit() stores text, after the sheet's explicit consent action, and it
+ * stores it on this phone: [save] is on-device storage, so no report can reach a server, and the
+ * sheet is ready at once because there is no capability to check.
+ */
+class ReportController(private val scope: CoroutineScope, private val save: suspend (ReportRecord) -> Unit,
+    private val now: () -> Double = ::nowSeconds) {
     private val mutable = MutableStateFlow(ReportState())
     val state = mutable.asStateFlow()
     private var generation = 0L
@@ -58,26 +52,20 @@ class ReportController(private val scope: CoroutineScope, private val service: R
 
     fun open(selection: ReportSelection) {
         job?.cancel()
-        val token = ++generation
-        mutable.value = ReportState(selection, false, if (service == null) ReportDelivery.UNAVAILABLE else ReportDelivery.CHECKING, token)
-        if (service == null) return
-        launchOperation(token) {
-            val available = service.available()
-            if (generation == token) mutable.value = mutable.value.copy(available = available,
-                delivery = if (available) ReportDelivery.IDLE else ReportDelivery.UNAVAILABLE)
-        }
+        mutable.value = ReportState(selection, ReportDelivery.IDLE, ++generation)
     }
 
     fun submit(report: AIReportSubmission) {
         val current = mutable.value
-        if (service == null || !current.available || current.delivery !in listOf(ReportDelivery.IDLE, ReportDelivery.FAILED) ||
+        if (current.delivery !in listOf(ReportDelivery.IDLE, ReportDelivery.FAILED) ||
             current.selection?.languageID != report.languageID || !report.isValid()) return
         val token = generation
-        // Reserve synchronously so two taps before recomposition cannot issue two requests.
-        mutable.value = current.copy(delivery = ReportDelivery.SENDING)
+        // Reserve synchronously so two taps before recomposition cannot save two reports.
+        mutable.value = current.copy(delivery = ReportDelivery.SAVING)
         launchOperation(token) {
-            service.submit(report)
-            if (generation == token) mutable.value = mutable.value.copy(delivery = ReportDelivery.SENT)
+            save(ReportRecord(report.reportID, report.languageID, report.reason, report.excerpt,
+                report.consentVersion, now()))
+            if (generation == token) mutable.value = mutable.value.copy(delivery = ReportDelivery.SAVED)
         }
     }
 
@@ -91,12 +79,10 @@ class ReportController(private val scope: CoroutineScope, private val service: R
         val next = scope.launch(start = CoroutineStart.LAZY) {
             try { action() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) {
-                if (generation == token) {
-                    val unavailable = mutable.value.delivery == ReportDelivery.CHECKING || error is ReportFailure.Unavailable
-                    mutable.value = mutable.value.copy(available = !unavailable,
-                        delivery = if (unavailable) ReportDelivery.UNAVAILABLE else ReportDelivery.FAILED)
-                }
+            // A failed write leaves the sheet retryable with the same report ID, so a report is
+            // never stored twice and never reported as saved when this phone does not hold it.
+            catch (_: Exception) {
+                if (generation == token) mutable.value = mutable.value.copy(delivery = ReportDelivery.FAILED)
             }
         }
         job = next

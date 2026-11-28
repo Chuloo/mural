@@ -202,7 +202,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         vm.foreground()
-        account.refresh()
+        // Zero server telemetry: a foreground probe never runs while On-Device Model is the choice.
+        account.refreshAutomatically()
         purchases.onForeground(account.state.value.copy(busy = account.state.value.busy || changingAccount))
         vm.refreshHostedReadiness()
     }

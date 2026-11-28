@@ -9,66 +9,64 @@ import org.junit.Test
 class ReportControllerTest {
     private val selection = ReportSelection("local-session", "local-passage", "es", "Una frase.")
     private val report = AIReportSubmission("e3c1d862-2d0f-4bf0-a44f-404e9c559581", "es", "incorrect", "Una frase.", REPORT_CONSENT_VERSION)
-    private class Fake : ReportService {
-        var enabled = true
-        var checks = 0
-        val sent = mutableListOf<AIReportSubmission>()
-        var submitAction: suspend () -> Unit = {}
-        override suspend fun available(): Boolean { checks++; return enabled }
-        override suspend fun submit(report: AIReportSubmission) { sent += report; submitAction() }
+    private class Storage {
+        val saved = mutableListOf<ReportRecord>()
+        var action: suspend () -> Unit = {}
+        suspend fun save(record: ReportRecord) { saved += record; action() }
     }
 
-    @Test fun openingChecksCapabilityOnlyAndDisabledOrUnconfiguredCannotSubmit() = runTest {
-        val api = Fake().apply { enabled = false }; val controller = ReportController(this, api)
-        runCurrent(); assertEquals(0, api.checks)
-        controller.open(selection); assertEquals(ReportDelivery.CHECKING, controller.state.value.delivery)
+    @Test fun openingProbesNothingAndSubmittingSavesTheReportOnThisPhone() = runTest {
+        val storage = Storage()
+        val controller = ReportController(this, storage::save, now = { 1_234.0 })
+        controller.open(selection)
+        // No capability check exists: the sheet is ready at once and nothing reached a network.
+        assertEquals(ReportDelivery.IDLE, controller.state.value.delivery)
+        assertTrue(storage.saved.isEmpty())
         controller.submit(report); runCurrent()
-        assertEquals(1, api.checks); assertTrue(api.sent.isEmpty())
-        assertEquals(ReportDelivery.UNAVAILABLE, controller.state.value.delivery)
-        controller.submit(report); runCurrent(); assertTrue(api.sent.isEmpty())
-        val unconfigured = ReportController(this, null)
-        unconfigured.open(selection); unconfigured.submit(report)
-        assertEquals(ReportDelivery.UNAVAILABLE, unconfigured.state.value.delivery)
+        assertEquals(ReportDelivery.SAVED, controller.state.value.delivery)
+        assertEquals(listOf(ReportRecord(report.reportID, "es", "incorrect", "Una frase.", REPORT_CONSENT_VERSION, 1_234.0)),
+            storage.saved)
+        controller.submit(report); runCurrent(); assertEquals(1, storage.saved.size)
     }
 
-    @Test fun duplicateTapCannotSubmitTwiceAndManualRetryKeepsID() = runTest {
-        val api = Fake().apply { submitAction = { throw ReportFailure.Retry } }
-        val controller = ReportController(this, api)
+    @Test fun duplicateTapCannotSaveTwiceAndManualRetryKeepsID() = runTest {
+        val storage = Storage().apply { action = { throw IllegalStateException("storage busy") } }
+        val controller = ReportController(this, storage::save)
         controller.open(selection); runCurrent()
         controller.submit(report); controller.submit(report)
-        assertEquals(ReportDelivery.SENDING, controller.state.value.delivery)
-        runCurrent(); assertEquals(1, api.sent.size); assertEquals(ReportDelivery.FAILED, controller.state.value.delivery)
-        api.submitAction = {}
+        assertEquals(ReportDelivery.SAVING, controller.state.value.delivery)
+        runCurrent(); assertEquals(1, storage.saved.size); assertEquals(ReportDelivery.FAILED, controller.state.value.delivery)
+        storage.action = {}
         controller.submit(report); runCurrent()
-        assertEquals(2, api.sent.size); assertEquals(api.sent[0].reportID, api.sent[1].reportID)
-        assertEquals(ReportDelivery.SENT, controller.state.value.delivery)
-        controller.submit(report); runCurrent(); assertEquals(2, api.sent.size)
+        assertEquals(2, storage.saved.size); assertEquals(storage.saved[0].reportID, storage.saved[1].reportID)
+        assertEquals(ReportDelivery.SAVED, controller.state.value.delivery)
+        controller.submit(report); runCurrent(); assertEquals(2, storage.saved.size)
     }
 
-    @Test fun revokedCapabilityBecomesUnavailableWithoutAutomaticRetry() = runTest {
-        val api = Fake().apply { submitAction = { throw ReportFailure.Unavailable } }
-        val controller = ReportController(this, api)
-        controller.open(selection); runCurrent(); controller.submit(report); advanceUntilIdle()
-        assertEquals(ReportDelivery.UNAVAILABLE, controller.state.value.delivery)
-        assertFalse(controller.state.value.available)
-        controller.submit(report); advanceUntilIdle(); assertEquals(1, api.sent.size)
-    }
-
-    @Test fun rejectedConsentLanguageAndMalformedPayloadNeverReachNetwork() = runTest {
-        val api = Fake(); val controller = ReportController(this, api)
+    @Test fun rejectedConsentLanguageAndMalformedPayloadNeverReachStorage() = runTest {
+        val storage = Storage()
+        val controller = ReportController(this, storage::save)
         controller.open(selection); runCurrent()
         for (invalid in listOf(report.copy(consentVersion = ""), report.copy(languageID = "en"), report.copy(reason = "unknown"),
             report.copy(reportID = "not-uuid"), report.copy(excerpt = "\ud83d"), report.copy(excerpt = " "),
             report.copy(excerpt = "a".repeat(2001)), report.copy(excerpt = "sk-" + "example-not-a-key".repeat(3)))) {
             controller.submit(invalid); runCurrent()
         }
-        assertTrue(api.sent.isEmpty()); assertEquals(ReportDelivery.IDLE, controller.state.value.delivery)
+        assertTrue(storage.saved.isEmpty()); assertEquals(ReportDelivery.IDLE, controller.state.value.delivery)
     }
 
-    @Test fun dismissedCompletionCannotChangeNewReportEvenIfTransportIgnoresCancellation() = runTest {
+    @Test fun anotherLanguageSelectionCannotBeSavedUnderTheOpenOne() = runTest {
+        val storage = Storage()
+        val controller = ReportController(this, storage::save)
+        controller.open(selection); runCurrent()
+        controller.submit(report.copy(languageID = "it")); runCurrent()
+        assertTrue(storage.saved.isEmpty()); assertEquals(ReportDelivery.IDLE, controller.state.value.delivery)
+    }
+
+    @Test fun dismissedCompletionCannotChangeNewReportEvenIfStorageIgnoresCancellation() = runTest {
         val completion = CompletableDeferred<Unit>()
-        val api = Fake().apply { submitAction = { withContext(NonCancellable) { completion.await() } } }
-        val controller = ReportController(this, api)
+        val storage = Storage().apply { action = { withContext(NonCancellable) { completion.await() } } }
+        val controller = ReportController(this, storage::save)
         controller.open(selection); runCurrent(); controller.submit(report); runCurrent()
         controller.dismiss(); controller.open(selection.copy(passageID = "new", excerpt = "Otra frase.")); runCurrent()
         completion.complete(Unit); runCurrent()
