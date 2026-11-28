@@ -57,9 +57,12 @@ object LearningEngine {
                     else -> successes=0
                 }
                 if(a.nextGoal.isNotEmpty()) nextGoal=a.nextGoal
-                if(a.outcome==Outcome.success && a.capability.isNotEmpty()) caps.getOrPut(a.capability){mutableSetOf()}.add("${dayKey(a.createdAt)}|${a.context}")
+                // `context` carries Session Provenance (`on-device:<theme>`); recall counts the theme
+                // alone, so one situation practised on two providers is still one situation.
+                val situation=a.context.removePrefix("$ON_DEVICE_PROVIDER_ID:")
+                if(a.outcome==Outcome.success && a.capability.isNotEmpty()) caps.getOrPut(a.capability){mutableSetOf()}.add("${dayKey(a.createdAt)}|$situation")
                 val seenWords=mutableSetOf<String>()
-                for(word in a.words) if(hidden.none { it==word.key } && seenWords.add(word.key)) events.getOrPut(word.key){mutableListOf()}.add(Triple(word,a.createdAt,a.context))
+                for(word in a.words) if(hidden.none { it==word.key } && seenWords.add(word.key)) events.getOrPut(word.key){mutableListOf()}.add(Triple(word,a.createdAt,situation))
             }
         }
         val words=events.mapNotNull { (key,obs) ->

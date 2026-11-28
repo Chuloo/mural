@@ -73,7 +73,7 @@ class OnDeviceLiveSession(
     }
 
     /**
-     * The cloud providers' data channel, locally: an instruction becomes a teacher turn (greeting,
+     * The cloud providers' data channel, on this phone: an instruction becomes a teacher turn (greeting,
      * check-in, theme, redirect, help), commentary is already generated text and is spoken as it is,
      * and anything else is context for the next turn.
      */

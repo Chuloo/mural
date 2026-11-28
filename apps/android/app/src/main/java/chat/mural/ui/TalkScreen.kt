@@ -294,12 +294,17 @@ fun TalkScreen(
                 }))
             }
         }
-        // An On-Device Model that cannot hear the learner still converses typed, from idle.
+        // An On-Device Model that cannot hear the learner still converses typed, from idle; one that
+        // can hear keeps Talk's idle home screen exactly as a cloud voice provider does.
         // A Typed-only Module is typed on every provider, so typing is its whole conversation.
-        if (vm.state == "active" || microphoneMessage != null || vm.language.isTypedOnly ||
-            vm.conversationProvider == ConversationProvider.ON_DEVICE) {
+        val onDeviceCannotHear = vm.conversationProvider == ConversationProvider.ON_DEVICE && !vm.canHearOnDeviceVoice
+        if (vm.state == "active" || microphoneMessage != null || vm.language.isTypedOnly || onDeviceCannotHear) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                MuralTextButton(onClick = { typing = true }, enabled = !busy && !vm.working,
+                MuralTextButton(onClick = {
+                    // A pending Continue/New choice is answered here too: a Typed-only Module has no
+                    // microphone to reopen it with, and dismissing the sheet must not lose it.
+                    if (vm.hasContinuation && !vm.isRunning) conversationChoice = true else typing = true
+                }, enabled = !busy && !vm.working,
                     modifier = Modifier.testTag("talk-type-button")) {
                     MuralIcon(MuralSymbol.Keyboard, Modifier.size(15.dp)); Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.talk_type_button), style = MaterialTheme.typography.bodySmall, color = MuralColors.Ink)
@@ -331,7 +336,17 @@ fun TalkScreen(
                 }
                 Text(vm.notice ?: stringResource(R.string.notice_continue_settling), color = MuralColors.Secondary,
                     style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = { conversationChoice = false; if (vm.continuationNeedsMinutes) onOpenAccount() else onMicrophone() },
+                Button(onClick = {
+                    conversationChoice = false
+                    when {
+                        vm.continuationNeedsMinutes -> onOpenAccount()
+                        vm.continuationIsVoice -> onMicrophone()
+                        // A Typed-only Module, an On-Device Model that cannot hear the learner and a
+                        // conversation that was typed all carry on typed: the microphone would only
+                        // ask for a permission that start() then ignores.
+                        else -> { vm.continueTypedConversation(); typing = true }
+                    }
+                },
                     enabled = vm.continuationReady || vm.continuationNeedsMinutes,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MuralColors.Orange, contentColor = MuralColors.Ink)) {

@@ -20,8 +20,8 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * The LiteRT-LM Model Runtime: the only place in Mural that knows the engine exists.
- * Cannot run on the JVM (it needs the device native library); tests run against
- * [ScriptedModelRuntime] through the same [ModelRuntime] interface.
+ * Cannot run on the JVM (it needs the device native library); tests run against the scripted
+ * Model Runtime fake in `src/test` through the same [ModelRuntime] interface.
  */
 class LiteRtModelRuntime : ModelRuntime {
     override suspend fun load(modelPath: String, options: RuntimeOptions): RuntimeSession =

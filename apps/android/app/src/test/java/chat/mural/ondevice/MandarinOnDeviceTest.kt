@@ -14,7 +14,6 @@ import chat.mural.core.ON_DEVICE_PROVIDER_ID
 import chat.mural.core.Outcome
 import chat.mural.core.SessionRecord
 import chat.mural.core.Speaker
-import java.util.concurrent.Executor
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -125,7 +124,7 @@ class MandarinOnDeviceTest {
     // ---------------------------------------------------------------------
 
     /** Runs a queued sentence on the calling thread, so a test observes one sentence at a time. */
-    private val inline = Executor { task -> task.run() }
+    private val inline = InlineVoiceWorker()
 
     private class FakePlatformVoice : OnDeviceSpeechOutput {
         val spoken = mutableListOf<String>()

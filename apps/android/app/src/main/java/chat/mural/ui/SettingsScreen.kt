@@ -209,15 +209,12 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
                     item {
                         SettingsGroup(stringResource(R.string.settings_advanced)) {
                             SettingsChoiceRow(stringResource(R.string.settings_conversation_access),
-                                stringResource(when (vm.conversationProvider) {
-                                    chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.account_mural_minutes
-                                    chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_on_device_model
-                                    chat.mural.core.ConversationProvider.PERSONAL_KEY -> R.string.settings_my_openai_key
-                                }),
+                                stringResource(providerLabel(vm.conversationProvider)),
                                 vm.conversationProvider.name,
-                                listOf(chat.mural.core.ConversationProvider.HOSTED_MINUTES.name to stringResource(R.string.account_mural_minutes),
-                                    chat.mural.core.ConversationProvider.PERSONAL_KEY.name to stringResource(R.string.settings_my_openai_key),
-                                    chat.mural.core.ConversationProvider.ON_DEVICE.name to stringResource(R.string.settings_on_device_model)),
+                                listOf(chat.mural.core.ConversationProvider.HOSTED_MINUTES,
+                                    chat.mural.core.ConversationProvider.PERSONAL_KEY,
+                                    chat.mural.core.ConversationProvider.ON_DEVICE)
+                                    .map { it.name to stringResource(providerLabel(it)) },
                                 "settings-conversation-access", !vm.isRunning, ::chooseSource)
                             if (vm.conversationProvider == chat.mural.core.ConversationProvider.ON_DEVICE) {
                                 Text(stringResource(R.string.settings_on_device_note), style = MaterialTheme.typography.bodySmall,
@@ -594,11 +591,7 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
             }
         }, modifier = Modifier.testTag("settings-source-confirm"), enabled = !vm.isRunning && (pendingSource != chat.mural.core.ConversationProvider.HOSTED_MINUTES ||
             (!checkingSwitch && switchBalance != null && switchBalance!! > 0))) {
-            Text(stringResource(when (pendingSource) {
-                chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.account_mural_minutes
-                chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_on_device_model
-                else -> R.string.settings_my_openai_key
-            }))
+            Text(stringResource(providerLabel(pendingSource)))
         } }, dismissButton = { MuralTextButton(onClick = { switchTicket++; sourceDialog = false }) { Text(stringResource(R.string.common_cancel)) } })
     if (keyDialog) KeyDialog(vm, keyDialogUseAfterSave, onDismiss = { keyDialog = false })
     pendingDownload?.let { model -> DownloadConfirmDialog(vm, model, onDismiss = { pendingDownload = null }) }
@@ -645,6 +638,13 @@ fun SettingsScreen(vm: MuralViewModel, onExport: () -> Unit, onImport: () -> Uni
         vm.deleteSession(session.id); deleteSession = null
     }, { deleteSession = null }) }
     transcript?.let { TranscriptDialog(vm, it, onDismiss = { transcript = null }) }
+}
+
+/** The learner-facing name of a Conversation Provider: one label in the picker and in its confirm. */
+private fun providerLabel(provider: chat.mural.core.ConversationProvider?) = when (provider) {
+    chat.mural.core.ConversationProvider.HOSTED_MINUTES -> R.string.account_mural_minutes
+    chat.mural.core.ConversationProvider.ON_DEVICE -> R.string.settings_on_device_model
+    else -> R.string.settings_my_openai_key
 }
 
 private fun issueLabel(kind: ProviderFailureKind, context: android.content.Context): String = context.getString(when (kind) {

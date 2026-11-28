@@ -49,6 +49,19 @@ class CoreTest {
         assertEquals(3,LearningEngine.project(listOf(first,second,third),now=third.startedAt).words[0].bars)
         assertEquals(0,LearningEngine.project(listOf(first,second,third),languageID="es").observationCount)
     }
+    @Test fun theSameThemeOnCloudAndOnDeviceIsOneSituationAndTwoOnDeviceThemesAreTwo() {
+        val cloud=evidence(day=0.0,theme="coffee")
+        val onDevice=evidence(day=2.0,theme="$ON_DEVICE_PROVIDER_ID:coffee")
+        val cloudAgain=evidence(day=8.0,theme="coffee")
+        // Session Provenance stays in `Assessment.context`, but recall counts the theme alone: one
+        // situation practised on two providers is one situation, exactly as two cloud ones would be.
+        assertEquals(2,LearningEngine.project(listOf(cloud,onDevice,cloudAgain),now=cloudAgain.startedAt).words[0].bars)
+        val onDeviceTravel=evidence(day=4.0,theme="$ON_DEVICE_PROVIDER_ID:travel")
+        val onDeviceLater=evidence(day=10.0,theme="$ON_DEVICE_PROVIDER_ID:coffee")
+        // Two different on-device themes are still two situations, so the third bar stays reachable
+        // for a learner who practises only on this phone.
+        assertEquals(3,LearningEngine.project(listOf(onDevice,onDeviceTravel,onDeviceLater),now=onDeviceLater.startedAt).words[0].bars)
+    }
     @Test fun archiveV1MigrationAndMergePreserveLocalPreferences() {
         val original=Archive(sessions= mutableListOf(evidence()),preferences=Preferences(hiddenWords=listOf("nb|radio"),meaningLanguage="Spanish"))
         val root=kotlinx.serialization.json.Json.parseToJsonElement(ArchiveCodec.encode(original)).jsonObject.toMutableMap()
