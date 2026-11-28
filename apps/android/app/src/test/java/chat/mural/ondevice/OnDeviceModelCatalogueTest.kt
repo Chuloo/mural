@@ -75,8 +75,62 @@ class OnDeviceModelCatalogueTest {
     }
 
     @Test fun aCatalogueFileNameIsTheOneSafeNameTheModelIsStoredUnder() {
-        for (model in OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.speechRecognition)
+        for (model in OnDeviceModelCatalogue.conversation + OnDeviceModelCatalogue.support)
             assertEquals(model.fileName, OnDeviceModelStore.fileName(model.fileName))
+    }
+
+    @Test fun theOpenWeightVoicesAreCuratedBesideTheConversationModelsNotAmongThem() {
+        val voices = OnDeviceModelCatalogue.voiceSynthesis
+        assertEquals(listOf("kokoro-82m", "pocket-tts-100m"), voices.map { it.id })
+        for (voice in voices) {
+            // A voice model is never the active conversation model, exactly like the speech
+            // recognition alternate: MediaPipe Tasks Audio runs it beside the conversation model.
+            assertEquals(ModelRuntimeKind.MEDIAPIPE_AUDIO, voice.runtime)
+            assertTrue(OnDeviceModelCatalogue.conversation.none { it.id == voice.id })
+            assertEquals(voice, OnDeviceModelCatalogue.byID(voice.id))
+            assertEquals(4, voice.minDeviceMemoryGb)
+            assertFalse(voice.supportsAudioInput)
+            assertFalse(voice.recommended)
+            assertNotEquals(0, voice.title)
+            assertNotEquals(0, voice.description)
+            assertTrue(voice.downloadURL!!.startsWith("https://"))
+        }
+        // Every curated model that is not a conversation model: downloaded and deleted beside it.
+        assertEquals(OnDeviceModelCatalogue.speechRecognition + voices, OnDeviceModelCatalogue.support)
+        assertTrue(OnDeviceModelCatalogue.support.contains(OnDeviceModelCatalogue.PARAKEET_TDT_0_6B))
+        // The teacher voice engine each one serves; the phone's own voice downloads nothing.
+        assertEquals(OnDeviceModelCatalogue.KOKORO_82M,
+            OnDeviceModelCatalogue.voiceModel(TeacherVoiceEngine.KOKORO_82M))
+        assertEquals(OnDeviceModelCatalogue.POCKET_TTS_100M,
+            OnDeviceModelCatalogue.voiceModel(TeacherVoiceEngine.POCKET_TTS_100M))
+        assertNull(OnDeviceModelCatalogue.voiceModel(TeacherVoiceEngine.PLATFORM))
+    }
+
+    @Test fun kokoroAndPocketTtsPointAtTheirVerifiedUnGatedHuggingFaceFiles() {
+        val kokoro = OnDeviceModelCatalogue.KOKORO_82M
+        assertEquals("kokoro_int8_gpu_fp16.litertlm", kokoro.fileName)
+        assertEquals(294_750_530L, kokoro.sizeBytes)
+        assertEquals("https://huggingface.co/litert-community/Kokoro-82M/resolve/" +
+            "81e43a025bccabcbbd487f08bc3ebd65b5fc7295/kokoro_int8_gpu_fp16.litertlm?download=true",
+            kokoro.downloadURL)
+        assertEquals(listOf("en-US", "en-GB", "es-ES", "fr-FR", "hi-IN", "it-IT", "pt-BR", "ja-JP", "zh-CN"),
+            kokoro.languages)
+
+        val pocketTts = OnDeviceModelCatalogue.POCKET_TTS_100M
+        assertEquals("pocket_tts_int8.litertlm", pocketTts.fileName)
+        assertEquals(760_061_960L, pocketTts.sizeBytes)
+        assertEquals("https://huggingface.co/litert-community/pocket-tts/resolve/" +
+            "bca93d6756489f9403f94d66826cfa65f80023a1/pocket_tts_int8.litertlm?download=true",
+            pocketTts.downloadURL)
+        assertEquals(listOf("en-US", "fr-FR", "de-DE", "es-ES", "it-IT", "pt-BR", "nl-NL"),
+            pocketTts.languages)
+
+        // The picker's honest promise: both speak Brazilian Portuguese, neither European Portuguese.
+        for (voice in listOf(kokoro, pocketTts)) {
+            assertTrue(voice.languages.contains("pt-BR"))
+            assertFalse(voice.languages.contains("pt-PT"))
+            assertEquals(voice.languages, voice.languages.distinct())
+        }
     }
 
     @Test fun theSpeechRecognitionAlternateIsCuratedBesideTheConversationModelsNotAmongThem() {

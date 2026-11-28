@@ -85,10 +85,52 @@ object OnDeviceModelCatalogue {
             "3ce205aa928f443f423214195cfe83ebe4802826", PARAKEET_FILE),
         614_588_752L, minDeviceMemoryGb = 4, languages = PARAKEET_LANGUAGES)
 
-    /** The speech recognition alternates. A voice model joins this list the same way. */
+    /** The speech recognition alternates. */
     val speechRecognition: List<CataloguedModel> = listOf(PARAKEET_TDT_0_6B)
 
-    private val all: List<CataloguedModel> = conversation + GEMINI_NANO_AICORE + speechRecognition
+    private const val KOKORO_FILE = "kokoro_int8_gpu_fp16.litertlm"
+    private const val POCKET_TTS_FILE = "pocket_tts_int8.litertlm"
+
+    /** Kokoro 82M's packaged coverage: nine languages, `pt-BR` and not `pt-PT`. */
+    private val KOKORO_LANGUAGES = listOf("en-US", "en-GB", "es-ES", "fr-FR", "hi-IN", "it-IT",
+        "pt-BR", "ja-JP", "zh-CN")
+
+    /** PocketTTS 100M's packaged coverage: seven languages, and the only German and Dutch voices. */
+    private val POCKET_TTS_LANGUAGES = listOf("en-US", "fr-FR", "de-DE", "es-ES", "it-IT", "pt-BR", "nl-NL")
+
+    /**
+     * The opt-in open-weight teacher voices, run by MediaPipe Tasks Audio like the speech recognition
+     * alternate: downloaded and deleted through the same catalogue experience, chosen per Language
+     * Module, and never the active model. Both speak Brazilian Portuguese, so the picker says so to a
+     * Portugal learner instead of promising a European voice that does not exist.
+     */
+    val KOKORO_82M = CataloguedModel("kokoro-82m", R.string.settings_on_device_model_kokoro,
+        R.string.settings_on_device_model_kokoro_description, ModelRuntimeKind.MEDIAPIPE_AUDIO, KOKORO_FILE,
+        OnDeviceModelURLs.repository("litert-community/Kokoro-82M",
+            "81e43a025bccabcbbd487f08bc3ebd65b5fc7295", KOKORO_FILE),
+        294_750_530L, minDeviceMemoryGb = 4, languages = KOKORO_LANGUAGES)
+
+    val POCKET_TTS_100M = CataloguedModel("pocket-tts-100m", R.string.settings_on_device_model_pocket_tts,
+        R.string.settings_on_device_model_pocket_tts_description, ModelRuntimeKind.MEDIAPIPE_AUDIO,
+        POCKET_TTS_FILE,
+        OnDeviceModelURLs.repository("litert-community/pocket-tts",
+            "bca93d6756489f9403f94d66826cfa65f80023a1", POCKET_TTS_FILE),
+        760_061_960L, minDeviceMemoryGb = 4, languages = POCKET_TTS_LANGUAGES)
+
+    /** The teacher voices. The phone's built-in voice stays the default and downloads nothing. */
+    val voiceSynthesis: List<CataloguedModel> = listOf(KOKORO_82M, POCKET_TTS_100M)
+
+    /** Every curated model that is never the active conversation model: speech recognition and voices. */
+    val support: List<CataloguedModel> = speechRecognition + voiceSynthesis
+
+    /** The curated voice model a teacher voice engine runs on; the platform voice has none. */
+    fun voiceModel(engine: TeacherVoiceEngine): CataloguedModel? = when (engine) {
+        TeacherVoiceEngine.PLATFORM -> null
+        TeacherVoiceEngine.KOKORO_82M -> KOKORO_82M
+        TeacherVoiceEngine.POCKET_TTS_100M -> POCKET_TTS_100M
+    }
+
+    private val all: List<CataloguedModel> = conversation + GEMINI_NANO_AICORE + support
 
     fun recommended(): CataloguedModel = conversation.first { it.recommended }
     /** A catalogue id, whether it downloads a file or is the zero-download system model. */
